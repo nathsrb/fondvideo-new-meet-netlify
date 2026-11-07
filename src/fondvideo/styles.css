@@ -665,3 +665,9 @@ footer {
 .cap-inspector-actions button{background:#44326f;border:1px solid #7963a9;border-radius:8px;padding:8px 10px;color:#fff;cursor:pointer}
 .cap-clip.cap-selected{border-color:#fff;background:#956ced;box-shadow:0 0 0 2px #bc9dff}
 @media(max-width:720px){.cap-inspector-grid{grid-template-columns:1fr 1fr}.cap-edit-box .cap-handle{height:29px;width:29px}}
+
+/* Pas de doublon visuel : le cadre est un outil de sélection, pas un second sous-titre. */
+.cap-edit-box .cap-drag-label{font-size:0!important;text-shadow:none!important;color:transparent!important;user-select:none;pointer-events:none}
+.cap-mode-switch{display:flex!important;flex-direction:row!important;align-items:center;gap:9px;font-weight:700;font-size:13px;background:#272143;border:1px solid #65519e;border-radius:9px;padding:10px;margin:12px 0!important}
+.cap-mode-switch input{width:18px;height:18px;accent-color:#aa8cff}
+#capAddPhrase{background:#6c45bf;border-color:#b8a1f7;font-weight:750}
