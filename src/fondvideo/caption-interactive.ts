@@ -6,9 +6,12 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
   mount.innerHTML = [
     '<section class="cap-inspector" aria-label="Personnalisation des sous-titres">',
     '<h4>Éditer comme sur CapCut <small id="capSelection" style="color:#c9aaff">Tous les blocs</small></h4>',
-    '<p>Clique sur la vidéo ou sur un bloc de la piste. Glisse pour déplacer, tire le carré violet pour agrandir, et touche le crayon pour changer le texte.</p>',
+    '<p>Sélectionne un sous-titre dans la vidéo ou la piste. Par défaut, le même design est appliqué à toute la vidéo.</p>',
+    '<label class="cap-mode-switch"><input type="checkbox" id="capLocalMode"> Personnaliser uniquement ce bloc (désynchroniser)</label>',
+    '<p id="capModeHint">Mode synchronisé : toute modification de style, taille ou position affecte tous les sous-titres.</p>',
     '<textarea id="capBlockText" rows="2" placeholder="Sélectionne un bloc pour modifier son texte" aria-label="Texte du bloc sélectionné"></textarea>',
-    '<div class="cap-inspector-actions"><button id="capApplyBlock" type="button">Appliquer le texte</button><button id="capResetAppearance" type="button">Réinitialiser le bloc</button><button id="capDeselect" type="button">Tout modifier</button></div>',
+    '<div class="cap-inspector-actions"><button id="capApplyBlock" type="button">Modifier cette phrase</button><button id="capResetAppearance" type="button">Réinitialiser ce bloc</button><button id="capDeselect" type="button">Désélectionner</button></div>',
+    '<div class="cap-inspector-actions"><button id="capAddPhrase" type="button">＋ Ajouter mon propre texte</button></div>',
     '<div class="cap-inspector-grid">',
     '<label>Couleur du texte<input id="capTextColor" type="color" value="#ffffff"></label>',
     '<label>Couleur de surbrillance<input id="capAccentColor" type="color" value="#fde047"></label>',
@@ -27,9 +30,19 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
   const pen = box.querySelector('.cap-pen');
   const label = box.querySelector('.cap-drag-label');
   let selected = -1;
+  let localMode = false;
   const startOf = index => index < 0 ? -1 : Math.floor(index / 4) * 4;
   const leader = () => state.words[selected] || null;
-  const value = name => leader()?.appearance?.[name] ?? state[name];
+  const value = name => (localMode ? leader()?.appearance?.[name] : undefined) ?? state[name];
+  // Un design global ne doit pas être supplanté par d'anciennes personnalisations.
+  function clearOverrides(name) {
+    for (const word of state.words) {
+      if (word.appearance && Object.prototype.hasOwnProperty.call(word.appearance, name)) {
+        delete word.appearance[name];
+        if (!Object.keys(word.appearance).length) delete word.appearance;
+      }
+    }
+  }
   function groupAtTime() {
     const index = state.words.findIndex(w => getTime() >= w.start && getTime() < w.end);
     return startOf(index);
@@ -37,16 +50,21 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
   function put(name, val, save = false) {
     if (save) remember();
     const word = leader();
-    if (word) word.appearance = { ...(word.appearance || {}), [name]: val };
-    else state[name] = val;
+    if (localMode && word) word.appearance = { ...(word.appearance || {}), [name]: val };
+    else { state[name] = val; clearOverrides(name); }
     sync(); repaint();
   }
   function syncControls() {
     const w = leader(), preset = catalog.find(p => p.id === (value('style') || state.style)) || catalog[0];
-    $('capSelection').textContent = w ? '· Bloc ' + (Math.floor(selected / 4) + 1) : '· Tous les blocs';
+    $('capSelection').textContent = (localMode && w) ? '· Bloc ' + (Math.floor(selected / 4) + 1) + ' seul' : '· Design synchronisé';
     $('capBlockText').disabled = !w;
     $('capApplyBlock').disabled = !w;
     $('capResetAppearance').disabled = !w;
+    $('capLocalMode').disabled = !w;
+    $('capLocalMode').checked = localMode;
+    $('capModeHint').textContent = localMode
+      ? 'Mode individuel : les changements de design ne concernent que le bloc sélectionné.'
+      : 'Mode synchronisé : le design, la taille et la position s’appliquent à tous les sous-titres.';
     if (document.activeElement !== $('capBlockText'))
       $('capBlockText').value = w ? state.words.slice(selected, selected+4).map(x=>x.text).join(' ') : '';
     const knobs = [
@@ -98,7 +116,8 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
     box.style.transform = 'translate(-50%,-50%) rotate('+(p.rotation ?? state.rotation ?? 0)+'deg)';
     box.style.borderColor = selected === active ? '#ffffff' : '#bd9fff';
     box.dataset.group = String(active);
-    label.textContent = text;
+    label.textContent = ''; // Le texte est déjà dessiné dans le canvas : ne jamais le dupliquer dans l'outil de sélection.
+    box.setAttribute('aria-label','Déplacer ou redimensionner : '+text);
   }
   function drag(e, mode) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -114,10 +133,15 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
     target.setPointerCapture(e.pointerId);
     const move = ev => {
       const dx=ev.clientX-x,dy=ev.clientY-y;
-      if(mode==='resize'){
-        w.appearance={...(w.appearance||{}),size:Math.max(4,Math.min(30,initial.size + dx / rect.width * 60))};
-      }else{
-        w.appearance={...(w.appearance||{}),x:Math.max(5,Math.min(95,initial.x+dx/rect.width*100)),y:Math.max(5,Math.min(95,initial.y+dy/rect.height*100))};
+      if(mode==='resize') {
+        const size=Math.max(4,Math.min(30,initial.size + dx / rect.width * 60));
+        if(localMode) w.appearance={...(w.appearance||{}),size};
+        else { state.size=size; clearOverrides('size'); }
+      } else {
+        const newX=Math.max(5,Math.min(95,initial.x+dx/rect.width*100));
+        const newY=Math.max(5,Math.min(95,initial.y+dy/rect.height*100));
+        if(localMode) w.appearance={...(w.appearance||{}),x:newX,y:newY};
+        else { state.x=newX;state.y=newY;clearOverrides('x');clearOverrides('y'); }
       }
       sync(); repaint();
     };
@@ -151,7 +175,12 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
     if(!e.target.closest('.cap-clip'))return;
     $('capBlockText').focus();$('capBlockText').select();
   });
-  $('capDeselect').onclick=()=>select(-1);
+  $('capDeselect').onclick=()=>{localMode=false; select(-1);};
+  $('capLocalMode').onchange=e=>{
+    localMode=e.target.checked && !!leader();
+    sync();repaint();
+    report(localMode ? 'Personnalisation individuelle activée.' : 'Design synchronisé pour tous les sous-titres.');
+  };
   $('capResetAppearance').onclick=()=>{
     if(!leader())return;
     remember();delete leader().appearance;refresh();repaint();report('Style de ce bloc réinitialisé.');
@@ -170,7 +199,7 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
     refresh();repaint();report('Texte du bloc corrigé.');
   };
   function attachInput(id,name,convert=Number) {
-    $(id).addEventListener('pointerdown',()=>{if(leader())remember();});
+    $(id).addEventListener('pointerdown',()=>remember());
     $(id).addEventListener('input',e=>put(name,convert(e.target.value)));
   }
   attachInput('capXSlider','x');
@@ -181,18 +210,44 @@ export function createCaptionInteraction({state, catalog, getTime, getDuration, 
   $('capSize').max='30';
   // En sélection, intercepter les contrôles globaux sans toucher aux autres sous-titres.
   for(const [id,name] of [['capSize','size'],['capPosition','y']]){
-    $(id).addEventListener('pointerdown',()=>{if(leader())remember();},true);
+    $(id).addEventListener('pointerdown',()=>remember(),true);
     $(id).addEventListener('input',e=>{
+      if (!localMode) {
+        clearOverrides(name);
+        queueMicrotask(() => {sync();repaint();});
+        return;
+      }
       if(!leader())return;
       e.stopImmediatePropagation();put(name,Number(e.target.value));
     },true);
   }
   $('capStyles').addEventListener('click',e=>{
     const b=e.target.closest('[data-style]');
-    if(!b||!leader())return;
+    if(!b)return;
+    if(!localMode) {
+      clearOverrides('style');
+      queueMicrotask(()=>{sync();repaint();});
+      return;
+    }
+    if(!leader())return;
     e.preventDefault();e.stopImmediatePropagation();
     put('style',b.dataset.style,true);refresh();
   },true);
+  $('capAddPhrase').onclick=()=>{
+    const existing=$('capBlockText').value.trim();
+    const phrase=window.prompt('Quel texte veux-tu ajouter à la vidéo ?',existing && !leader() ? existing : '');
+    if(phrase===null || !phrase.trim())return;
+    const input=phrase.trim().split(/\s+/u).filter(Boolean);
+    const t=Math.max(0,Number(getTime())||0);
+    const end=Math.min(Math.max(t+2,Number(getDuration())||t+2),t+4);
+    const words=input.map((text,i)=>({text,start:t+(end-t)*i/input.length,end:t+(end-t)*(i+1)/input.length}));
+    remember();
+    state.words.push(...words);
+    state.words.sort((a,b)=>a.start-b.start);
+    localMode=false;
+    refresh();select(state.words.indexOf(words[0]));repaint();
+    report('Texte ajouté à '+t.toFixed(1)+' s. Ajuste sa durée dans la piste.');
+  };
   sync();
-  return {sync,clear(){selected=-1;sync();}};
+  return {sync,clear(){selected=-1;localMode=false;sync();}};
 }
