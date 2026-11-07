@@ -29,7 +29,7 @@
       </header>
       <main>
         <section id="landing" class="landing">
-          <div class="pill">100 % local • Sans watermark</div>
+          <div class="pill">Montage sur mobile • Transcription IA haute précision</div>
           <h1>Change le fond de ta vidéo <span>gratuitement</span></h1>
           <p>
             Importe ta vidéo, supprime automatiquement l’arrière-plan et ajoute
@@ -46,7 +46,7 @@
             Tester l’éditeur sans vidéo
           </button>
           <div class="privacy">
-            ✓ Ta vidéo reste sur ton appareil. Aucun upload cloud.
+            ✓ Vidéo sur ton appareil ; seuls des extraits audio sont envoyés au prestataire IA pour la transcription.
           </div>
           <div class="cards">
             <article>
@@ -76,6 +76,7 @@
                 <div id="stage" class="stage">
                   <video id="video" playsinline preload="metadata"></video
                   ><canvas id="canvas"></canvas>
+                  <div id="capCanvasTools" class="cap-canvas-tools" aria-label="Outils de sous-titres"></div>
                   <div id="overlay" class="overlay hidden">
                     <div class="spinner"></div>
                     <b id="overlayTitle">Préparation…</b
@@ -140,7 +141,7 @@
                 <div class="cap-heading">
                   <div>
                     <h3>Sous-titres premium</h3>
-                    <p class="hint">36 styles animés • 0 API payante</p>
+                    <p class="hint">36 styles animés • Whisper Large V3 via serveur</p>
                   </div>
                   <label class="cap-check"
                     ><input id="capEnabled" type="checkbox" checked />
@@ -155,13 +156,13 @@
                     <option value="english">Anglais</option>
                     <option value="spanish">Espagnol</option>
                   </select>
+                  <label for="capVocabulary">Vocabulaire important (optionnel)</label>
+                  <textarea id="capVocabulary" rows="2" placeholder="Ex. entretien professionnel, insertion, AFEPT, candidat..." aria-label="Vocabulaire pour améliorer la transcription"></textarea>
                   <button id="capGenerate" class="primary full" type="button">
                     Générer automatiquement
                   </button>
                   <p class="hint">
-                    Whisper fonctionne sur ton appareil. Au premier usage, un
-                    modèle gratuit est téléchargé. Sur iPhone, calcul CPU pour
-                    plus de stabilité.
+                    Reconnaissance IA sur serveur : aucun modèle lourd à installer sur iPhone. Extraits audio envoyés au service cloud ; la vidéo reste dans ton navigateur. Une clé serveur GROQ_API_KEY est utilisée pour cette prévisualisation.
                   </p>
                 </div>
                 <details class="cap-manual">
@@ -182,6 +183,13 @@
                     hidden
                   />
                 </details>
+                <div class="cap-correction">
+                  <h4>Corriger les erreurs de transcription</h4>
+                  <p class="hint">Exemple : remplacer « autre chien » par « entretien » quand les mots sont groupés ou corriger chaque mot directement ci-dessous.</p>
+                  <div class="cap-fix-row"><input id="capFind" placeholder="Mot incorrect" aria-label="Rechercher" /><input id="capReplace" placeholder="Correction" aria-label="Remplacer par" /><button id="capReplaceAll" type="button">Tout remplacer</button></div>
+                  <div class="cap-edit-actions"><button id="capUndo" type="button">↶ Annuler</button><button id="capRedo" type="button">↷ Rétablir</button></div>
+                </div>
+                <div id="capInspectorMount"></div>
                 <h4>Choisis ton style</h4>
                 <div
                   id="capStyles"

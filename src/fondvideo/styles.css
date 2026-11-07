@@ -638,3 +638,30 @@ footer {
 .cap-pages{display:flex;justify-content:space-between;align-items:center;gap:9px;margin:12px 0}
 .cap-pages button{border:1px solid #66628c;border-radius:9px;color:#e2ddff;background:#28243f;padding:8px 11px;font-size:11px}
 .cap-pages button:disabled{opacity:.25}.cap-pages span{color:#acb4cf;font-size:11px}
+
+.cap-correction{border:1px solid #454c6b;background:#171d30;border-radius:12px;padding:12px;margin:15px 0}
+.cap-fix-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.cap-fix-row input{min-width:120px;flex:1;border:1px solid #59617f;border-radius:8px;color:white;background:#242b43;padding:9px}
+.cap-fix-row button,.cap-edit-actions button{padding:9px 11px;border-radius:8px;border:1px solid #6b61a6;background:#3d345e;color:white;cursor:pointer}
+.cap-edit-actions{display:flex;gap:8px;margin-top:9px}
+
+/* Éditeur de sous-titres interactif (prévisualisation V3) */
+.cap-canvas-tools{position:absolute;inset:0;pointer-events:none;z-index:5}
+.cap-edit-box{position:absolute;box-sizing:border-box;border:2px dashed #d9c5ff;border-radius:7px;transform:translate(-50%,-50%);background:rgba(124,85,237,.10);pointer-events:auto;touch-action:none;cursor:move;box-shadow:0 0 0 2px rgba(136,92,244,.4)}
+.cap-edit-box[hidden]{display:none!important}
+.cap-edit-box .cap-drag-label{display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:12px;text-align:center;color:#fff;text-shadow:0 1px 4px #000;font-weight:800;overflow:hidden;white-space:nowrap;padding:3px;box-sizing:border-box;touch-action:none}
+.cap-edit-box .cap-handle{position:absolute;right:-12px;bottom:-12px;height:25px;width:25px;border:3px solid #fff;border-radius:7px;background:#9168fb;cursor:nwse-resize;touch-action:none;box-shadow:0 2px 8px #0009}
+.cap-edit-box .cap-pen{position:absolute;right:-6px;top:-32px;height:28px;width:30px;background:#5c37ac;border:1px solid #e9d5ff;border-radius:7px;color:#fff;cursor:pointer}
+.cap-edit-box:focus-visible,.cap-handle:focus-visible{outline:3px solid #facc15}
+.cap-inspector{border:1px solid #4b426e;background:#141b2b;border-radius:12px;padding:14px;margin:14px 0}
+.cap-inspector h4{margin:0 0 6px}
+.cap-inspector p{font-size:12px;color:#b7aacd}
+.cap-inspector textarea{width:100%;box-sizing:border-box;min-height:60px;padding:10px;background:#0a1020;border:1px solid #585177;border-radius:9px;color:white;resize:vertical;font:inherit}
+.cap-inspector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.cap-inspector-grid label{font-size:12px;margin:5px 0!important}
+.cap-inspector-grid input[type=color]{width:100%;height:34px;background:transparent;border:0}
+.cap-inspector-grid input[type=range]{accent-color:#b18aff}
+.cap-inspector-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.cap-inspector-actions button{background:#44326f;border:1px solid #7963a9;border-radius:8px;padding:8px 10px;color:#fff;cursor:pointer}
+.cap-clip.cap-selected{border-color:#fff;background:#956ced;box-shadow:0 0 0 2px #bc9dff}
+@media(max-width:720px){.cap-inspector-grid{grid-template-columns:1fr 1fr}.cap-edit-box .cap-handle{height:29px;width:29px}}
