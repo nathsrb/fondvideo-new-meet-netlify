@@ -508,6 +508,7 @@ video.addEventListener('timeupdate', () => {
   );
   $('current').textContent = fmtTime(video.currentTime);
   if (video.paused) draw();
+  captions.syncOverlay();
 });
 video.addEventListener('ended', () => ($('play').textContent = '▶'));
 $('timeline').addEventListener('input', () => {
