@@ -76,6 +76,7 @@
                 <div id="stage" class="stage">
                   <video id="video" playsinline preload="metadata"></video
                   ><canvas id="canvas"></canvas>
+                  <div id="capCanvasTools" class="cap-canvas-tools" aria-label="Outils de sous-titres"></div>
                   <div id="overlay" class="overlay hidden">
                     <div class="spinner"></div>
                     <b id="overlayTitle">Préparation…</b
@@ -161,7 +162,7 @@
                     Générer automatiquement
                   </button>
                   <p class="hint">
-                    Reconnaissance IA sur serveur : aucun modèle lourd à installer sur iPhone. Extraits audio envoyés au service cloud ; la vidéo reste dans ton navigateur. Une clé serveur DEEPINFRA_API_KEY est nécessaire.
+                    Reconnaissance IA sur serveur : aucun modèle lourd à installer sur iPhone. Extraits audio envoyés au service cloud ; la vidéo reste dans ton navigateur. Une clé serveur GROQ_API_KEY est utilisée pour cette prévisualisation.
                   </p>
                 </div>
                 <details class="cap-manual">
@@ -188,6 +189,7 @@
                   <div class="cap-fix-row"><input id="capFind" placeholder="Mot incorrect" aria-label="Rechercher" /><input id="capReplace" placeholder="Correction" aria-label="Remplacer par" /><button id="capReplaceAll" type="button">Tout remplacer</button></div>
                   <div class="cap-edit-actions"><button id="capUndo" type="button">↶ Annuler</button><button id="capRedo" type="button">↷ Rétablir</button></div>
                 </div>
+                <div id="capInspectorMount"></div>
                 <h4>Choisis ton style</h4>
                 <div
                   id="capStyles"
