@@ -638,3 +638,9 @@ footer {
 .cap-pages{display:flex;justify-content:space-between;align-items:center;gap:9px;margin:12px 0}
 .cap-pages button{border:1px solid #66628c;border-radius:9px;color:#e2ddff;background:#28243f;padding:8px 11px;font-size:11px}
 .cap-pages button:disabled{opacity:.25}.cap-pages span{color:#acb4cf;font-size:11px}
+
+.cap-correction{border:1px solid #454c6b;background:#171d30;border-radius:12px;padding:12px;margin:15px 0}
+.cap-fix-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
+.cap-fix-row input{min-width:120px;flex:1;border:1px solid #59617f;border-radius:8px;color:white;background:#242b43;padding:9px}
+.cap-fix-row button,.cap-edit-actions button{padding:9px 11px;border-radius:8px;border:1px solid #6b61a6;background:#3d345e;color:white;cursor:pointer}
+.cap-edit-actions{display:flex;gap:8px;margin-top:9px}
