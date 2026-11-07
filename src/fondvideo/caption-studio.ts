@@ -1,6 +1,7 @@
 // @ts-nocheck
 // FondVidéo : sous-titres animés, transcription IA cloud (clé privée serveur).
 import { Input, BlobSource, ALL_FORMATS, AudioSampleSink } from 'mediabunny';
+import { createCaptionInteraction } from './caption-interactive';
 
 const catalog = [
   ['viral', 'Viral jaune', 'highlight', '#ffffff', '#fde047'],
@@ -44,7 +45,10 @@ const initial = () => ({
   words: [],
   style: 'viral',
   size: 8.2,
+  x: 50,
   y: 76,
+  rotation: 0,
+  opacity: 100,
   enabled: true,
 });
 const byId = id => document.getElementById(id);
@@ -85,11 +89,19 @@ export function drawCaption(ctx, time, w, h, model) {
   const start = Math.floor(index / 4) * 4,
     words = model.words.slice(start, start + 4),
     active = index - start;
-  const preset = catalog.find(item => item.id === model.style) || catalog[0];
-  const font = Math.max(12, Math.min(120, (Math.min(w, h) * model.size) / 100));
+  const settings = model.words[start]?.appearance || {};
+  const chosen = catalog.find(item => item.id === (settings.style || model.style)) || catalog[0];
+  const preset = { ...chosen, fg: settings.fg || chosen.fg, accent: settings.accent || chosen.accent };
+  const font = Math.max(12, Math.min(120, (Math.min(w, h) * (settings.size ?? model.size)) / 100));
   const kind = preset.kind,
     width = w * 0.88;
   ctx.save();
+  const centerX = w * (settings.x ?? model.x ?? 50) / 100;
+  const centerY = h * (settings.y ?? model.y) / 100;
+  ctx.translate(centerX, centerY);
+  ctx.rotate((settings.rotation ?? model.rotation ?? 0) * Math.PI / 180);
+  ctx.translate(-centerX, -centerY);
+  ctx.globalAlpha *= (settings.opacity ?? model.opacity ?? 100) / 100;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
   ctx.lineJoin = 'round';
@@ -115,7 +127,7 @@ export function drawCaption(ctx, time, w, h, model) {
     running += tw + font * 0.28;
   });
   let y =
-    Math.max(font * 1.8, Math.min(h - font * 1.8, (h * model.y) / 100)) -
+    Math.max(font * 1.8, Math.min(h - font * 1.8, centerY)) -
     (lines.length - 1) * font * 0.66;
   const current = model.words[index];
   const fraction = Math.max(
@@ -129,7 +141,7 @@ export function drawCaption(ctx, time, w, h, model) {
     const total =
       line.reduce((a, v) => a + v.tw, 0) +
       Math.max(0, line.length - 1) * font * 0.28;
-    let x = w / 2 - total / 2;
+    let x = centerX - total / 2;
     line.forEach(word => {
       const focus = word.j === active,
         p =
@@ -396,6 +408,7 @@ export function createCaptionStudio({
   preview,
 }) {
   let page=0;
+  let interaction;
   const undoStack = [];
   const redoStack = [];
   const snapshot = () => state.words.map(w => ({...w}));
@@ -413,7 +426,7 @@ export function createCaptionStudio({
     report = text => {
       byId('capStatus').textContent = text;
     };
-  const repaint=()=>preview();
+  const repaint=()=>{preview(); interaction?.sync();};
   function renderTimeline(){
     const holder=byId('capTimeline');
     if(!holder)return;
@@ -530,6 +543,7 @@ export function createCaptionStudio({
     byId('capPrev').disabled=page===0;
     byId('capNext').disabled=(page+1)*pageSize>=n;
     renderTimeline();
+    interaction?.sync();
   };
   byId('capUndo').onclick = () => {
     if (!undoStack.length) return;
@@ -726,10 +740,13 @@ export function createCaptionStudio({
     }
   };
   refresh();
+  interaction = createCaptionInteraction({ state, catalog, getTime, getDuration, remember, refresh, repaint, report });
   return {
+    syncOverlay: () => interaction.sync(),
     render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
     reset: () => {
       Object.assign(state, initial());page=0;undoStack.length=0;redoStack.length=0;
+      interaction.clear();
       byId('capText').value = '';
       byId('capEnabled').checked = true;
       byId('capSize').value = String(state.size);
