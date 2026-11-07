@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FondVidéo — Studio vidéo gratuit</title>
+    <meta name="theme-color" content="#08090d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./src/fondvideo/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          Fond<span>Vidéo</span
+          ><a
+            href="./index.html#/meet"
+            style="
+              margin-left: 16px;
+              color: #b6a8ff;
+              font-size: 12px;
+              text-decoration: none;
+            "
+            >← Revenir à Meet</a
+          >
+        </div>
+        <button id="newProject" class="ghost hidden">Nouveau projet</button>
+      </header>
+      <main>
+        <section id="landing" class="landing">
+          <div class="pill">100 % local • Sans watermark</div>
+          <h1>Change le fond de ta vidéo <span>gratuitement</span></h1>
+          <p>
+            Importe ta vidéo, supprime automatiquement l’arrière-plan et ajoute
+            le décor de ton choix.
+          </p>
+          <a class="primary" href="./index.html#/meet" style="margin:10px;text-decoration:none">Lancer une visioconférence</a>
+          <label class="primary" for="videoInput">Importer une vidéo</label
+          ><input
+            id="videoInput"
+            type="file"
+            accept="video/*,.mov,.mp4,.webm"
+            hidden
+          /><button id="demoBtn" class="secondary" type="button">
+            Tester l’éditeur sans vidéo
+          </button>
+          <div class="privacy">
+            ✓ Ta vidéo reste sur ton appareil. Aucun upload cloud.
+          </div>
+          <div class="cards">
+            <article>
+              <b>Import rapide</b><span>Lecture directe du fichier local.</span>
+            </article>
+            <article>
+              <b>IA locale</b
+              ><span>Le détourage tourne dans ton navigateur.</span>
+            </article>
+            <article>
+              <b>Qualité source</b
+              ><span>Le fichier original n’est jamais modifié.</span>
+            </article>
+          </div>
+        </section>
+        <section id="editor" class="editor hidden">
+          <div class="editorHead">
+            <div>
+              <h2 id="fileName">Vidéo</h2>
+              <div id="fileMeta" class="meta"></div>
+            </div>
+            <div id="status" class="status">IA en attente</div>
+          </div>
+          <div class="editorWorkspace">
+            <div class="previewColumn">
+              <div class="stageWrap">
+                <div id="stage" class="stage">
+                  <video id="video" playsinline preload="metadata"></video
+                  ><canvas id="canvas"></canvas>
+                  <div id="overlay" class="overlay hidden">
+                    <div class="spinner"></div>
+                    <b id="overlayTitle">Préparation…</b
+                    ><span id="overlayText"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="transport">
+                <button id="play" type="button">▶</button
+                ><span id="current">0:00</span
+                ><input
+                  id="timeline"
+                  type="range"
+                  min="0"
+                  max="1000"
+                  value="0"
+                /><span id="duration">0:00</span>
+              </div>
+            </div>
+            <div class="controlsColumn">
+              <div class="tabs">
+                <button class="tab active" data-panel="fond">Fond</button
+                ><button class="tab" data-panel="format">Format</button
+                ><button class="tab" data-panel="captions">Sous-titres</button
+                ><button class="tab" data-panel="adjust">Ajuster</button
+                ><button class="tab" data-panel="export">Exporter</button>
+              </div>
+              <section id="fond" class="panel activePanel">
+                <div class="choices">
+                  <button class="bg selected" data-bg="original">
+                    Original</button
+                  ><button class="bg" data-bg="remove">Supprimer</button
+                  ><button class="bg" data-bg="blur">Flouter</button
+                  ><button class="bg" data-bg="studio">Studio</button
+                  ><button class="bg" data-bg="office">Bureau</button
+                  ><button class="bg" data-bg="tech">Tech</button
+                  ><button class="bg" data-bg="blue">Bleu</button
+                  ><button class="bg" data-bg="violet">Violet</button
+                  ><button class="bg" data-bg="warm">Beige</button
+                  ><label class="bg" for="imageInput">Ton image</label
+                  ><input id="imageInput" type="file" accept="image/*" hidden />
+                </div>
+              </section>
+              <section id="format" class="panel">
+                <div class="choices">
+                  <button class="fmt selected" data-format="original">
+                    Original</button
+                  ><button class="fmt" data-format="16:9">16:9</button
+                  ><button class="fmt" data-format="9:16">9:16</button
+                  ><button class="fmt" data-format="1:1">1:1</button
+                  ><button class="fmt" data-format="4:5">4:5</button>
+                </div>
+                <div class="row">
+                  <span>Recadrage</span
+                  ><button id="fit" class="small selected">Adapter</button
+                  ><button id="fill" class="small">Remplir</button>
+                </div>
+                <p class="hint">Adapter conserve toute l’image.</p>
+              </section>
+
+              <section id="captions" class="panel">
+                <div class="cap-heading">
+                  <div>
+                    <h3>Sous-titres premium</h3>
+                    <p class="hint">36 styles animés • 0 API payante</p>
+                  </div>
+                  <label class="cap-check"
+                    ><input id="capEnabled" type="checkbox" checked />
+                    Afficher</label
+                  >
+                </div>
+                <div class="cap-auto">
+                  <label for="capLanguage">Langue de la vidéo</label>
+                  <select id="capLanguage">
+                    <option value="auto">Automatique</option>
+                    <option value="french" selected>Français</option>
+                    <option value="english">Anglais</option>
+                    <option value="spanish">Espagnol</option>
+                  </select>
+                  <button id="capGenerate" class="primary full" type="button">
+                    Générer automatiquement
+                  </button>
+                  <p class="hint">
+                    Whisper fonctionne sur ton appareil. Au premier usage, un
+                    modèle gratuit est téléchargé. Sur iPhone, calcul CPU pour
+                    plus de stabilité.
+                  </p>
+                </div>
+                <details class="cap-manual">
+                  <summary>Saisie manuelle ou import SRT</summary>
+                  <textarea
+                    id="capText"
+                    rows="3"
+                    placeholder="Écris les paroles à afficher…"
+                  ></textarea>
+                  <button id="capManual" type="button" class="secondary">
+                    Créer depuis ce texte
+                  </button>
+                  <label for="capSrtIn" class="cap-file">Importer un .srt</label
+                  ><input
+                    id="capSrtIn"
+                    type="file"
+                    accept=".srt,text/plain"
+                    hidden
+                  />
+                </details>
+                <h4>Choisis ton style</h4>
+                <div
+                  id="capStyles"
+                  class="cap-styles"
+                  aria-label="Styles de sous-titres"
+                ></div>
+                <div class="cap-sliders">
+                  <label
+                    >Taille <span id="capSizeValue">8.2 %</span
+                    ><input
+                      id="capSize"
+                      type="range"
+                      min="4"
+                      max="14"
+                      step=".2"
+                      value="8.2"
+                  /></label>
+                  <label
+                    >Position verticale<input
+                      id="capPosition"
+                      type="range"
+                      min="12"
+                      max="90"
+                      value="76"
+                  /></label>
+                </div>
+                <div class="cap-rowhead">
+                  <h4>Éditer les mots</h4>
+                  <span id="capCount">0 mots</span>
+                </div>
+                <p class="hint">Début (s) • Fin (s) • Texte</p>
+                <h4>Piste des sous-titres — glisser pour déplacer, tirer les bords pour modifier la durée</h4>
+                <div id="capTimeline" class="cap-timeline"></div>
+                <div id="capWords" class="cap-words"></div>
+                <div class="cap-pages"><button id="capPrev" type="button">← Précédents</button><span id="capRange"></span><button id="capNext" type="button">Suivants →</button></div>
+                <div class="cap-actions">
+                  <button id="capAdd" class="small" type="button">
+                    + Ajouter un mot</button
+                  ><button id="capSrtOut" class="small" type="button">
+                    Exporter en SRT
+                  </button>
+                </div>
+                <p
+                  id="capStatus"
+                  class="cap-status"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Sous-titres prêts.
+                </p>
+              </section>
+              <section id="adjust" class="panel">
+                <label
+                  >Contours
+                  <input id="softness" type="range" min="0" max="10" value="2"
+                /></label>
+                <label
+                  >Lissage
+                  <input
+                    id="smoothing"
+                    type="range"
+                    min="0"
+                    max="80"
+                    value="25"
+                /></label>
+                <label
+                  >Anti-halo
+                  <input
+                    id="antiHalo"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="35"
+                /></label>
+                <label
+                  >Réparer les trous
+                  <input
+                    id="holeRepair"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="35"
+                /></label>
+                <label
+                  >Stabilité mouvement
+                  <input
+                    id="stability"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="65"
+                /></label>
+                <p class="hint">
+                  Anti-halo resserre le contour. Réparer les trous protège mieux
+                  cheveux, mains et bras pendant les mouvements.
+                </p>
+              </section>
+              <section id="export" class="panel">
+                <div class="quality">
+                  <b>Qualité originale</b
+                  ><span id="qualityText">Même résolution que la source</span>
+                </div>
+                <div class="choices">
+                  <button class="size selected" data-size="original">
+                    Source</button
+                  ><button class="size" data-size="1080">1080p</button
+                  ><button class="size" data-size="720">720p</button>
+                </div>
+                <p class="hint">Mode d’export</p>
+                <div class="choices">
+                  <button class="profile" data-profile="fast">Rapide</button>
+                  <button class="profile selected" data-profile="balanced">
+                    Équilibré
+                  </button>
+                  <button class="profile" data-profile="quality">
+                    Qualité max
+                  </button>
+                </div>
+                <button id="exportBtn" class="primary full" type="button">
+                  Exporter la vidéo
+                </button>
+                <p id="exportInfo" class="hint">
+                  Export local optimisé • un changement bref d’app met l’export
+                  en pause puis il reprend à ton retour.
+                </p>
+                <p class="hint">
+                  Sur iPhone : après l’export, touche « Enregistrer dans Photos
+                  », puis « Enregistrer la vidéo » dans le menu iOS.
+                </p>
+                <button
+                  id="savePhotos"
+                  class="primary full hidden"
+                  type="button"
+                >
+                  Enregistrer dans Photos
+                </button>
+                <a
+                  id="download"
+                  class="primary full hidden"
+                  download="fondvideo.webm"
+                  >Télécharger la vidéo</a
+                >
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+      <footer>Traitement local • Pas de compte • Pas de watermark</footer>
+    </div>
+    <script type="module" src="./src/fondvideo/main.ts"></script>
+  </body>
+</html>

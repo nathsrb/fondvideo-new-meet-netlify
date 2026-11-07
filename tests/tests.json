@@ -1,0 +1,143 @@
+[
+  {
+    "name": "FondVidéo page d'accueil et montage des sous-titres",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "FondVidéo studio",
+      "sous-titres éditables",
+      "piste de montage",
+      "paginer les mots",
+      "SRT",
+      "Whisper without unsupported word timestamps",
+      "SRT export",
+      "MP4 nonempty validation"
+    ],
+    "description": "On retrouve le studio complet et la piste de sous-titres à déplacer.",
+    "steps": [
+      "Ouvrir la prévisualisation, vérifier FondVidéo",
+      "Cliquer Tester l’éditeur sans vidéo",
+      "Ouvrir Sous-titres et écrire Bonjour mon test",
+      "Cliquer Créer depuis ce texte",
+      "Modifier un mot et retrouver sa piste",
+      "Exporter les sous-titres en SRT",
+      "Importer un clip parlé et générer les sous-titres, puis exporter le SRT et un MP4 non vide."
+    ],
+    "expected": "La piste est disponible et le sous-titre reste modifiable, le fichier SRT peut être exporté."
+  },
+  {
+    "name": "Créer une réunion depuis FondVidéo",
+    "viewport": "mobile",
+    "covers": [
+      "Meet intégré",
+      "caméra avant arrière",
+      "capture haute qualité",
+      "code privé",
+      "iPhone vertical camera fit without cutting the face",
+      "video fills available screen space without cropping face",
+      "full-screen stage control",
+      "YouTube mobile rotation landscape prompt",
+      "native camera actual resolution",
+      "full frame contain",
+      "GPU effects limited to 1080p"
+    ],
+    "description": "L'application unique permet de passer du studio au module Meet.",
+    "steps": [
+      "Cliquer Lancer une visioconférence depuis l'accueil FondVidéo",
+      "Créer une nouvelle réunion",
+      "Choisir caméra arrière et 4K si disponible",
+      "Tenter de rejoindre sans prénom",
+      "Dans la réunion choisir YouTube 16:9 et un arrière-plan, vérifier que le cadrage entier de la caméra portrait est conservé sans zoom",
+      "Sur iPhone et ordinateur, activer Plein écran dans la vue intervenant puis le refermer.",
+      "Sur iPhone en portrait, choisir format 16:9 et vérifier la recommandation de tourner le téléphone. Effectuer la rotation et regarder la mise en page."
+    ],
+    "expected": "La scène suit le format paysage, ne rogne pas l'image de la caméra et affiche la résolution réellement fournie par le navigateur."
+  },
+  {
+    "name": "Hôte modère les participants",
+    "viewport": "desktop",
+    "covers": [
+      "backend join",
+      "host mute",
+      "host kick",
+      "realtime",
+      "liste participants"
+    ],
+    "description": "Un hôte peut couper un micro et retirer quelqu'un.",
+    "steps": [
+      "Alice ouvre une réunion",
+      "Bob rejoint la même salle",
+      "Alice ouvre Participants et modération",
+      "Alice coupe le micro de Bob",
+      "Bob voit son micro désactivé",
+      "Alice retire Bob après confirmation"
+    ],
+    "expected": "Bob est coupé puis retiré, et les autres participants reçoivent la mise à jour."
+  },
+  {
+    "name": "Un intervenant seul sur le fichier enregistré",
+    "viewport": "desktop",
+    "covers": [
+      "détection speaker",
+      "écran partagé prioritaire",
+      "enregistrement vidéo active speaker",
+      "enregistrement audio",
+      "téléchargement",
+      "Drive resumable OAuth",
+      "GET /api/drive/config",
+      "Google OAuth button",
+      "auto audio upload after stop",
+      "auto video upload after stop",
+      "upload progress and retry",
+      "recording download fallback",
+      "IndexedDB browser local recording storage",
+      "audio and video persist after reload",
+      "native iPhone share menu",
+      "local player",
+      "manual upload to Drive or YouTube",
+      "delete recordings",
+      "recording no crop",
+      "MediaRecorder empty blob check",
+      "native media track fallback",
+      "recording codec retry",
+      "recording no signallling dependency",
+      "native iOS video recording",
+      "Photos and Drive native sharing",
+      "remote mirroring removed",
+      "screen share capability",
+      "stage zoom",
+      "import saved recordings from AppDeploy device downloads"
+    ],
+    "description": "La scène de l'intervenant est distincte de la mosaïque et seule cette scène est enregistrée.",
+    "steps": [
+      "Alice et Bob rejoignent un salon",
+      "Alice ouvre la vue Intervenant",
+      "Bob parle puis partage son écran",
+      "Alice enregistre puis arrête la vidéo",
+      "Vérifier les actions Télécharger et Sauvegarder sur Drive",
+      "Cliquer Connecter Drive; vérifier le bouton Se connecter avec Google et la configuration avancée réservée à l'administrateur",
+      "Après autorisation Google et arrêt d'un enregistrement audio, vérifier l'envoi automatique sans action supplémentaire",
+      "Arrêter un enregistrement audio et ouvrir Mes enregistrements, puis recharger la page : le fichier doit rester présent.",
+      "Depuis la bibliothèque, écouter, télécharger, partager et supprimer un enregistrement après confirmation.",
+      "Enregistrer puis arrêter une courte vidéo, l'ouvrir depuis Mes enregistrements et vérifier qu'elle a une taille non nulle et un aperçu lisible.",
+      "Sur iPhone, partager via Photos / Drive / Partager et vérifier dix secondes de vidéo sans gel.",
+      "Importer un ancien MP4 depuis Fichiers et vérifier sa présence après actualisation sur Netlify."
+    ],
+    "expected": "Les enregistrements vidéo conservent toute l'image. Si le navigateur échoue, le système prévient et ne publie pas de faux fichier. Les fichiers valides sont téléchargeables ou partageables localement. OAuth Drive non configuré."
+  },
+  {
+    "name": "Code de réunion invalide",
+    "viewport": "mobile",
+    "covers": [
+      "validation du code",
+      "erreur"
+    ],
+    "description": "Une chaîne incorrecte ne rejoint pas une salle.",
+    "steps": [
+      "Ouvrir le module Meet",
+      "Entrer abc comme code",
+      "Appuyer sur rejoindre"
+    ],
+    "expected": "Message de code invalide et aucune salle ouverte."
+  }
+]

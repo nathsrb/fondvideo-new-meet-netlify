@@ -1,0 +1,11 @@
+{
+  "name": "FondVidéo",
+  "short_name": "FondVidéo",
+  "description": "Montage local, fonds et sous-titres",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08090d",
+  "theme_color": "#08090d",
+  "lang": "fr"
+}
