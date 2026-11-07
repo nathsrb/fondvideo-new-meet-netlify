@@ -1811,7 +1811,7 @@ function App() {
         </div>
       )}
       <footer className="footer">
-        <span>© FondVidéo New Meet · Prévisualisation AppDeploy</span>
+        <span>© FondVidéo New Meet · Prévisualisation Netlify</span>
         <span>Appels WebRTC · Vos enregistrements vous appartiennent</span>
       </footer>
 
