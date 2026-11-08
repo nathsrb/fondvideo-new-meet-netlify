@@ -1,6 +1,7 @@
 // @ts-nocheck
-// FondVidéo : sous-titres animés et transcription sans API distante.
+// FondVidéo : sous-titres animés, transcription IA cloud (clé privée serveur).
 import { Input, BlobSource, ALL_FORMATS, AudioSampleSink } from 'mediabunny';
+import { createCaptionInteraction } from './caption-interactive';
 
 const catalog = [
   ['viral', 'Viral jaune', 'highlight', '#ffffff', '#fde047'],
@@ -44,7 +45,10 @@ const initial = () => ({
   words: [],
   style: 'viral',
   size: 8.2,
+  x: 50,
   y: 76,
+  rotation: 0,
+  opacity: 100,
   enabled: true,
 });
 const byId = id => document.getElementById(id);
@@ -85,11 +89,19 @@ export function drawCaption(ctx, time, w, h, model) {
   const start = Math.floor(index / 4) * 4,
     words = model.words.slice(start, start + 4),
     active = index - start;
-  const preset = catalog.find(item => item.id === model.style) || catalog[0];
-  const font = Math.max(12, Math.min(120, (Math.min(w, h) * model.size) / 100));
+  const settings = model.words[start]?.appearance || {};
+  const chosen = catalog.find(item => item.id === (settings.style || model.style)) || catalog[0];
+  const preset = { ...chosen, fg: settings.fg || chosen.fg, accent: settings.accent || chosen.accent };
+  const font = Math.max(12, Math.min(120, (Math.min(w, h) * (settings.size ?? model.size)) / 100));
   const kind = preset.kind,
     width = w * 0.88;
   ctx.save();
+  const centerX = w * (settings.x ?? model.x ?? 50) / 100;
+  const centerY = h * (settings.y ?? model.y) / 100;
+  ctx.translate(centerX, centerY);
+  ctx.rotate((settings.rotation ?? model.rotation ?? 0) * Math.PI / 180);
+  ctx.translate(-centerX, -centerY);
+  ctx.globalAlpha *= (settings.opacity ?? model.opacity ?? 100) / 100;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
   ctx.lineJoin = 'round';
@@ -115,7 +127,7 @@ export function drawCaption(ctx, time, w, h, model) {
     running += tw + font * 0.28;
   });
   let y =
-    Math.max(font * 1.8, Math.min(h - font * 1.8, (h * model.y) / 100)) -
+    Math.max(font * 1.8, Math.min(h - font * 1.8, centerY)) -
     (lines.length - 1) * font * 0.66;
   const current = model.words[index];
   const fraction = Math.max(
@@ -129,7 +141,7 @@ export function drawCaption(ctx, time, w, h, model) {
     const total =
       line.reduce((a, v) => a + v.tw, 0) +
       Math.max(0, line.length - 1) * font * 0.28;
-    let x = w / 2 - total / 2;
+    let x = centerX - total / 2;
     line.forEach(word => {
       const focus = word.j === active,
         p =
@@ -272,7 +284,7 @@ function exportSrt(words) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 20000);
 }
-async function extractAudio(file, seconds, report) {
+async function extractAudio(file, seconds, report, offset = 0) {
   const input = new Input({
     source: new BlobSource(file),
     formats: ALL_FORMATS,
@@ -283,22 +295,22 @@ async function extractAudio(file, seconds, report) {
     throw new Error('Codec audio non pris en charge.');
   const sink = new AudioSampleSink(track),
     output = new Float32Array(Math.ceil(seconds * 16000));
-  for await (const sample of sink.samples(0, seconds)) {
+  for await (const sample of sink.samples(offset, offset + seconds)) {
     try {
       const opt = { planeIndex: 0, format: 'f32-planar' };
       const data = new Float32Array(sample.allocationSize(opt) / 4);
       sample.copyTo(data, opt);
-      const begin = Math.max(0, Math.ceil(sample.timestamp * 16000));
+      const begin = Math.max(0, Math.ceil((sample.timestamp - offset) * 16000));
       const end = Math.min(
         output.length,
-        Math.floor((sample.timestamp + sample.duration) * 16000)
+        Math.floor((sample.timestamp + sample.duration - offset) * 16000)
       );
       for (let j = begin; j < end; j++) {
         const p = Math.max(
           0,
           Math.min(
             data.length - 1,
-            (j / 16000 - sample.timestamp) * sample.sampleRate
+            (offset + j / 16000 - sample.timestamp) * sample.sampleRate
           )
         );
         const k = Math.floor(p),
@@ -318,40 +330,57 @@ async function extractAudio(file, seconds, report) {
   }
   return output;
 }
-let whisper = null;
-async function getWhisper(report) {
-  if (whisper) return whisper;
+
+function audioToWav16(samples, rate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const write = (position, value) => { for (let i = 0; i < value.length; i++) view.setUint8(position + i, value.charCodeAt(i)); };
+  write(0, 'RIFF'); view.setUint32(4, buffer.byteLength - 8, true);
+  write(8, 'WAVE'); write(12, 'fmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  write(36, 'data'); view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const value = Math.min(1, Math.max(-1, samples[i]));
+    view.setInt16(44 + i * 2, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+// Legacy local Whisper retained for compatibility but not used by cloud transcription.
+const whisperPipelines = new Map();
+async function getWhisper(report, quality = 'balanced') {
+  const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const candidates = quality === 'maximum'
+    ? ['onnx-community/whisper-small', 'onnx-community/whisper-base', 'onnx-community/whisper-tiny']
+    : quality === 'fast'
+      ? ['onnx-community/whisper-tiny']
+      : ['onnx-community/whisper-base', 'onnx-community/whisper-tiny'];
   const { pipeline } = await import('@huggingface/transformers');
-  const mobile = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const configs =
-    !mobile && navigator.gpu
-      ? [
-          {
-            device: 'webgpu',
-            dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' },
-          },
-          { device: 'wasm', dtype: 'q8' },
-        ]
-      : [{ device: 'wasm', dtype: 'q8' }];
+  const configs = !mobile && navigator.gpu
+    ? [{ device: 'webgpu', dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' } }, { device: 'wasm', dtype: 'q8' }]
+    : [{ device: 'wasm', dtype: 'q8' }];
   let last;
-  for (const config of configs) {
-    try {
-      report('Téléchargement / chargement du modèle Whisper gratuit…');
-      whisper = await pipeline(
-        'automatic-speech-recognition',
-        'onnx-community/whisper-tiny',
-        {
+  for (const model of candidates) {
+    for (const config of configs) {
+      const key = model + '/' + config.device;
+      if (whisperPipelines.has(key)) return whisperPipelines.get(key);
+      try {
+        report('Chargement de ' + model.split('/').pop() + ' (' + config.device + ')…');
+        const pipe = await pipeline('automatic-speech-recognition', model, {
           ...config,
           progress_callback: data => {
             if (data.status === 'progress' && Number.isFinite(data.progress))
-              report('Chargement Whisper… ' + Math.round(data.progress) + ' %');
+              report('Téléchargement du modèle… ' + Math.round(data.progress) + ' %');
           },
-        }
-      );
-      return whisper;
-    } catch (err) {
-      last = err;
-      report('Accélération indisponible, essai du mode CPU…');
+        });
+        whisperPipelines.set(key, pipe);
+        return pipe;
+      } catch (err) {
+        last = err;
+        report('Modèle indisponible, essai d’un modèle plus léger…');
+      }
     }
   }
   throw last || new Error('Whisper indisponible.');
@@ -379,12 +408,25 @@ export function createCaptionStudio({
   preview,
 }) {
   let page=0;
+  let interaction;
+  const undoStack = [];
+  const redoStack = [];
+  const snapshot = () => state.words.map(w => ({...w}));
+  function remember() {
+    undoStack.push(snapshot());
+    if (undoStack.length > 80) undoStack.shift();
+    redoStack.length = 0;
+  }
+  function restore(words) {
+    state.words = words.map(w => ({...w}));
+    refresh(); repaint();
+  }
   const pageSize=100;
   const state = initial(),
     report = text => {
       byId('capStatus').textContent = text;
     };
-  const repaint=()=>preview();
+  const repaint=()=>{preview(); interaction?.sync();};
   function renderTimeline(){
     const holder=byId('capTimeline');
     if(!holder)return;
@@ -401,11 +443,13 @@ export function createCaptionStudio({
         clip.style.left=(first.start/duration*100)+'%';
         clip.style.width=(Math.max(.06,last.end-first.start)/duration*100)+'%';
       };update();
+      clip.ondblclick=()=>{const inputs=byId('capWords').querySelectorAll('.cap-word input[type=text]');page=Math.floor(i/pageSize);refresh();byId('capWords').querySelector('input[type=text]')?.focus();};
       clip.onpointerdown=e=>{
         if(e.button!==0)return;
         e.preventDefault();
         const box=clip.getBoundingClientRect();
         const mode=e.clientX-box.left<10?'start':box.right-e.clientX<10?'end':'move';
+        remember();
         const x=e.clientX,original=group.map(w=>({start:w.start,end:w.end}));
         clip.setPointerCapture(e.pointerId);
         const move=ev=>{
@@ -468,21 +512,25 @@ export function createCaptionStudio({
       remove.textContent = '×';
       remove.title = 'Supprimer';
       start.onchange = () => {
+        remember();
         word.start = Math.max(0,Math.min(word.end-.05,Number(start.value)||0));
         state.words.sort((a,b)=>a.start-b.start);refresh();repaint();
       };
       end.onchange = () => {
+        remember();
         word.end = Math.max(
           word.start + 0.05,
           Number(end.value) || word.start + 0.1
         );
         refresh();repaint();
       };
+      label.onfocus = () => remember();
       label.oninput = () => {
         word.text = label.value;
         renderTimeline();repaint();
       };
       remove.onclick = () => {
+        remember();
         state.words.splice(index, 1);
         refresh();
         repaint();
@@ -495,6 +543,48 @@ export function createCaptionStudio({
     byId('capPrev').disabled=page===0;
     byId('capNext').disabled=(page+1)*pageSize>=n;
     renderTimeline();
+    interaction?.sync();
+  };
+  byId('capUndo').onclick = () => {
+    if (!undoStack.length) return;
+    redoStack.push(snapshot()); restore(undoStack.pop());
+  };
+  byId('capRedo').onclick = () => {
+    if (!redoStack.length) return;
+    undoStack.push(snapshot()); restore(redoStack.pop());
+  };
+  byId('capReplaceAll').onclick = () => {
+    const from = byId('capFind').value.trim();
+    const to = byId('capReplace').value.trim();
+    if (!from) return report('Saisis le mot ou l’expression à corriger.');
+    const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(escapeRegex(from), 'giu');
+    const needle = from.toLocaleLowerCase().split(/\s+/u);
+    let count = 0;
+    const updated = state.words.map(w => ({...w}));
+    // Multi-word correction keeps the original time range and redistributes it.
+    if (needle.length > 1) {
+      for (let i = updated.length - needle.length; i >= 0; i--) {
+        const match = updated.slice(i, i + needle.length)
+          .map(w => w.text.replace(/[.,!?;:]+$/gu, '').toLocaleLowerCase());
+        if (!match.every((text, j) => text === needle[j])) continue;
+        const first = updated[i], last = updated[i + needle.length - 1];
+        updated.splice(i, needle.length, ...distribute(to, first.start, last.end));
+        count++;
+      }
+    } else {
+      for (const w of updated) {
+        re.lastIndex = 0;
+        if (re.test(w.text)) {
+          re.lastIndex = 0;
+          w.text = w.text.replace(re, to);
+          count++;
+        }
+      }
+    }
+    if (!count) return report('Aucune correspondance trouvée.');
+    remember(); state.words = updated; refresh(); repaint();
+    report(count + ' mot(s) corrigé(s). Tu peux annuler la modification.');
   };
   byId('capPrev').onclick=()=>{page=Math.max(0,page-1);refresh();};
   byId('capNext').onclick=()=>{page+=1;refresh();};
@@ -547,6 +637,7 @@ export function createCaptionStudio({
       report('Écris d’abord ton texte.');
       return;
     }
+    remember();
     state.words = distribute(text, 0, Math.max(2, getDuration()));
     refresh();
     repaint();
@@ -554,6 +645,7 @@ export function createCaptionStudio({
   };
   byId('capAdd').onclick = () => {
     const t = Math.max(0, getTime());
+    remember();
     state.words.push({ text: 'Nouveau', start: t, end: t + 1.2 });
     state.words.sort((a, b) => a.start - b.start);
     refresh();
@@ -565,6 +657,7 @@ export function createCaptionStudio({
     if (!f) return;
     const words = parseSrt(await f.text());
     if (words.length) {
+      remember();
       state.words = words;
       refresh();
       repaint();
@@ -591,53 +684,49 @@ export function createCaptionStudio({
       report('Durée de vidéo inconnue.');
       return;
     }
-    const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const seconds = Math.min(duration, mobile ? 180 : 600);
+    const seconds = duration;
     const btn = byId('capGenerate');
     btn.disabled = true;
-    btn.textContent = 'Transcription…';
+    btn.textContent = 'Transcription IA…';
     try {
-      report('Préparation audio locale…');
-      const audio = await extractAudio(file, seconds, report);
-      const pipe = await getWhisper(report);
-      const language = byId('capLanguage').value,
-        params = { task: 'transcribe', return_timestamps: true };
-      if (language !== 'auto') params.language = language;
+      const language = byId('capLanguage').value;
+      const languageCode = { french: 'fr', english: 'en', spanish: 'es' }[language] || '';
+      const chunkSize = 24;
+      const overlap = 1.5;
       const words = [];
-      for (let start = 0; start < audio.length / 16000; start += 25) {
-        const len = Math.min(25, audio.length / 16000 - start);
-        report(
-          'Transcription sur ton appareil… ' +
-            Math.round((start / seconds) * 100) +
-            ' %'
-        );
-        const audioPart = audio.subarray(
-          Math.round(start * 16000), Math.round((start + len) * 16000)
-        );
-        let piece;
-        try {
-          piece = await pipe(audioPart, params);
-        } catch (e) {
-          const reason = String(e?.message || e);
-          if (!reason.includes('timestamp') && !reason.includes('cross attentions')) throw e;
-          report('Horodatage approximatif utilisé pour ce modèle Whisper…');
-          piece = await pipe(audioPart, { ...params, return_timestamps: false });
+      for (let start = 0; start < seconds; start += chunkSize - overlap) {
+        const length = Math.min(chunkSize, seconds - start);
+        report('Préparation audio… ' + Math.round(start / seconds * 100) + ' %');
+        const audio = await extractAudio(file, length, report, start);
+        const wav = audioToWav16(audio, 16000);
+        const form = new FormData();
+        form.append('audio', wav, 'extrait.wav');
+        if (languageCode) form.append('language', languageCode);
+        const context = byId('capVocabulary')?.value?.trim();
+        if (context) form.append('prompt', context.slice(0, 1000));
+        report('Reconnaissance haute précision sur serveur… ' + Math.round(start / seconds * 100) + ' %');
+        const response = await fetch('/.netlify/functions/transcribe', { method: 'POST', body: form });
+        let data;
+        try { data = await response.json(); } catch { throw new Error('Réponse de transcription illisible'); }
+        if (!response.ok) throw new Error(data.error || 'Erreur du service de transcription');
+        const chunkWords = Array.isArray(data.words) && data.words.length
+          ? data.words.map(w => ({ text: String(w.text || w.word || '').trim(), start: Number(w.start) + start, end: Number(w.end) + start }))
+          : (data.segments || []).flatMap(seg => distribute(seg.text || '', Number(seg.start) + start, Number(seg.end) + start));
+        const cutoff = start === 0 ? 0 : start + overlap / 2;
+        for (const word of chunkWords) {
+          if (!word.text || !Number.isFinite(word.start) || !Number.isFinite(word.end)) continue;
+          if (word.end <= word.start || (word.start + word.end) / 2 < cutoff) continue;
+          if (words.some(prev => Math.abs(prev.start - word.start) < .24 && prev.text.toLowerCase() === word.text.toLowerCase())) continue;
+          words.push(word);
         }
-        words.push(...resultsToWords(piece, start, len));
+        if (start + length >= seconds) break;
       }
-      if (!words.length) throw new Error('Aucune parole reconnue.');
-      state.words = words;
+      if (!words.length) throw new Error('Aucune parole détectée.');
+      remember();
+      state.words = words.sort((a, b) => a.start - b.start);
       refresh();
       repaint();
-      report(
-        words.length +
-          ' mots transcrits localement. Horodatages estimés par segment : vérifie et ajuste les mots.' +
-          (seconds < duration
-            ? ' Les premières ' +
-              Math.round(seconds) +
-              ' secondes ont été traitées pour préserver la mémoire.'
-            : '')
-      );
+      report(words.length + ' mots transcrits avec Whisper Large V3. Corrige les éventuelles erreurs directement dans la piste.');
     } catch (e) {
       console.error(e);
       report(
@@ -651,10 +740,13 @@ export function createCaptionStudio({
     }
   };
   refresh();
+  interaction = createCaptionInteraction({ state, catalog, getTime, getDuration, remember, refresh, repaint, report });
   return {
+    syncOverlay: () => interaction.sync(),
     render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
     reset: () => {
-      Object.assign(state, initial());page=0;
+      Object.assign(state, initial());page=0;undoStack.length=0;redoStack.length=0;
+      interaction.clear();
       byId('capText').value = '';
       byId('capEnabled').checked = true;
       byId('capSize').value = String(state.size);

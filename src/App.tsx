@@ -78,12 +78,10 @@ function readableError(e: unknown) {
 function StreamVideo({
   stream,
   muted = false,
-  mirror = false,
   fit = 'contain',
 }: {
   stream: MediaStream | null;
   muted?: boolean;
-  mirror?: boolean;
   fit?: 'contain' | 'cover';
 }) {
   const ref = useRef<HTMLVideoElement>(null);
@@ -107,10 +105,10 @@ function StreamVideo({
         autoPlay
         playsInline
         muted={muted}
-        style={{ objectFit: fit }}
-        className={
-          (mirror ? 'mirror ' : '') + (!hasVideo ? 'audio-only-video' : '')
-        }
+        // Never mirror front camera: local preview, remote view and exported
+        // recordings must all use the same natural left-to-right orientation.
+        style={{ objectFit: fit, transform: 'none' }}
+        className={!hasVideo ? 'audio-only-video' : ''}
       />
       {!hasVideo && (
         <div className="empty-avatar">
@@ -351,15 +349,82 @@ function App() {
     window.setTimeout(()=>URL.revokeObjectURL(url),30000);
   }
 
-  async function shareRecording(item:SavedRecording) {
-    const file=new File([item.blob],item.name,{type:item.mime||'application/octet-stream'});
-    if(navigator.share && navigator.canShare?.({files:[file]})) {
-      try { await navigator.share({files:[file],title:item.name}); }
-      catch(err){if((err as Error)?.name!=='AbortError')toast('Partage impossible : '+readableError(err));}
-    } else {
-      downloadRecording(item);
-      toast('Le partage natif de fichier n’est pas disponible ici. Utilise le fichier téléchargé pour Drive, Photos ou YouTube.');
+  async function shareRecording(item:SavedRecording, destination: 'photos' | 'drive' | 'youtube' | 'general' = 'general') {
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isVideo = item.mime.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(item.name);
+    // Remove codecs parameters from the MIME type: iOS share targets expect
+    // video/mp4, not video/mp4;codecs=avc1..., which can fail canShare().
+    const mime = /\.mp4$/i.test(item.name) || item.mime.includes('video/mp4')
+      ? 'video/mp4'
+      : /\.m4a$/i.test(item.name) || item.mime.includes('audio/mp4')
+        ? 'audio/mp4'
+        : item.mime.split(';')[0] || 'application/octet-stream';
+    if (ios && isVideo && mime !== 'video/mp4') {
+      toast('Photos sur iPhone exige un fichier MP4 compatible. Cet enregistrement est en ' + mime + ' ; essaie un nouvel enregistrement dans Safari ou télécharge-le dans Fichiers.');
     }
+    const file = new File([item.blob], item.name, {type:mime, lastModified:Date.now()});
+    const data = {files:[file], title:item.name};
+    // Important: navigator.share() is invoked synchronously from the click.
+    // iOS does not allow a website to write silently to the Photos library.
+    const canShareFile = !!navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }));
+    if (canShareFile) {
+      if (ios) toast(destination === 'drive'
+        ? 'Choisis Google Drive dans le partage iPhone. Aucune clé API à saisir.'
+        : destination === 'youtube'
+          ? 'Choisis YouTube si proposé. Sinon, enregistre la vidéo dans Photos puis ouvre YouTube → Créer → Vidéo.'
+          : 'Choisis « Enregistrer la vidéo » dans le partage iPhone pour l’ajouter à Photos.');
+      try { await navigator.share(data); return; }
+      catch(err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        toast('Partage indisponible : ' + readableError(err) + '. Tu peux télécharger le fichier et l’importer dans Drive ou Photos.');
+        return;
+      }
+    }
+    if (ios && isVideo && mime === 'video/mp4' && destination !== 'drive' && destination !== 'youtube') {
+      // Safari may support its own native video viewer even if Web Share files
+      // are not supported. Keep the current preview/link as fallback.
+      const url = URL.createObjectURL(item.blob);
+      const viewer = window.open(url, '_blank');
+      if (viewer) {
+        window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+        toast('Vidéo ouverte. Utilise le menu Partager du lecteur Safari puis « Enregistrer la vidéo ».');
+        return;
+      }
+      URL.revokeObjectURL(url);
+    }
+    downloadRecording(item);
+    toast(destination === 'drive'
+      ? 'Fichier téléchargé : ouvre Google Drive et importe-le depuis Fichiers.'
+      : destination === 'youtube'
+        ? 'Fichier téléchargé : ouvre l’application YouTube, touche Créer → Vidéo puis sélectionne le fichier.'
+        : 'Partage direct non disponible : le fichier a été téléchargé. Ouvre-le depuis Fichiers ou utilise Safari.');
+  }
+
+  function saveOnDrive(item: SavedRecording) {
+    if (driveConnected && tokenRef.current) {
+      void uploadToDrive({blob:item.blob, name:item.name, url:''});
+      return;
+    }
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      void shareRecording(item, 'drive');
+      return;
+    }
+    // Without a Google authorization there is no secure browser API that can
+    // upload a local Blob into the user's Drive. Prepare the file and destination.
+    downloadRecording(item);
+    window.open('https://drive.google.com/drive/u/0/my-drive', '_blank', 'noopener,noreferrer');
+    toast('Drive ouvert et fichier téléchargé. Dans Drive : Nouveau → Importer un fichier, puis sélectionne la vidéo.');
+  }
+
+  function publishOnYouTube(item: SavedRecording) {
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // YouTube is not guaranteed to be a target in the OS share sheet.
+      void shareRecording(item, 'youtube');
+      return;
+    }
+    downloadRecording(item);
+    window.open('https://studio.youtube.com/', '_blank', 'noopener,noreferrer');
+    toast('YouTube Studio ouvert et vidéo téléchargée. Dans Studio : Créer → Importer des vidéos.');
   }
 
   function previewRecording(item:SavedRecording) {
@@ -953,17 +1018,19 @@ function App() {
     };
     draw();
     const nativeIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const interval = nativeIOS ? 0 : window.setInterval(draw, 80);
+    // Keep the composited frame stream alive on iPhone too. Previously iOS
+    // forcibly recorded the raw track, losing effects and correct orientation.
+    const interval = window.setInterval(draw, nativeIOS ? 100 : 80);
     let videoStream: MediaStream | null = null;
     let fallback = false;
     if(mode==='video'){
-      try { if(!nativeIOS && typeof canvas.captureStream==='function') videoStream=canvas.captureStream(24); }
+      try { if(typeof canvas.captureStream==='function') videoStream=canvas.captureStream(nativeIOS ? 20 : 24); }
       catch { /* provide source-track recording fallback */ }
       if(!videoStream?.getVideoTracks().length){
         const items=allStreams();
         const focus=shareRef.current||pinRef.current||focusRef.current;
         const chosen=items.find(x=>x.key===focus)||items.find(x=>x.key==='local')||items[0];
-        const source=(chosen?.key==='local' ? screenRef.current?.getVideoTracks()[0] || (nativeIOS ? rawRef.current?.getVideoTracks()[0] : null) : null) || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
+        const source=(chosen?.key==='local' ? screenRef.current?.getVideoTracks()[0] : null) || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
         if(!source)throw new Error('La caméra ne fournit pas de piste vidéo enregistrable.');
         videoStream=new MediaStream([source]);
         fallback=true;
@@ -995,7 +1062,7 @@ function App() {
     }
     try {
       const { stream, cleanup, fallback } = recordCanvasAndAudio(mode);
-      if(fallback)toast('Capture directe iPhone plus stable : les effets virtuels et changements automatiques d’intervenant ne seront pas inclus dans ce fichier.');
+      if(fallback)toast('Capture directe de secours : les effets de fond et le changement automatique d’intervenant peuvent être absents.');
       const types =
         mode === 'video'
           ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm']
@@ -1012,7 +1079,7 @@ function App() {
         }catch(e){recorderError=e;}
       }
       if(!recorder)throw new Error('Format vidéo non pris en charge : '+readableError(recorderError));
-      recorder.onerror=()=>toast('La capture vidéo a rencontré une erreur du navigateur. Essaie 720p.');
+      recorder.onerror=()=>toast('Erreur de capture vidéo : essaie Safari sur iPhone et le format 720p.');
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = e => {
         if (e.data.size) chunks.push(e.data);
@@ -1020,8 +1087,11 @@ function App() {
       recorder.onstop = () => {
         cleanup();
         stopCaptureRef.current = null;
-        const type =
+        const recordedType =
           recorder.mimeType || (mode === 'video' ? 'video/webm' : 'audio/webm');
+        const type = recordedType.toLowerCase().includes('mp4')
+          ? (mode === 'video' ? 'video/mp4' : 'audio/mp4')
+          : (mode === 'video' ? 'video/webm' : 'audio/webm');
         const blob = new Blob(chunks, { type });
         if(!blob.size){
           setRecording(false);
@@ -1055,7 +1125,11 @@ function App() {
           void uploadToDrive(item);
         } else {
           setDriveStatus('idle');
-          toast('Enregistrement disponible dans Mes enregistrements : télécharge-le ou partage-le.');
+          toast(isPhone && mode === 'video'
+            ? (type === 'video/mp4'
+              ? 'Vidéo MP4 prête ! Clique sur « Enregistrer dans Photos » puis choisis « Enregistrer la vidéo » dans le partage iPhone.'
+              : 'Vidéo prête, mais le format proposé par ce navigateur peut ne pas être accepté par Photos.')
+            : 'Enregistrement disponible dans Mes enregistrements : télécharge-le ou partage-le.');
         }
       };
       recorderRef.current = recorder;
@@ -1254,10 +1328,10 @@ function App() {
           <button
             className={'drive-header-action ' + (driveConnected ? 'connected' : '')}
             title="Connexion Google Drive"
-            onClick={() => setShowSettings(true)}
+            onClick={() => driveConnected ? setShowSettings(true) : setLibraryOpen(true)}
           >
             <CloudUpload size={17} />
-            <span>{driveConnected ? 'Drive connecté' : 'Drive : en attente'}</span>
+            <span>{driveConnected ? 'Drive connecté' : 'Exporter Drive / YouTube'}</span>
           </button>
         </div>
       </header>
@@ -1687,7 +1761,16 @@ function App() {
                     <button onClick={()=>void shareRecording({
                       id:'current',name:recordReady.name,blob:recordReady.blob,
                       mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
-                    })}><Share2 size={15}/> Photos / Drive / Partager</button>
+                    }, 'photos')}><Share2 size={15}/> {isPhone && recordMode === 'video' ? 'Enregistrer dans Photos' : 'Partager le fichier'}</button>
+                    <button onClick={()=>saveOnDrive({
+                      id:'current',name:recordReady.name,blob:recordReady.blob,
+                      mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
+                    })}><CloudUpload size={15}/> Enregistrer sur Google Drive</button>
+                    {recordMode === 'video' && <button onClick={()=>publishOnYouTube({
+                      id:'current',name:recordReady.name,blob:recordReady.blob,
+                      mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
+                    })}><ExternalLink size={15}/> Publier sur YouTube</button>}
+                    {isPhone && recordMode === 'video' && <span className="photos-help">iPhone : « Enregistrer sur Google Drive » ouvre le partage natif. Pour YouTube, choisis YouTube si proposé ; sinon enregistre la vidéo dans Photos, puis ouvre YouTube → Créer → Vidéo.</span>}
                     {uploadedLink ? (
                       <a href={uploadedLink} target="_blank" rel="noreferrer">
                         <ExternalLink size={15} /> Ouvrir dans Drive
@@ -1797,21 +1880,23 @@ function App() {
                   <div className="recording-item-actions">
                     <button onClick={()=>previewRecording(item)}><PlayCircle size={15}/> {activePreview===item.id?'Fermer':'Lire'}</button>
                     <button onClick={()=>downloadRecording(item)}><Download size={15}/> Télécharger</button>
-                    <button onClick={()=>void shareRecording(item)}><Share2 size={15}/> Photos / Drive / Partager</button>
+                    <button onClick={()=>void shareRecording(item, 'photos')}><Share2 size={15}/> {isPhone && item.mime.startsWith('video/') ? 'Enregistrer dans Photos' : 'Partager'}</button>
+                    <button onClick={()=>saveOnDrive(item)}><CloudUpload size={15}/> Enregistrer sur Google Drive</button>
+                    {item.mime.startsWith('video/') && <button onClick={()=>publishOnYouTube(item)}><ExternalLink size={15}/> Publier sur YouTube</button>}
                     <button className="danger" onClick={()=>void removeRecording(item)}><Trash2 size={15}/> Supprimer</button>
                   </div>
                 </article>)}
               </div>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
-              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire dans FondVidéo.</p>
+              <p>Après l’enregistrement, choisis « Enregistrer sur Google Drive » ou « Publier sur YouTube ». Sur iPhone, la feuille de partage te permet de choisir Drive ou Photos. Si YouTube n’est pas proposé, enregistre d’abord la vidéo dans Photos puis ouvre YouTube → Créer → Vidéo. Sur ordinateur, le fichier est téléchargé et la page d’import de Drive ou YouTube s’ouvre. Seul l’envoi automatique vers Drive nécessite une autorisation Google.</p>
               <div><a href="https://drive.google.com/drive/u/0/my-drive" target="_blank" rel="noreferrer">Ouvrir Drive <ExternalLink size={13}/></a><a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Ouvrir YouTube Studio <ExternalLink size={13}/></a></div>
             </div>
           </section>
         </div>
       )}
       <footer className="footer">
-        <span>© FondVidéo New Meet · Prévisualisation AppDeploy</span>
+        <span>© FondVidéo New Meet · Prévisualisation Netlify</span>
         <span>Appels WebRTC · Vos enregistrements vous appartiennent</span>
       </footer>
 
