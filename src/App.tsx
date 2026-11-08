@@ -173,6 +173,17 @@ function App() {
   const [recordReady, setRecordReady] = useState<Recording | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Deep-link Vault from SCELYO Studio without changing meeting routing.
+  useEffect(() => {
+    const openVaultRoute = () => {
+      if (location.hash === '#/vault') setLibraryOpen(true);
+    };
+    openVaultRoute();
+    window.addEventListener('hashchange', openVaultRoute);
+    return () => window.removeEventListener('hashchange', openVaultRoute);
+  }, []);
+
   const [savedItems, setSavedItems] = useState<SavedRecording[]>([]);
   const [activePreview, setActivePreview] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -320,7 +331,7 @@ function App() {
     try {
       const item=await saveRecording(blob,name);
       setSavedItems(previous=>[item,...previous.filter(x=>x.id!==item.id)]);
-      toast('Enregistrement sauvegardé dans Mes enregistrements sur cet appareil.');
+      toast('Capture enregistrée dans SCELYO Vault sur cet appareil.');
     } catch(err) {
       toast('Stockage insuffisant ou inaccessible : '+readableError(err)+'. Télécharge la vidéo avant de quitter.');
     } finally {
@@ -1056,7 +1067,7 @@ function App() {
           void uploadToDrive(item);
         } else {
           setDriveStatus('idle');
-          toast('Enregistrement disponible dans Mes enregistrements : télécharge-le ou partage-le.');
+          toast('Enregistrement disponible dans SCELYO Vault : télécharge-le ou partage-le.');
         }
       };
       recorderRef.current = recorder;
@@ -1624,7 +1635,7 @@ function App() {
                 )}
                 {recordReady && !recording && (
                   <div className="record-links">
-                    <button onClick={()=>setLibraryOpen(true)} disabled={savingLocal}><Library size={15}/>{savingLocal?'Enregistrement local…':'Mes enregistrements'}</button>
+                    <button onClick={()=>setLibraryOpen(true)} disabled={savingLocal}><Library size={15}/>{savingLocal?'Enregistrement local…':'SCELYO Vault'}</button>
                     <a href={recordReady.url} download={recordReady.name}>
                       <Download size={15} /> Télécharger dans Fichiers
                     </a>
@@ -1718,7 +1729,7 @@ function App() {
         <div className="modal-backdrop local-recordings-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setLibraryOpen(false);}}>
           <section className="local-recordings-panel" role="dialog" aria-modal="true" aria-label="Mes enregistrements">
             <div className="modal-header">
-              <div><div className="eyebrow">BIBLIOTHÈQUE DE CET APPAREIL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
+              <div><div className="eyebrow">SCELYO / VAULT LOCAL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
               <button className="icon-btn" onClick={()=>setLibraryOpen(false)} aria-label="Fermer"><X size={21}/></button>
             </div>
             <p className="local-recordings-hint">Tes enregistrements restent dans ce navigateur, même après fermeture de l’onglet. Ils ne sont pas synchronisés entre appareils et peuvent disparaître si tu effaces les données du navigateur. Pour les conserver durablement, télécharge-les ou partage-les.</p>
@@ -1774,7 +1785,7 @@ function App() {
           >
             <div className="modal-header">
               <div>
-                <div className="eyebrow">ENREGISTREMENTS</div>
+                <div className="eyebrow">SCELYO / DRIVE</div>
                 <h2>SCELYO & Google Drive</h2>
               </div>
               <button
@@ -1788,7 +1799,7 @@ function App() {
               <div className="drive-icon"><CloudUpload size={30}/></div>
               <div>
                 <strong>Enregistrements automatiquement sauvegardés</strong>
-                <p>Après connexion, chaque audio et chaque vidéo rejoint ton dossier <b>FondVidéo Meet - Enregistrements</b> sur Google Drive à la fin de l'enregistrement.</p>
+                <p>Après connexion, tes nouveaux enregistrements rejoignent le dossier dédié sur ton Google Drive après la fin de l’enregistrement.</p>
               </div>
             </div>
             {driveConnected ? (
@@ -1808,7 +1819,7 @@ function App() {
                   </svg>
                   Se connecter avec Google
                 </button>
-                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCELYO. Aucun mot de passe n'est demandé par notre application.</p>
+                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCELYO. Aucun mot de passe n’est demandé par SCELYO.</p>
                 {!clientId.trim().endsWith('.apps.googleusercontent.com') && (
                   <p className="drive-needs-setup">La connexion Google doit être configurée une seule fois pour cette prévisualisation. Le bouton sera fonctionnel dès que cette configuration aura été ajoutée.</p>
                 )}
