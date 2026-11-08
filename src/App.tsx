@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ws } from './netlify-transport';
+import { MeetingMusicMixer } from './meeting-music';
 import {
   processCamera,
   videoDimensions,
@@ -43,6 +44,12 @@ import {
   Maximize2,
   Minimize2,
   PlayCircle,
+  Music2,
+  Volume2,
+  Pause,
+  Play,
+  Repeat2,
+  FileAudio,
 } from 'lucide-react';
 
 type Member = { id: string; name: string };
@@ -66,6 +73,10 @@ const alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
 function newCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(12));
   return Array.from(bytes, n => alphabet[n % alphabet.length]).join('');
+}
+function musicClock(seconds: number) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
 function currentRoom() {
   const match = location.hash.match(/^#\/room\/([a-z2-9]{12})$/);
@@ -173,6 +184,15 @@ function App() {
   const [recordReady, setRecordReady] = useState<Recording | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
+  const [musicName, setMusicName] = useState('');
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(35);
+  const [musicLoop, setMusicLoop] = useState(false);
+  const [musicMonitor, setMusicMonitor] = useState(false);
+  const [musicTime, setMusicTime] = useState(0);
+  const [musicDuration, setMusicDuration] = useState(0);
+  const [musicBusy, setMusicBusy] = useState(false);
 
   // Deep-link Vault from SCELYO Studio without changing meeting routing.
   useEffect(() => {
@@ -197,6 +217,7 @@ function App() {
   const [remoteRecording, setRemoteRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
+  const musicRef = useRef<MeetingMusicMixer | null>(null);
   const peerId = useRef(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
@@ -435,6 +456,102 @@ function App() {
     }
   }
 
+  // Audio sent to participants is a single WebRTC track. When music is
+  // imported, it contains the microphone and the selected soundtrack.
+  function outboundAudioTrack() {
+    return musicRef.current?.track || rawRef.current?.getAudioTracks()[0] || null;
+  }
+
+  async function restoreOutboundAudio(track: MediaStreamTrack | null) {
+    const senders = [...pcs.current.values()]
+      .flatMap(pc => pc.getSenders())
+      .filter(sender => sender.track?.kind === 'audio');
+    await Promise.allSettled(senders.map(sender => sender.replaceTrack(track)));
+  }
+
+  async function loadMusic(file: File | null) {
+    if (!file) return;
+    if (hostId !== peerId.current) {
+      toast('Seul l’organisateur peut diffuser une musique dans SCELYO Live.');
+      return;
+    }
+    if (!/\.(mp3|wav|m4a|aac)$/i.test(file.name)) {
+      toast('Choisis un fichier MP3, WAV ou M4A.');
+      return;
+    }
+    if (file.size > 150 * 1024 * 1024) {
+      toast('Le fichier dépasse 150 Mo. Sélectionne une piste plus légère.');
+      return;
+    }
+    const microphone = rawRef.current?.getAudioTracks()[0];
+    if (!microphone || microphone.readyState !== 'live') {
+      toast('Autorise le microphone avant de diffuser de la musique.');
+      return;
+    }
+    setMusicBusy(true);
+    let next: MeetingMusicMixer | null = null;
+    const previous = musicRef.current;
+    try {
+      next = new MeetingMusicMixer(file, new MediaStream([microphone]), progress => {
+        setMusicPlaying(progress.playing);
+        setMusicTime(progress.currentTime);
+        setMusicDuration(progress.duration);
+      });
+      next.setVolume(musicVolume);
+      next.setLoop(musicLoop);
+      next.setMonitor(musicMonitor);
+      const senders = [...pcs.current.values()].flatMap(pc => pc.getSenders())
+        .filter(sender => sender.track?.kind === 'audio');
+      const switched = await Promise.allSettled(senders.map(sender => sender.replaceTrack(next!.track)));
+      if (switched.some(result => result.status === 'rejected')) {
+        await Promise.allSettled(senders.map(sender => sender.replaceTrack(previous?.track || microphone)));
+        throw new Error('La diffusion de musique est indisponible sur cette connexion.');
+      }
+      musicRef.current = next;
+      setMusicName(file.name);
+      setMusicTime(0);
+      setMusicDuration(0);
+      setMusicPlaying(false);
+      if (previous) await previous.destroy();
+      toast('Musique prête : appuie sur Lecture pour la diffuser aux participants.');
+    } catch (error) {
+      if (next && musicRef.current !== next) await next.destroy();
+      toast('Impossible de charger la musique : ' + readableError(error));
+    } finally {
+      setMusicBusy(false);
+    }
+  }
+
+  async function clearMusic() {
+    const previous = musicRef.current;
+    if (!previous) return;
+    setMusicBusy(true);
+    try {
+      const rawTrack = rawRef.current?.getAudioTracks()[0] || null;
+      await restoreOutboundAudio(rawTrack);
+      musicRef.current = null;
+      await previous.destroy();
+      setMusicPlaying(false);
+      setMusicName('');
+      setMusicTime(0);
+      setMusicDuration(0);
+      setMusicMonitor(false);
+    } finally {
+      setMusicBusy(false);
+    }
+  }
+
+  async function toggleMusicPlayback() {
+    const current = musicRef.current;
+    if (!current) return;
+    try {
+      if (musicPlaying) current.pause();
+      else await current.play();
+    } catch (error) {
+      toast('Lecture impossible : ' + readableError(error) + '. Réessaie en touchant Lecture.');
+    }
+  }
+
   function getPeer(id: string) {
     const existing = pcs.current.get(id);
     if (existing) return existing;
@@ -449,7 +566,8 @@ function App() {
     if (source && source.getTracks().length) {
       source.getTracks().forEach(track => {
         const selected =
-          track.kind === 'video' && screenRef.current
+          track.kind === 'audio' ? (outboundAudioTrack() || track)
+          : track.kind === 'video' && screenRef.current
             ? screenRef.current.getVideoTracks()[0]
             : track;
         if (selected) pc.addTrack(selected, source);
@@ -755,6 +873,15 @@ function App() {
 
   async function leaveMeeting() {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    const currentMusic = musicRef.current;
+    musicRef.current = null;
+    if (currentMusic) await currentMusic.destroy();
+    setMusicName('');
+    setMusicPlaying(false);
+    setMusicTime(0);
+    setMusicDuration(0);
+    setMusicMonitor(false);
+    setMusicPanelOpen(false);
     try {
       if (isJoinedRef.current) {
         await api.post('/api/rooms/' + roomRef.current + '/leave', {
@@ -894,6 +1021,12 @@ function App() {
           key,
           stream,
         })),
+        // Record the soundtrack separately: the local microphone is already
+        // included above, so we must not record the mixed track twice.
+        ...(musicRef.current ? [{
+          key: 'music-' + musicRef.current.musicOnlyStream.getAudioTracks()[0]?.id,
+          stream: musicRef.current.musicOnlyStream,
+        }] : []),
       ];
       return candidates.filter(x => x.stream) as Array<{
         key: string;
@@ -921,6 +1054,8 @@ function App() {
     silence.connect(dest);
     oscillator.start();
     linkAudio();
+    // Attach newly imported music even when iOS uses direct camera recording.
+    const audioSyncInterval = window.setInterval(linkAudio, 500);
     const canvas = document.createElement('canvas');
     const dimensions = videoDimensions(
       format === 'original' ? '16:9' : format,
@@ -987,6 +1122,7 @@ function App() {
     ]);
     const cleanup = () => {
       window.clearInterval(interval);
+      window.clearInterval(audioSyncInterval);
       if(!fallback)videoStream?.getTracks().forEach(t => t.stop());
       nodes.forEach(n => n.disconnect());
       oscillator.stop();
@@ -1048,7 +1184,7 @@ function App() {
             : 'm4a'
           : 'webm';
         const filename =
-          'FondVideo-New-Meet-' +
+          'SCELYO-Live-' +
           roomRef.current +
           '-' +
           new Date().toISOString().replace(/[:.]/g, '-') +
