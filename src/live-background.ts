@@ -43,22 +43,28 @@ export function videoDimensions(
     height: Math.max(2, Math.round(h / 2) * 2),
   };
 }
-let state = { bg: 'original', demo: false, customImage: null };
-let video;
-function background(targetCtx, w, h, r) {
-  if (state.bg === 'remove') {
+// Keep the camera source and background config local to this stream.
+// A module-level mutable <video> caused interference between render instances.
+function background(targetCtx, w, h, r, source, bg, customImage) {
+  if (bg === 'remove') {
     targetCtx.clearRect(0, 0, w, h);
     return;
   }
-  if (state.bg === 'blur' && !state.demo) {
+  if (bg === 'blur') {
+    // Blur a full-frame "cover" copy, *under* the segmented foreground.
+    // Never paint an unmasked sharp frame over it while the mask is loading.
+    const sourceW = source.videoWidth || w, sourceH = source.videoHeight || h;
+    const scale = Math.max(w / sourceW, h / sourceH);
+    const drawW = sourceW * scale, drawH = sourceH * scale;
+    const padding = Math.max(24, Math.round(Math.min(w, h) * .065));
     targetCtx.save();
-    targetCtx.filter = 'blur(22px)';
-    targetCtx.drawImage(video, r.x - 20, r.y - 20, r.w + 40, r.h + 40);
+    targetCtx.filter = 'blur(' + padding + 'px) brightness(.93)';
+    targetCtx.drawImage(source, (w - drawW) / 2 - padding, (h - drawH) / 2 - padding, drawW + 2 * padding, drawH + 2 * padding);
     targetCtx.restore();
     return;
   }
-  if (state.bg === 'custom' && state.customImage) {
-    const a = state.customImage.naturalWidth / state.customImage.naturalHeight;
+  if (bg === 'custom' && customImage) {
+    const a = customImage.naturalWidth / customImage.naturalHeight;
     const ta = w / h;
     let dw, dh;
     if (a > ta) {
@@ -68,10 +74,10 @@ function background(targetCtx, w, h, r) {
       dw = w;
       dh = w / a;
     }
-    targetCtx.drawImage(state.customImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    targetCtx.drawImage(customImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
     return;
   }
-  if (state.bg === 'studio') {
+  if (bg === 'studio') {
     const g = targetCtx.createLinearGradient(0, 0, w, h);
     g.addColorStop(0, '#070a12');
     g.addColorStop(0.55, '#111a2d');
@@ -86,7 +92,7 @@ function background(targetCtx, w, h, r) {
     targetCtx.fillRect(w * 0.12, h * 0.76, w * 0.76, h * 0.03);
     return;
   }
-  if (state.bg === 'office') {
+  if (bg === 'office') {
     const g = targetCtx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, '#dce4eb');
     g.addColorStop(1, '#8795a4');
@@ -104,7 +110,7 @@ function background(targetCtx, w, h, r) {
     targetCtx.fillRect(0, h * 0.79, w, h * 0.21);
     return;
   }
-  if (state.bg === 'tech') {
+  if (bg === 'tech') {
     const g = targetCtx.createRadialGradient(
       w * 0.5,
       h * 0.42,
@@ -138,7 +144,7 @@ function background(targetCtx, w, h, r) {
     violet: ['#07050b', '#7142c2'],
     warm: ['#5f4a35', '#d7c09a'],
   };
-  const colors = gradients[state.bg] || ['#08090d', '#1b1e29'];
+  const colors = gradients[bg] || ['#08090d', '#1b1e29'];
   const g = targetCtx.createLinearGradient(0, 0, w, h);
   g.addColorStop(0, colors[0]);
   g.addColorStop(1, colors[1]);
@@ -152,7 +158,6 @@ export async function processCamera(raw, initial, report) {
   input.muted = true;
   input.autoplay = true;
   input.playsInline = true;
-  video = input;
   await input.play();
   let config = initial,
     stopped = false,
@@ -262,8 +267,9 @@ export async function processCamera(raw, initial, report) {
                   : data[i] === 1
                     ? 255
                     : 0;
-                const pixel = alpha < 16 ? 0 : alpha > 246 ? 255 : alpha;
-                oldMask[i] = pixel * 0.97 + oldMask[i] * 0.03;
+                const pixel = alpha < 12 ? 0 : alpha > 247 ? 255 : alpha;
+                // Soft temporal smoothing, matching FondVidéo's mask pipeline.
+                oldMask[i] = pixel * 0.82 + oldMask[i] * 0.18;
                 img.data[j] = 255;
                 img.data[j + 1] = 255;
                 img.data[j + 2] = 255;
@@ -312,14 +318,14 @@ export async function processCamera(raw, initial, report) {
           w,
           h,
         };
-        state.bg = config.bg;
-        state.customImage = config.photo;
         ctx.fillStyle = '#060810';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         if (config.bg === 'original') ctx.drawImage(input, r.x, r.y, r.w, r.h);
         else {
-          background(ctx, canvas.width, canvas.height, r);
-          if (maskCanvas && personCtx && performance.now() - lastMaskReady < 350) {
+          background(ctx, canvas.width, canvas.height, r, input, config.bg, config.photo);
+          // Segmentation can run slower than 3fps on phones. Preserve the last
+          // valid matte longer so the sharp camera never erases the blurred backdrop.
+          if (maskCanvas && personCtx && performance.now() - lastMaskReady < 1600) {
             // FondVidéo classic's compositing: softly feathered mask, rather than sharp edges.
             personCtx.globalCompositeOperation = 'source-over';
             personCtx.filter = 'none';
@@ -331,10 +337,13 @@ export async function processCamera(raw, initial, report) {
             personCtx.filter = 'none';
             personCtx.globalCompositeOperation = 'source-over';
             ctx.drawImage(person, 0, 0);
-          } else {
+          } else if (config.bg !== 'blur') {
+            // For other scenes, show camera while AI initializes.
+            // In blur mode the blurry backdrop remains visible rather than
+            // silently showing an entirely sharp picture.
             ctx.drawImage(input, r.x, r.y, r.w, r.h);
           }
-          if (!pending && performance.now() - lastSegmentAt > 38) {
+          if (!pending && performance.now() - lastSegmentAt > (config.bg === 'blur' ? 55 : 38)) {
             lastSegmentAt = performance.now();
             void updateMask();
           }
