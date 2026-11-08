@@ -1121,7 +1121,7 @@ $('savePhotos').addEventListener('click', async () => {
       !navigator.canShare?.({ files: [state.exportFile] })
     )
       throw new Error('file sharing unavailable');
-    await navigator.share({ files: [state.exportFile], title: 'FondVidéo' });
+    await navigator.share({ files: [state.exportFile], title: 'SCELYO Studio' });
     $('exportInfo').textContent =
       'Dans le menu iPhone, choisis « Enregistrer la vidéo » pour l’ajouter à Photos.';
   } catch (e) {
