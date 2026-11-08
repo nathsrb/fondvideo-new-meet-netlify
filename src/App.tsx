@@ -1675,6 +1675,65 @@ function App() {
               </div>
             )}
           </div>
+          {isHost && musicPanelOpen && (
+            <section className="scelyo-music-panel" aria-label="Musique d’ambiance SCELYO Live">
+              <div className="scelyo-music-panel-head">
+                <div className="scelyo-music-title"><span className="scelyo-music-title-icon"><Music2 size={22}/></span><div><strong>Musique d’ambiance</strong><small>SCELYO Live · diffusion dans la session</small></div></div>
+                <button type="button" className="scelyo-music-close" title="Fermer" onClick={() => setMusicPanelOpen(false)}><X size={20}/></button>
+              </div>
+              <div className="scelyo-music-panel-body">
+                <label className="scelyo-music-upload">
+                  <FileAudio size={19}/>
+                  <span>{musicName ? 'Changer de morceau' : 'Importer un fichier audio'}</span>
+                  <small>MP3 · WAV · M4A</small>
+                  <input type="file" accept=".mp3,.wav,.m4a,.aac,audio/mpeg,audio/wav,audio/mp4"
+                    disabled={musicBusy} hidden onChange={event => {
+                      const file = event.currentTarget.files?.[0] || null;
+                      event.currentTarget.value = '';
+                      void loadMusic(file);
+                    }}/>
+                </label>
+                {musicName ? (
+                  <div className="scelyo-music-player">
+                    <div className="scelyo-music-track"><div><Music2 size={18}/><span title={musicName}>{musicName}</span></div><span className={musicPlaying ? 'scelyo-music-live' : 'scelyo-music-paused'}>{musicPlaying ? '● DIFFUSION' : 'PRÊT / PAUSE'}</span></div>
+                    <div className="scelyo-music-transport">
+                      <button type="button" disabled={musicBusy} onClick={() => void toggleMusicPlayback()}
+                        title={musicPlaying ? 'Mettre en pause' : 'Diffuser la musique'}>
+                        {musicPlaying ? <Pause size={20} fill="currentColor"/> : <Play size={20} fill="currentColor"/>}
+                        <span>{musicPlaying ? 'Pause' : 'Lecture'}</span>
+                      </button>
+                      <input type="range" min="0" max={Math.max(1, musicDuration || 1)} step="0.1"
+                        value={Math.min(musicTime, Math.max(1, musicDuration || 1))}
+                        disabled={!musicDuration || musicBusy}
+                        aria-label="Position dans la musique"
+                        onChange={event => musicRef.current?.seek(Number(event.target.value))}/>
+                      <span>{musicClock(musicTime)} / {musicClock(musicDuration)}</span>
+                      <button type="button" title="Retirer la musique" disabled={musicBusy}
+                        className="scelyo-music-delete" onClick={() => void clearMusic()}><X size={18}/></button>
+                    </div>
+                    <div className="scelyo-music-settings">
+                      <label className="scelyo-music-volume">
+                        <Volume2 size={18}/> <span>Volume envoyé : {musicVolume}%</span>
+                        <input type="range" min="0" max="100" value={musicVolume}
+                          aria-label="Volume de diffusion" onChange={event => {
+                            const next = Number(event.target.value);
+                            setMusicVolume(next);
+                            musicRef.current?.setVolume(next);
+                          }}/>
+                      </label>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
+                        onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
+                        <Repeat2 size={17}/> En boucle</label>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicMonitor}
+                        onChange={event => {setMusicMonitor(event.target.checked);musicRef.current?.setMonitor(event.target.checked);}}/>
+                        <Headphones size={17}/> Écoute locale</label>
+                    </div>
+                  </div>
+                ) : <p className="scelyo-music-empty">Choisis une musique depuis ton appareil, puis appuie sur Lecture pour la diffuser à tous les participants.</p>}
+              </div>
+              <p className="scelyo-music-note"><ShieldCheck size={15}/> Le fichier reste sur ton appareil : seul le son est partagé pendant la session. Pour l’écoute locale, utilise un casque afin d’éviter les échos.</p>
+            </section>
+          )}
           <div className="meeting-main">
             <section className="meeting-videos">
               <div className="program-heading"><strong>INTERVENANT : {stageName}</strong><span>{sharedStage?'Écran partagé':'Caméra'} · seule cette image est enregistrée</span><button onClick={()=>setFullStage(value=>!value)}>{fullStage?<Minimize2 size={16}/>:<Maximize2 size={16}/>} {fullStage?'Réduire':'Plein écran'}</button><button onClick={()=>setFillStage(v=>!v)} title="Agrandir peut rogner les bords">{fillStage?'Tout voir':'Remplir l’écran'}</button></div>
@@ -1717,6 +1776,14 @@ function App() {
                 >
                   {camOn ? <Video /> : <VideoOff />}
                 </button>
+                {isHost && (
+                  <button type="button" className={musicPanelOpen || musicPlaying ? 'tool-btn active-tool scelyo-music-button' : 'tool-btn scelyo-music-button'}
+                    onClick={() => setMusicPanelOpen(open => !open)}
+                    title="Diffuser une musique d’ambiance" aria-label="Musique d’ambiance" aria-expanded={musicPanelOpen}>
+                    <Music2/>
+                    {musicPlaying && <span className="scelyo-music-indicator"/>}
+                  </button>
+                )}
                 <span className="tool-separator" />
                 <button
                   className={sharing ? 'tool-btn active-tool' : 'tool-btn'}
