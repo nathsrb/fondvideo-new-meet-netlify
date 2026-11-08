@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ws } from './netlify-transport';
+import { MeetingMusicMixer } from './meeting-music';
 import {
   processCamera,
   videoDimensions,
@@ -43,6 +44,12 @@ import {
   Maximize2,
   Minimize2,
   PlayCircle,
+  Music2,
+  Volume2,
+  Pause,
+  Play,
+  Repeat2,
+  FileAudio,
 } from 'lucide-react';
 
 type Member = { id: string; name: string };
@@ -66,6 +73,10 @@ const alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
 function newCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(12));
   return Array.from(bytes, n => alphabet[n % alphabet.length]).join('');
+}
+function musicClock(seconds: number) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
 function currentRoom() {
   const match = location.hash.match(/^#\/room\/([a-z2-9]{12})$/);
@@ -172,6 +183,27 @@ function App() {
   const [recordMode, setRecordMode] = useState<'video' | 'audio'>('video');
   const [recordReady, setRecordReady] = useState<Recording | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
+  const [musicName, setMusicName] = useState('');
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(35);
+  const [musicLoop, setMusicLoop] = useState(false);
+  const [musicMonitor, setMusicMonitor] = useState(false);
+  const [musicTime, setMusicTime] = useState(0);
+  const [musicDuration, setMusicDuration] = useState(0);
+  const [musicBusy, setMusicBusy] = useState(false);
+
+  // Deep-link Vault from SCELYO Studio without changing meeting routing.
+  useEffect(() => {
+    const openVaultRoute = () => {
+      if (location.hash === '#/vault') setLibraryOpen(true);
+    };
+    openVaultRoute();
+    window.addEventListener('hashchange', openVaultRoute);
+    return () => window.removeEventListener('hashchange', openVaultRoute);
+  }, []);
+
   const [savedItems, setSavedItems] = useState<SavedRecording[]>([]);
   const [activePreview, setActivePreview] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -185,6 +217,7 @@ function App() {
   const [remoteRecording, setRemoteRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
+  const musicRef = useRef<MeetingMusicMixer | null>(null);
   const peerId = useRef(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
@@ -319,7 +352,7 @@ function App() {
     try {
       const item=await saveRecording(blob,name);
       setSavedItems(previous=>[item,...previous.filter(x=>x.id!==item.id)]);
-      toast('Enregistrement sauvegardé dans Mes enregistrements sur cet appareil.');
+      toast('Capture enregistrée dans SCELYO Vault sur cet appareil.');
     } catch(err) {
       toast('Stockage insuffisant ou inaccessible : '+readableError(err)+'. Télécharge la vidéo avant de quitter.');
     } finally {
@@ -423,6 +456,102 @@ function App() {
     }
   }
 
+  // Audio sent to participants is a single WebRTC track. When music is
+  // imported, it contains the microphone and the selected soundtrack.
+  function outboundAudioTrack() {
+    return musicRef.current?.track || rawRef.current?.getAudioTracks()[0] || null;
+  }
+
+  async function restoreOutboundAudio(track: MediaStreamTrack | null) {
+    const senders = [...pcs.current.values()]
+      .flatMap(pc => pc.getSenders())
+      .filter(sender => sender.track?.kind === 'audio');
+    await Promise.allSettled(senders.map(sender => sender.replaceTrack(track)));
+  }
+
+  async function loadMusic(file: File | null) {
+    if (!file) return;
+    if (hostId !== peerId.current) {
+      toast('Seul l’organisateur peut diffuser une musique dans SCELYO Live.');
+      return;
+    }
+    if (!/\.(mp3|wav|m4a|aac)$/i.test(file.name)) {
+      toast('Choisis un fichier MP3, WAV ou M4A.');
+      return;
+    }
+    if (file.size > 150 * 1024 * 1024) {
+      toast('Le fichier dépasse 150 Mo. Sélectionne une piste plus légère.');
+      return;
+    }
+    const microphone = rawRef.current?.getAudioTracks()[0];
+    if (!microphone || microphone.readyState !== 'live') {
+      toast('Autorise le microphone avant de diffuser de la musique.');
+      return;
+    }
+    setMusicBusy(true);
+    let next: MeetingMusicMixer | null = null;
+    const previous = musicRef.current;
+    try {
+      next = new MeetingMusicMixer(file, new MediaStream([microphone]), progress => {
+        setMusicPlaying(progress.playing);
+        setMusicTime(progress.currentTime);
+        setMusicDuration(progress.duration);
+      });
+      next.setVolume(musicVolume);
+      next.setLoop(musicLoop);
+      next.setMonitor(musicMonitor);
+      const senders = [...pcs.current.values()].flatMap(pc => pc.getSenders())
+        .filter(sender => sender.track?.kind === 'audio');
+      const switched = await Promise.allSettled(senders.map(sender => sender.replaceTrack(next!.track)));
+      if (switched.some(result => result.status === 'rejected')) {
+        await Promise.allSettled(senders.map(sender => sender.replaceTrack(previous?.track || microphone)));
+        throw new Error('La diffusion de musique est indisponible sur cette connexion.');
+      }
+      musicRef.current = next;
+      setMusicName(file.name);
+      setMusicTime(0);
+      setMusicDuration(0);
+      setMusicPlaying(false);
+      if (previous) await previous.destroy();
+      toast('Musique prête : appuie sur Lecture pour la diffuser aux participants.');
+    } catch (error) {
+      if (next && musicRef.current !== next) await next.destroy();
+      toast('Impossible de charger la musique : ' + readableError(error));
+    } finally {
+      setMusicBusy(false);
+    }
+  }
+
+  async function clearMusic() {
+    const previous = musicRef.current;
+    if (!previous) return;
+    setMusicBusy(true);
+    try {
+      const rawTrack = rawRef.current?.getAudioTracks()[0] || null;
+      await restoreOutboundAudio(rawTrack);
+      musicRef.current = null;
+      await previous.destroy();
+      setMusicPlaying(false);
+      setMusicName('');
+      setMusicTime(0);
+      setMusicDuration(0);
+      setMusicMonitor(false);
+    } finally {
+      setMusicBusy(false);
+    }
+  }
+
+  async function toggleMusicPlayback() {
+    const current = musicRef.current;
+    if (!current) return;
+    try {
+      if (musicPlaying) current.pause();
+      else await current.play();
+    } catch (error) {
+      toast('Lecture impossible : ' + readableError(error) + '. Réessaie en touchant Lecture.');
+    }
+  }
+
   function getPeer(id: string) {
     const existing = pcs.current.get(id);
     if (existing) return existing;
@@ -437,7 +566,8 @@ function App() {
     if (source && source.getTracks().length) {
       source.getTracks().forEach(track => {
         const selected =
-          track.kind === 'video' && screenRef.current
+          track.kind === 'audio' ? (outboundAudioTrack() || track)
+          : track.kind === 'video' && screenRef.current
             ? screenRef.current.getVideoTracks()[0]
             : track;
         if (selected) pc.addTrack(selected, source);
@@ -743,6 +873,15 @@ function App() {
 
   async function leaveMeeting() {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    const currentMusic = musicRef.current;
+    musicRef.current = null;
+    if (currentMusic) await currentMusic.destroy();
+    setMusicName('');
+    setMusicPlaying(false);
+    setMusicTime(0);
+    setMusicDuration(0);
+    setMusicMonitor(false);
+    setMusicPanelOpen(false);
     try {
       if (isJoinedRef.current) {
         await api.post('/api/rooms/' + roomRef.current + '/leave', {
@@ -882,6 +1021,12 @@ function App() {
           key,
           stream,
         })),
+        // Record the soundtrack separately: the local microphone is already
+        // included above, so we must not record the mixed track twice.
+        ...(musicRef.current ? [{
+          key: 'music-' + musicRef.current.musicOnlyStream.getAudioTracks()[0]?.id,
+          stream: musicRef.current.musicOnlyStream,
+        }] : []),
       ];
       return candidates.filter(x => x.stream) as Array<{
         key: string;
@@ -909,6 +1054,8 @@ function App() {
     silence.connect(dest);
     oscillator.start();
     linkAudio();
+    // Attach newly imported music even when iOS uses direct camera recording.
+    const audioSyncInterval = window.setInterval(linkAudio, 500);
     const canvas = document.createElement('canvas');
     const dimensions = videoDimensions(
       format === 'original' ? '16:9' : format,
@@ -975,6 +1122,7 @@ function App() {
     ]);
     const cleanup = () => {
       window.clearInterval(interval);
+      window.clearInterval(audioSyncInterval);
       if(!fallback)videoStream?.getTracks().forEach(t => t.stop());
       nodes.forEach(n => n.disconnect());
       oscillator.stop();
@@ -1036,7 +1184,7 @@ function App() {
             : 'm4a'
           : 'webm';
         const filename =
-          'FondVideo-New-Meet-' +
+          'SCELYO-Live-' +
           roomRef.current +
           '-' +
           new Date().toISOString().replace(/[:.]/g, '-') +
@@ -1055,7 +1203,7 @@ function App() {
           void uploadToDrive(item);
         } else {
           setDriveStatus('idle');
-          toast('Enregistrement disponible dans Mes enregistrements : télécharge-le ou partage-le.');
+          toast('Enregistrement disponible dans SCELYO Vault : télécharge-le ou partage-le.');
         }
       };
       recorderRef.current = recorder;
@@ -1227,39 +1375,35 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="header">
-        <div
-          className="brand"
-          onClick={() => {
-            if (!joined) {
-              location.hash = '';
-              setRoom('');
-            }
-          }}
-        >
-          <div className="brand-mark">
-            <Video size={23} strokeWidth={2.7} />
-          </div>
-          <strong>
-            Fond<span>Vidéo New Meet</span>
-          </strong>
-        </div>
-        <span className="header-caption">Vos réunions, sans compromis</span>
-        <div className="header-right">
-          <a className="studio-nav" href="./fondvideo.html">Studio vidéo</a>
-          <button className="library-nav" onClick={()=>setLibraryOpen(true)}><Library size={18}/> <span>Mes enregistrements</span></button>
-          <span className="private-pill">
-            <ShieldCheck size={15} /> Lien privé
-          </span>
-          <button
-            className={'drive-header-action ' + (driveConnected ? 'connected' : '')}
-            title="Connexion Google Drive"
-            onClick={() => setShowSettings(true)}
-          >
-            <CloudUpload size={17} />
-            <span>{driveConnected ? 'Drive connecté' : 'Drive : en attente'}</span>
+      <header className="header scelyo-header">
+        <button type="button" className="scelyo-brand" aria-label="SCELYO · Accueil"
+          onClick={() => { if (!joined) { location.hash = ''; setRoom(''); setMenuOpen(false); } }}>
+          <img src="./scelyo-mark.svg" alt="" width="40" height="40" />
+          <span className="scelyo-brand-name">SCELYO</span>
+          <span className="scelyo-brand-divider" />
+          <span className="scelyo-brand-descriptor">Le live devient création</span>
+        </button>
+        <nav className="scelyo-header-nav" aria-label="Espaces SCELYO">
+          <button type="button" className="scelyo-nav-item selected" onClick={() => { if (!joined) { location.hash = ''; setRoom(''); } }}><Video size={17}/> Live</button>
+          <a className="scelyo-nav-item" href="./fondvideo.html"><Camera size={17}/> Studio</a>
+          <button type="button" className="scelyo-nav-item" onClick={() => setLibraryOpen(true)}><Library size={17}/> Vault</button>
+        </nav>
+        <div className="scelyo-header-actions">
+          <button type="button" className={'scelyo-drive-btn ' + (driveConnected ? 'connected' : '')} onClick={() => setShowSettings(true)} title="Sauvegarde Google Drive">
+            <CloudUpload size={18}/><span>{driveConnected ? 'Drive connecté' : 'Connecter Drive'}</span>
+          </button>
+          <button type="button" className="scelyo-menu-toggle" aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
+            {menuOpen ? <X size={22}/> : <Menu size={22}/>}
           </button>
         </div>
+        {menuOpen && (
+          <nav className="scelyo-mobile-menu" aria-label="Navigation mobile">
+            <button type="button" onClick={() => {setMenuOpen(false);if(!joined){location.hash='';setRoom('');}}}><Video size={18}/> SCELYO Live <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={18}/> SCELYO Studio <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => {setMenuOpen(false);setLibraryOpen(true);}}><Library size={18}/> SCELYO Vault <ArrowRight size={16}/></button>
+            <button type="button" onClick={() => {setMenuOpen(false);setShowSettings(true);}}><CloudUpload size={18}/> Google Drive <ArrowRight size={16}/></button>
+          </nav>
+        )}
       </header>
 
       {notice && (
@@ -1273,128 +1417,75 @@ function App() {
       )}
 
       {!room && !joined && (
-        <main className="landing">
-          <div className="hero-glow" />
-          <div className="hero-copy">
-            <div className="eyebrow">
-              <span className="live-dot" /> LA VISIO, SIMPLEMENT
+        <main className="fv-dashboard">
+          <aside className="fv-sidebar" aria-label="Navigation principale">
+            <div className="fv-sidebar-label">SCELYO / ESPACES</div>
+            <div className="fv-sidebar-active"><Video size={19}/> Tableau de bord <span>01</span></div>
+            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> Nouvelle session <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={19}/> SCELYO Studio <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => setLibraryOpen(true)}><Library size={19}/> SCELYO Vault <ArrowRight size={16}/></button>
+            <div className="fv-sidebar-bottom">
+              <div className="fv-sidebar-orb"><Video size={20}/></div>
+              <strong>Le live devient création.</strong>
+              <p>Crée, échange et enregistre tes idées au même endroit.</p>
+              <span><ShieldCheck size={14}/> Ton espace, tes contenus</span>
             </div>
-            <h1>
-              Vos meilleures idées
-              <br />
-              <em>méritent de se rencontrer.</em>
-            </h1>
-            <p>
-              Ton studio FondVidéo et ta visioconférence réunis. Fonds en
-              direct, formats sociaux, enregistrements et partage d’écran.
-            </p>
-            <div className="launch-actions">
-              <button
-                className="btn primary large"
-                onClick={() => openRoom(newCode())}
-              >
-                <Plus size={20} /> Nouvelle réunion
+          </aside>
+
+          <div className="fv-dashboard-content">
+            <div className="fv-dashboard-topline"><span><span className="fv-online-dot"/> TON UNIVERS SCELYO</span><span>LIVE · STUDIO · VAULT</span></div>
+            <section className="fv-feature-hero">
+              <div className="fv-feature-content">
+                <div className="fv-kicker"><span className="fv-kicker-dash"/> CRÉER. RÉUNIR. CAPTURER.</div>
+                <h1>Le live devient<br/><em>création.</em></h1>
+                <p>Lance tes sessions, transforme tes vidéos et retrouve tes captures dans un seul espace créatif.</p>
+                <div className="fv-hero-buttons">
+                  <button className="fv-hero-primary" onClick={() => openRoom(newCode())}><Plus size={21}/> Créer une session <ArrowRight size={18}/></button>
+                  <a className="fv-hero-secondary" href="./fondvideo.html"><PlayCircle size={21}/> Ouvrir le Studio</a>
+                </div>
+                <div className="fv-feature-metrics"><span><span className="fv-metric-dot"/> ÉCHANGES EN DIRECT</span><span><ShieldCheck size={15}/> ACCÈS PRIVÉ</span></div>
+              </div>
+              <div className="fv-hero-showcase" aria-hidden="true">
+                <div className="fv-showcase-orbit fv-orbit-one"/>
+                <div className="fv-showcase-orbit fv-orbit-two"/>
+                <div className="fv-showcase-glow"/>
+                <div className="fv-glass-frame">
+                  <div className="fv-glass-head"><span><i/> <i/> <i/></span><b>SCELYO / LIVE</b><span>● LIVE</span></div>
+                  <div className="fv-glass-stage">
+                    <div className="fv-glass-guest guest-one"><div className="fv-guest-avatar"><Users size={38}/></div><small>Caméra principale</small></div>
+                    <div className="fv-glass-guest guest-two"><div className="fv-guest-avatar"><Video size={22}/></div><small>Invité connecté</small></div>
+                  </div>
+                  <div className="fv-glass-controls"><span><Mic size={16}/></span><span><Video size={16}/></span><span><MonitorUp size={16}/></span><span className="fv-glass-hangup"><PhoneOff size={16}/></span></div>
+                </div>
+                <div className="fv-floating-label"><span><Circle size={9} fill="currentColor"/></span><div><strong>À toi de créer</strong><small>Le studio est prêt.</small></div></div>
+              </div>
+            </section>
+
+            <div className="fv-section-heading"><div><span>TON WORKSPACE</span><h2>Quelle sera ta prochaine création ?</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
+            <section className="fv-action-grid">
+              <button className="fv-action-card fv-action-meet" onClick={() => openRoom(newCode())}>
+                <span className="fv-action-top"><span className="fv-action-icon"><Video size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>01 / SE CONNECTER</small><strong>Nouvelle session</strong><span>Lance une session vidéo en un instant.</span></span>
               </button>
-              <a className="btn subtle large" href="./fondvideo.html"><Camera size={18}/> Ouvrir FondVidéo</a>
-              <button className="btn subtle large" onClick={()=>setLibraryOpen(true)}><Library size={18}/> Mes enregistrements</button>
-              <div className="join-form">
-                <Link2 size={18} />
-                <input
-                  value={newRoom}
-                  onChange={e => setNewRoom(e.target.value.toLowerCase())}
-                  placeholder="Code de la réunion"
-                  aria-label="Code de la réunion"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      if (/^[a-z2-9]{12}$/.test(newRoom.trim()))
-                        openRoom(newRoom.trim());
-                      else
-                        toast(
-                          'Saisis un code de réunion valide (12 caractères).'
-                        );
-                    }
-                  }}
-                />
-                <button
-                  title="Rejoindre"
-                  onClick={() =>
-                    /^[a-z2-9]{12}$/.test(newRoom.trim())
-                      ? openRoom(newRoom.trim())
-                      : toast(
-                          'Saisis un code de réunion valide (12 caractères).'
-                        )
-                  }
-                >
-                  <ArrowRight size={19} />
-                </button>
+              <a className="fv-action-card fv-action-studio" href="./fondvideo.html">
+                <span className="fv-action-top"><span className="fv-action-icon"><Camera size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>SCELYO Studio</strong><span>Mets tes vidéos en scène et exporte-les.</span></span>
+              </a>
+              <button className="fv-action-card fv-action-library" onClick={() => setLibraryOpen(true)}>
+                <span className="fv-action-top"><span className="fv-action-icon"><Library size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>SCELYO Vault</strong><span>Retrouve tes captures sur cet appareil.</span></span>
+              </button>
+            </section>
+
+            <section className="fv-join-strip">
+              <div className="fv-join-copy"><span className="fv-join-icon"><Link2 size={23}/></span><div><strong>Une invitation à rejoindre ?</strong><p>Entre un code pour accéder à une session.</p></div></div>
+              <div className="fv-join-form">
+                <input value={newRoom} onChange={e => setNewRoom(e.target.value.toLowerCase())}
+                  placeholder="Code de session (12 caractères)" aria-label="Code de session"
+                  onKeyDown={e => {if(e.key==='Enter'){if(/^[a-z2-9]{12}$/.test(newRoom.trim()))openRoom(newRoom.trim());else toast('Saisis un code valide de 12 caractères.');}}}/>
+                <button title="Rejoindre la session" onClick={() => /^[a-z2-9]{12}$/.test(newRoom.trim()) ? openRoom(newRoom.trim()) : toast('Saisis un code valide de 12 caractères.')}><ArrowRight size={21}/></button>
               </div>
-            </div>
-            <div className="hero-badges">
-              <span>
-                <Check size={16} /> Audio & vidéo
-              </span>
-              <span>
-                <Check size={16} /> Partage d’écran
-              </span>
-              <span>
-                <Check size={16} /> Enregistrement & Drive
-              </span>
-            </div>
-          </div>
-          <div className="preview-art">
-            <div className="art-top">
-              <div className="art-dots">
-                <i />
-                <i />
-                <i />
-              </div>
-              <span>Réunion en cours</span>
-              <span className="art-lock">
-                <ShieldCheck size={14} />
-              </span>
-            </div>
-            <div className="art-grid">
-              <div className="art-person person-1">
-                <div className="avatar-shape a1" />
-                <span>Vous</span>
-              </div>
-              <div className="art-person person-2">
-                <div className="avatar-shape a2" />
-                <span>Invité</span>
-              </div>
-              <div className="art-person person-3">
-                <div className="avatar-shape a3" />
-                <span>Collègue</span>
-              </div>
-              <div className="art-person person-4">
-                <div className="avatar-shape a4" />
-                <span>Partenaire</span>
-              </div>
-            </div>
-            <div className="art-controls">
-              <span>
-                <Mic size={16} />
-              </span>
-              <span>
-                <Video size={16} />
-              </span>
-              <span>
-                <MonitorUp size={16} />
-              </span>
-              <span className="art-end">
-                <PhoneOff size={16} />
-              </span>
-            </div>
-            <div className="art-float">
-              <span className="small-purple">
-                <Circle size={13} fill="currentColor" />
-              </span>
-              <div>
-                <strong>Enregistrement prêt</strong>
-                <small>Sauvegarde Google Drive</small>
-              </div>
-              <Check size={16} />
-            </div>
+            </section>
           </div>
         </main>
       )}
@@ -1423,9 +1514,9 @@ function App() {
               </div>
             </div>
             <div className="prejoin-card">
-              <div className="eyebrow">PRÊT À REJOINDRE ?</div>
-              <h2>Rejoindre la réunion</h2>
-              <p>Choisis ton nom d’affichage avant d’entrer dans le salon.</p>
+              <div className="eyebrow">SCELYO LIVE / AVANT LA SESSION</div>
+              <h2>Rejoindre la session</h2>
+              <p>Prépare ta présence avant d'entrer en direct.</p>
               <label className="field-label" htmlFor="name">
                 Ton prénom
               </label>
@@ -1481,7 +1572,7 @@ function App() {
                 disabled={busy}
                 onClick={joinMeeting}
               >
-                {busy ? 'Connexion…' : 'Rejoindre maintenant'}{' '}
+                {busy ? 'Connexion…' : 'Entrer dans la session'}{' '}
                 <ArrowRight size={18} />
               </button>
               <div className="room-code">
@@ -1501,9 +1592,9 @@ function App() {
         <main className="meeting">
           <div className="meeting-header">
             <div>
-              <div className="eyebrow">RÉUNION EN DIRECT</div>
+              <div className="eyebrow">SCELYO LIVE / EN DIRECT</div>
               <h2>
-                FondVidéo Meet <span className="meeting-id">#{room}</span>
+                SCELYO Live <span className="meeting-id">#{room}</span>
               </h2>
             </div>
             <div className="meeting-meta">
@@ -1528,7 +1619,7 @@ function App() {
           </div>
           <div className="live-tools">
             <strong>
-              <Camera size={17} /> Studio caméra
+              <Camera size={17} /> Mise en scène
             </strong>
             <label>
               Fond
@@ -1584,6 +1675,65 @@ function App() {
               </div>
             )}
           </div>
+          {isHost && musicPanelOpen && (
+            <section className="scelyo-music-panel" aria-label="Musique d’ambiance SCELYO Live">
+              <div className="scelyo-music-panel-head">
+                <div className="scelyo-music-title"><span className="scelyo-music-title-icon"><Music2 size={22}/></span><div><strong>Musique d’ambiance</strong><small>SCELYO Live · diffusion dans la session</small></div></div>
+                <button type="button" className="scelyo-music-close" title="Fermer" onClick={() => setMusicPanelOpen(false)}><X size={20}/></button>
+              </div>
+              <div className="scelyo-music-panel-body">
+                <label className="scelyo-music-upload">
+                  <FileAudio size={19}/>
+                  <span>{musicName ? 'Changer de morceau' : 'Importer un fichier audio'}</span>
+                  <small>MP3 · WAV · M4A</small>
+                  <input type="file" accept=".mp3,.wav,.m4a,.aac,audio/mpeg,audio/wav,audio/mp4"
+                    disabled={musicBusy} hidden onChange={event => {
+                      const file = event.currentTarget.files?.[0] || null;
+                      event.currentTarget.value = '';
+                      void loadMusic(file);
+                    }}/>
+                </label>
+                {musicName ? (
+                  <div className="scelyo-music-player">
+                    <div className="scelyo-music-track"><div><Music2 size={18}/><span title={musicName}>{musicName}</span></div><span className={musicPlaying ? 'scelyo-music-live' : 'scelyo-music-paused'}>{musicPlaying ? '● DIFFUSION' : 'PRÊT / PAUSE'}</span></div>
+                    <div className="scelyo-music-transport">
+                      <button type="button" disabled={musicBusy} onClick={() => void toggleMusicPlayback()}
+                        title={musicPlaying ? 'Mettre en pause' : 'Diffuser la musique'}>
+                        {musicPlaying ? <Pause size={20} fill="currentColor"/> : <Play size={20} fill="currentColor"/>}
+                        <span>{musicPlaying ? 'Pause' : 'Lecture'}</span>
+                      </button>
+                      <input type="range" min="0" max={Math.max(1, musicDuration || 1)} step="0.1"
+                        value={Math.min(musicTime, Math.max(1, musicDuration || 1))}
+                        disabled={!musicDuration || musicBusy}
+                        aria-label="Position dans la musique"
+                        onChange={event => musicRef.current?.seek(Number(event.target.value))}/>
+                      <span>{musicClock(musicTime)} / {musicClock(musicDuration)}</span>
+                      <button type="button" title="Retirer la musique" disabled={musicBusy}
+                        className="scelyo-music-delete" onClick={() => void clearMusic()}><X size={18}/></button>
+                    </div>
+                    <div className="scelyo-music-settings">
+                      <label className="scelyo-music-volume">
+                        <Volume2 size={18}/> <span>Volume envoyé : {musicVolume}%</span>
+                        <input type="range" min="0" max="100" value={musicVolume}
+                          aria-label="Volume de diffusion" onChange={event => {
+                            const next = Number(event.target.value);
+                            setMusicVolume(next);
+                            musicRef.current?.setVolume(next);
+                          }}/>
+                      </label>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
+                        onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
+                        <Repeat2 size={17}/> En boucle</label>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicMonitor}
+                        onChange={event => {setMusicMonitor(event.target.checked);musicRef.current?.setMonitor(event.target.checked);}}/>
+                        <Headphones size={17}/> Écoute locale</label>
+                    </div>
+                  </div>
+                ) : <p className="scelyo-music-empty">Choisis une musique depuis ton appareil, puis appuie sur Lecture pour la diffuser à tous les participants.</p>}
+              </div>
+              <p className="scelyo-music-note"><ShieldCheck size={15}/> Le fichier reste sur ton appareil : seul le son est partagé pendant la session. Pour l’écoute locale, utilise un casque afin d’éviter les échos.</p>
+            </section>
+          )}
           <div className="meeting-main">
             <section className="meeting-videos">
               <div className="program-heading"><strong>INTERVENANT : {stageName}</strong><span>{sharedStage?'Écran partagé':'Caméra'} · seule cette image est enregistrée</span><button onClick={()=>setFullStage(value=>!value)}>{fullStage?<Minimize2 size={16}/>:<Maximize2 size={16}/>} {fullStage?'Réduire':'Plein écran'}</button><button onClick={()=>setFillStage(v=>!v)} title="Agrandir peut rogner les bords">{fillStage?'Tout voir':'Remplir l’écran'}</button></div>
@@ -1626,6 +1776,14 @@ function App() {
                 >
                   {camOn ? <Video /> : <VideoOff />}
                 </button>
+                {isHost && (
+                  <button type="button" className={musicPanelOpen || musicPlaying ? 'tool-btn active-tool scelyo-music-button' : 'tool-btn scelyo-music-button'}
+                    onClick={() => setMusicPanelOpen(open => !open)}
+                    title="Diffuser une musique d’ambiance" aria-label="Musique d’ambiance" aria-expanded={musicPanelOpen}>
+                    <Music2/>
+                    {musicPlaying && <span className="scelyo-music-indicator"/>}
+                  </button>
+                )}
                 <span className="tool-separator" />
                 <button
                   className={sharing ? 'tool-btn active-tool' : 'tool-btn'}
@@ -1680,7 +1838,7 @@ function App() {
                 )}
                 {recordReady && !recording && (
                   <div className="record-links">
-                    <button onClick={()=>setLibraryOpen(true)} disabled={savingLocal}><Library size={15}/>{savingLocal?'Enregistrement local…':'Mes enregistrements'}</button>
+                    <button onClick={()=>setLibraryOpen(true)} disabled={savingLocal}><Library size={15}/>{savingLocal?'Enregistrement local…':'SCELYO Vault'}</button>
                     <a href={recordReady.url} download={recordReady.name}>
                       <Download size={15} /> Télécharger dans Fichiers
                     </a>
@@ -1774,7 +1932,7 @@ function App() {
         <div className="modal-backdrop local-recordings-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setLibraryOpen(false);}}>
           <section className="local-recordings-panel" role="dialog" aria-modal="true" aria-label="Mes enregistrements">
             <div className="modal-header">
-              <div><div className="eyebrow">BIBLIOTHÈQUE DE CET APPAREIL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
+              <div><div className="eyebrow">SCELYO / VAULT LOCAL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
               <button className="icon-btn" onClick={()=>setLibraryOpen(false)} aria-label="Fermer"><X size={21}/></button>
             </div>
             <p className="local-recordings-hint">Tes enregistrements restent dans ce navigateur, même après fermeture de l’onglet. Ils ne sont pas synchronisés entre appareils et peuvent disparaître si tu effaces les données du navigateur. Pour les conserver durablement, télécharge-les ou partage-les.</p>
@@ -1804,15 +1962,15 @@ function App() {
               </div>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
-              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire dans FondVidéo.</p>
+              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire pour cet export manuel.</p>
               <div><a href="https://drive.google.com/drive/u/0/my-drive" target="_blank" rel="noreferrer">Ouvrir Drive <ExternalLink size={13}/></a><a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Ouvrir YouTube Studio <ExternalLink size={13}/></a></div>
             </div>
           </section>
         </div>
       )}
       <footer className="footer">
-        <span>© FondVidéo New Meet · Prévisualisation AppDeploy</span>
-        <span>Appels WebRTC · Vos enregistrements vous appartiennent</span>
+        <span>© SCELYO · Version de prévisualisation</span>
+        <span>Live · Studio · Vault — Tes captures restent sous ton contrôle</span>
       </footer>
 
       {showSettings && (
@@ -1830,8 +1988,8 @@ function App() {
           >
             <div className="modal-header">
               <div>
-                <div className="eyebrow">ENREGISTREMENTS</div>
-                <h2>Connecter Google Drive</h2>
+                <div className="eyebrow">SCELYO / DRIVE</div>
+                <h2>SCELYO & Google Drive</h2>
               </div>
               <button
                 className="icon-btn"
@@ -1844,7 +2002,7 @@ function App() {
               <div className="drive-icon"><CloudUpload size={30}/></div>
               <div>
                 <strong>Enregistrements automatiquement sauvegardés</strong>
-                <p>Après connexion, chaque audio et chaque vidéo rejoint ton dossier <b>FondVidéo Meet - Enregistrements</b> sur Google Drive à la fin de l'enregistrement.</p>
+                <p>Après connexion, tes nouveaux enregistrements rejoignent le dossier dédié sur ton Google Drive après la fin de l’enregistrement.</p>
               </div>
             </div>
             {driveConnected ? (
@@ -1864,7 +2022,7 @@ function App() {
                   </svg>
                   Se connecter avec Google
                 </button>
-                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans FondVidéo. Aucun mot de passe n'est demandé par notre application.</p>
+                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCELYO. Aucun mot de passe n’est demandé par SCELYO.</p>
                 {!clientId.trim().endsWith('.apps.googleusercontent.com') && (
                   <p className="drive-needs-setup">La connexion Google doit être configurée une seule fois pour cette prévisualisation. Le bouton sera fonctionnel dès que cette configuration aura été ajoutée.</p>
                 )}
