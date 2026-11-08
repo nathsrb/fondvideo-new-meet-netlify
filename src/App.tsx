@@ -163,6 +163,7 @@ function App() {
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveEmail, setDriveEmail] = useState('');
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'saved' | 'failed'>('idle');
+  const [driveProgress, setDriveProgress] = useState(0);
   const [driveAdvanced, setDriveAdvanced] = useState(false);
 
   const [uploading, setUploading] = useState(false);
@@ -1227,6 +1228,7 @@ function App() {
     }
     setUploading(true);
     setDriveStatus('uploading');
+    setDriveProgress(0);
     setNotice('');
     try {
       let folderId = localStorage.getItem('nexa_drive_folder') || '';
@@ -1256,12 +1258,32 @@ function App() {
       if(!destination)throw Error('Navigateur non autorisé à démarrer le transfert Drive.');
       let file:any=null;
       const bytes=8*1024*1024;
-      for(let pos=0;pos<rec.blob.size;pos+=bytes){
+      let pos=0;
+      while(pos<rec.blob.size){
         const end=Math.min(rec.blob.size,pos+bytes);
-        const result=await fetch(destination,{method:'PUT',headers:{Authorization:'Bearer '+tokenRef.current,'Content-Range':'bytes '+pos+'-'+(end-1)+'/'+rec.blob.size},body:rec.blob.slice(pos,end)});
-        if(result.status===308)continue;
-        if(!result.ok)throw Error('Transfert Drive impossible ('+result.status+').');
+        let result:Response|null=null;
+        let lastError:unknown=null;
+        for(let attempt=0;attempt<3;attempt++){
+          try {
+            result=await fetch(destination,{method:'PUT',headers:{Authorization:'Bearer '+tokenRef.current,'Content-Range':'bytes '+pos+'-'+(end-1)+'/'+rec.blob.size},body:rec.blob.slice(pos,end)});
+            if(result.ok || result.status===308) break;
+            if(result.status===401){ tokenRef.current=''; setDriveConnected(false); throw Error('Session Google expirée. Reconnecte Google Drive puis réessaie.'); }
+            lastError=Error('Transfert Drive impossible ('+result.status+').');
+          } catch(error){ lastError=error; }
+          await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+        }
+        if(!result)throw lastError || Error('Transfert Drive interrompu.');
+        if(result.status===308){
+          const range=result.headers.get('Range');
+          const acknowledged=range?.match(/bytes=\d+-(\d+)/i);
+          pos=acknowledged ? Number(acknowledged[1])+1 : end;
+          setDriveProgress(Math.round((pos/rec.blob.size)*100));
+          continue;
+        }
+        if(!result.ok)throw lastError || Error('Transfert Drive impossible.');
         file=await result.json();
+        pos=end;
+        setDriveProgress(100);
       }
       if(!file?.id)throw Error('Google Drive n’a pas confirmé le fichier.');
       setUploadedLink(
@@ -1272,7 +1294,7 @@ function App() {
       toast((rec.blob.type.startsWith('audio/') ? 'Audio' : 'Vidéo') + ' sauvegardé automatiquement dans ton Google Drive.');
     } catch (e) {
       setDriveStatus('failed');
-      toast('Envoi Drive échoué : ' + readableError(e) + ' — le fichier reste téléchargeable, réessaie depuis la réunion.');
+      toast('Envoi Drive échoué : ' + readableError(e) + ' — le fichier reste disponible, réessaie depuis la réunion.');
     } finally {
       setUploading(false);
     }
@@ -1747,7 +1769,7 @@ function App() {
                   </span>
                 )}
                 {uploading && (
-                  <span className="drive-transfer"><CloudUpload size={16} /> Envoi automatique de l’enregistrement sur Drive…</span>
+                  <span className="drive-transfer"><CloudUpload size={16} /> Envoi sur Drive… {driveProgress}%</span>
                 )}
                 {driveStatus === 'saved' && uploadedLink && (
                   <span className="drive-transfer success"><Check size={16} /> Enregistrement sauvegardé sur Drive</span>
