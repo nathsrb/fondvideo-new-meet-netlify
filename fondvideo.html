@@ -3,70 +3,68 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FondVidéo — Studio vidéo gratuit</title>
-    <meta name="theme-color" content="#08090d" />
+    <title>SCELYO Studio — Mets tes vidéos en scène</title>
+    <meta name="theme-color" content="#090B12" />
+    <meta name="description" content="SCELYO Studio : décors vidéo, formats et sous-titres réunis dans un espace de création." />
+    <link rel="icon" type="image/svg+xml" href="./scelyo-mark.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./src/fondvideo/styles.css" />
     <link rel="stylesheet" href="./src/fondvideo-design.css" />
+    <link rel="stylesheet" href="./src/scelyo-studio.css" />
   </head>
   <body>
     <div id="app">
-      <header class="topbar">
-        <div class="brand">
-          Fond<span>Vidéo</span
-          ><a
-            href="./index.html#/meet"
-            style="
-              margin-left: 16px;
-              color: #b6a8ff;
-              font-size: 12px;
-              text-decoration: none;
-            "
-            >← Revenir à Meet</a
-          >
-        </div>
+      <header class="topbar scelyo-studio-header">
+        <a class="scelyo-studio-brand" href="./index.html#/meet" aria-label="SCELYO — Accueil">
+          <img src="./scelyo-mark.svg" width="42" height="42" alt="" />
+          <span>SCELYO <small>STUDIO</small></span>
+        </a>
+        <nav class="scelyo-studio-nav" aria-label="Espaces SCELYO">
+          <a href="./index.html#/meet">Live</a>
+          <span class="active" aria-current="page">Studio</span>
+          <a href="./index.html#/vault">Vault</a>
+        </nav>
         <button id="newProject" class="ghost hidden">Nouveau projet</button>
       </header>
       <main>
-        <section id="landing" class="landing">
-          <div class="pill">100 % local • Sans watermark</div>
-          <h1>Change le fond de ta vidéo <span>gratuitement</span></h1>
-          <p>
-            Importe ta vidéo, supprime automatiquement l’arrière-plan et ajoute
-            le décor de ton choix.
-          </p>
-          <a class="primary" href="./index.html#/meet" style="margin:10px;text-decoration:none">Lancer une visioconférence</a>
-          <label class="primary" for="videoInput">Importer une vidéo</label
-          ><input
-            id="videoInput"
-            type="file"
-            accept="video/*,.mov,.mp4,.webm"
-            hidden
-          /><button id="demoBtn" class="secondary" type="button">
-            Tester l’éditeur sans vidéo
-          </button>
-          <div class="privacy">
-            ✓ Ta vidéo reste sur ton appareil. Aucun upload cloud.
+        <section id="landing" class="landing scelyo-studio-landing">
+          <div class="scelyo-studio-copy">
+            <div class="scelyo-studio-overline"><span></span> SCELYO / STUDIO CRÉATIF</div>
+            <div class="scelyo-studio-pill">Ton studio vidéo, directement dans ton navigateur</div>
+            <h1>Chaque image mérite <span>sa propre scène.</span></h1>
+            <p>Découpe tes sujets, change de décor, ajuste ton format et habille tes vidéos de sous-titres — dans un espace pensé pour créer.</p>
+            <div class="scelyo-studio-actions">
+              <label class="primary" for="videoInput"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4m-4 4 4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Importer une vidéo</label>
+              <input id="videoInput" type="file" accept="video/*,.mov,.mp4,.webm" hidden />
+              <button id="demoBtn" class="secondary" type="button">Explorer le Studio <span aria-hidden="true">↗</span></button>
+            </div>
+            <div class="scelyo-studio-trust"><span>✓ Traitement local</span><span>✓ Sans filigrane</span><span>✓ Formats sociaux</span></div>
           </div>
-          <div class="cards">
-            <article>
-              <b>Import rapide</b><span>Lecture directe du fichier local.</span>
-            </article>
-            <article>
-              <b>IA locale</b
-              ><span>Le détourage tourne dans ton navigateur.</span>
-            </article>
-            <article>
-              <b>Qualité source</b
-              ><span>Le fichier original n’est jamais modifié.</span>
-            </article>
+          <div class="scelyo-studio-art" aria-hidden="true">
+            <div class="scelyo-art-halo"></div>
+            <div class="scelyo-art-device">
+              <div class="scelyo-art-top"><span>● &nbsp; SCELYO STUDIO</span><span>16:9</span></div>
+              <div class="scelyo-art-screen">
+                <div class="scelyo-art-light"></div>
+                <div class="scelyo-art-person"><div class="scelyo-art-head"></div><div class="scelyo-art-body"></div></div>
+                <span class="scelyo-art-label">TON UNIVERS, TON DÉCOR</span>
+              </div>
+              <div class="scelyo-art-timeline"><span></span><i></i><i></i><i></i></div>
+              <div class="scelyo-art-bottom"><span>00:16 / 00:45</span><span>● APERÇU</span></div>
+            </div>
+            <div class="scelyo-art-floating"><span>✦</span><div><strong>Libère tes idées.</strong><small>Un décor à la fois.</small></div></div>
+          </div>
+          <div class="scelyo-studio-benefits">
+            <div class="scelyo-studio-benefit"><span>01 / IMPORTER</span><strong>Commence par ton image.</strong><p>Import rapide depuis ton appareil.</p></div>
+            <div class="scelyo-studio-benefit"><span>02 / COMPOSER</span><strong>Choisis ton univers.</strong><p>Détourage, décors, formats et sous-titres.</p></div>
+            <div class="scelyo-studio-benefit"><span>03 / EXPORTER</span><strong>Emporte ta création.</strong><p>Un export local, à ton rythme.</p></div>
           </div>
         </section>
         <section id="editor" class="editor hidden">
           <div class="editorHead">
             <div>
-              <h2 id="fileName">Vidéo</h2>
+              <div class="scelyo-editor-overline">SCELYO STUDIO / PROJET EN COURS</div><h2 id="fileName">Vidéo</h2>
               <div id="fileMeta" class="meta"></div>
             </div>
             <div id="status" class="status">IA en attente</div>
@@ -98,7 +96,7 @@
             </div>
             <div class="controlsColumn">
               <div class="tabs">
-                <button class="tab active" data-panel="fond">Fond</button
+                <button class="tab active" data-panel="fond">Décors</button
                 ><button class="tab" data-panel="format">Format</button
                 ><button class="tab" data-panel="captions">Sous-titres</button
                 ><button class="tab" data-panel="adjust">Ajuster</button
@@ -322,7 +320,7 @@
                 <a
                   id="download"
                   class="primary full hidden"
-                  download="fondvideo.webm"
+                  download="scelyo.webm"
                   >Télécharger la vidéo</a
                 >
               </section>
@@ -330,7 +328,7 @@
           </div>
         </section>
       </main>
-      <footer>Traitement local • Pas de compte • Pas de watermark</footer>
+      <footer class="scelyo-studio-footer">SCELYO Studio <span>Le live devient création.</span> <a href="./index.html#/meet">Retour à SCELYO Live ↗</a></footer>
     </div>
     <script type="module" src="./src/fondvideo/main.ts"></script>
   </body>
