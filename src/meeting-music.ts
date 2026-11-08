@@ -92,8 +92,11 @@ export class MeetingMusicMixer {
 
   async play() {
     if (this.disposed) throw new Error('Lecteur fermé.');
-    await this.context.resume();
-    await this.audio.play();
+    // Start both while the iPhone user gesture is active; awaiting resume
+    // before calling play() can lose Safari's playback permission.
+    const resumed = this.context.resume();
+    const played = this.audio.play();
+    await Promise.all([resumed, played]);
     this.notify();
   }
 
