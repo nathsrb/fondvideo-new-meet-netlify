@@ -24,8 +24,17 @@ const roomPattern = /^[a-z2-9]{12}$/;
 const uuidPattern = /^[0-9a-f-]{36}$/i;
 const maxAge = 2 * 60 * 60 * 1000;
 
+const allowedOrigin = 'https://scelyo.nathan-srb7214.chatgpt.site';
+function corsHeaders() {
+  return {
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
 function success(data: unknown, status = 200) {
-  return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
+  return Response.json(data, { status, headers: corsHeaders() });
 }
 function fail(error: string, status = 400) { return success({ error }, status); }
 function memberKey(room: string, id: string) { return `members/${room}/${id}`; }
@@ -75,6 +84,7 @@ export default async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+  if (method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders() });
   try {
     if (method === 'GET' && path === '/api/_healthcheck') {
       return success({ message: 'Success', transport: 'netlify-preview-polling' });
