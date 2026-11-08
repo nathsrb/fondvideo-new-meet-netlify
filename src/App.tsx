@@ -1273,128 +1273,75 @@ function App() {
       )}
 
       {!room && !joined && (
-        <main className="landing">
-          <div className="hero-glow" />
-          <div className="hero-copy">
-            <div className="eyebrow">
-              <span className="live-dot" /> LA VISIO, SIMPLEMENT
+        <main className="fv-dashboard">
+          <aside className="fv-sidebar" aria-label="Navigation principale">
+            <div className="fv-sidebar-label">ESPACE CRÉATIF</div>
+            <div className="fv-sidebar-active"><Video size={19}/> Vue d’ensemble <span>01</span></div>
+            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> Nouvelle réunion <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={19}/> Studio de montage <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => setLibraryOpen(true)}><Library size={19}/> Bibliothèque <ArrowRight size={16}/></button>
+            <div className="fv-sidebar-bottom">
+              <div className="fv-sidebar-orb"><Video size={20}/></div>
+              <strong>Tout commence ici.</strong>
+              <p>Crée, échange et enregistre tes idées au même endroit.</p>
+              <span><ShieldCheck size={14}/> Ton espace, tes contenus</span>
             </div>
-            <h1>
-              Vos meilleures idées
-              <br />
-              <em>méritent de se rencontrer.</em>
-            </h1>
-            <p>
-              Ton studio FondVidéo et ta visioconférence réunis. Fonds en
-              direct, formats sociaux, enregistrements et partage d’écran.
-            </p>
-            <div className="launch-actions">
-              <button
-                className="btn primary large"
-                onClick={() => openRoom(newCode())}
-              >
-                <Plus size={20} /> Nouvelle réunion
+          </aside>
+
+          <div className="fv-dashboard-content">
+            <div className="fv-dashboard-topline"><span><span className="fv-online-dot"/> TON ESPACE FONDVIDÉO</span><span>STUDIO / NEW MEET</span></div>
+            <section className="fv-feature-hero">
+              <div className="fv-feature-content">
+                <div className="fv-kicker"><span className="fv-kicker-dash"/> CRÉER. CONNECTER. INSPIRER.</div>
+                <h1>Donne vie à<br/><em>tes idées.</em></h1>
+                <p>Une réunion à lancer, une vidéo à créer, une histoire à partager. Ton espace de création commence ici.</p>
+                <div className="fv-hero-buttons">
+                  <button className="fv-hero-primary" onClick={() => openRoom(newCode())}><Plus size={21}/> Créer une réunion <ArrowRight size={18}/></button>
+                  <a className="fv-hero-secondary" href="./fondvideo.html"><PlayCircle size={21}/> Ouvrir le studio</a>
+                </div>
+                <div className="fv-feature-metrics"><span><span className="fv-metric-dot"/> RÉUNIONS EN DIRECT</span><span><ShieldCheck size={15}/> ACCÈS PRIVÉ</span></div>
+              </div>
+              <div className="fv-hero-showcase" aria-hidden="true">
+                <div className="fv-showcase-orbit fv-orbit-one"/>
+                <div className="fv-showcase-orbit fv-orbit-two"/>
+                <div className="fv-showcase-glow"/>
+                <div className="fv-glass-frame">
+                  <div className="fv-glass-head"><span><i/> <i/> <i/></span><b>FONDVIDÉO / LIVE</b><span>● LIVE</span></div>
+                  <div className="fv-glass-stage">
+                    <div className="fv-glass-guest guest-one"><div className="fv-guest-avatar"><Users size={38}/></div><small>Caméra principale</small></div>
+                    <div className="fv-glass-guest guest-two"><div className="fv-guest-avatar"><Video size={22}/></div><small>Invité connecté</small></div>
+                  </div>
+                  <div className="fv-glass-controls"><span><Mic size={16}/></span><span><Video size={16}/></span><span><MonitorUp size={16}/></span><span className="fv-glass-hangup"><PhoneOff size={16}/></span></div>
+                </div>
+                <div className="fv-floating-label"><span><Circle size={9} fill="currentColor"/></span><div><strong>À toi de créer</strong><small>Le studio est prêt.</small></div></div>
+              </div>
+            </section>
+
+            <div className="fv-section-heading"><div><span>TON WORKSPACE</span><h2>Qu’est-ce qu’on crée aujourd’hui ?</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
+            <section className="fv-action-grid">
+              <button className="fv-action-card fv-action-meet" onClick={() => openRoom(newCode())}>
+                <span className="fv-action-top"><span className="fv-action-icon"><Video size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>01 / COLLABORER</small><strong>Nouvelle réunion</strong><span>Réunis ton équipe en un instant.</span></span>
               </button>
-              <a className="btn subtle large" href="./fondvideo.html"><Camera size={18}/> Ouvrir FondVidéo</a>
-              <button className="btn subtle large" onClick={()=>setLibraryOpen(true)}><Library size={18}/> Mes enregistrements</button>
-              <div className="join-form">
-                <Link2 size={18} />
-                <input
-                  value={newRoom}
-                  onChange={e => setNewRoom(e.target.value.toLowerCase())}
-                  placeholder="Code de la réunion"
-                  aria-label="Code de la réunion"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      if (/^[a-z2-9]{12}$/.test(newRoom.trim()))
-                        openRoom(newRoom.trim());
-                      else
-                        toast(
-                          'Saisis un code de réunion valide (12 caractères).'
-                        );
-                    }
-                  }}
-                />
-                <button
-                  title="Rejoindre"
-                  onClick={() =>
-                    /^[a-z2-9]{12}$/.test(newRoom.trim())
-                      ? openRoom(newRoom.trim())
-                      : toast(
-                          'Saisis un code de réunion valide (12 caractères).'
-                        )
-                  }
-                >
-                  <ArrowRight size={19} />
-                </button>
+              <a className="fv-action-card fv-action-studio" href="./fondvideo.html">
+                <span className="fv-action-top"><span className="fv-action-icon"><Camera size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>Studio vidéo</strong><span>Transforme tes images en contenu.</span></span>
+              </a>
+              <button className="fv-action-card fv-action-library" onClick={() => setLibraryOpen(true)}>
+                <span className="fv-action-top"><span className="fv-action-icon"><Library size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>Ma bibliothèque</strong><span>Tes moments, toujours à portée de main.</span></span>
+              </button>
+            </section>
+
+            <section className="fv-join-strip">
+              <div className="fv-join-copy"><span className="fv-join-icon"><Link2 size={23}/></span><div><strong>Tu as reçu une invitation ?</strong><p>Rejoins directement une réunion avec son code.</p></div></div>
+              <div className="fv-join-form">
+                <input value={newRoom} onChange={e => setNewRoom(e.target.value.toLowerCase())}
+                  placeholder="Saisir le code de réunion" aria-label="Code de la réunion"
+                  onKeyDown={e => {if(e.key==='Enter'){if(/^[a-z2-9]{12}$/.test(newRoom.trim()))openRoom(newRoom.trim());else toast('Saisis un code valide de 12 caractères.');}}}/>
+                <button title="Rejoindre la réunion" onClick={() => /^[a-z2-9]{12}$/.test(newRoom.trim()) ? openRoom(newRoom.trim()) : toast('Saisis un code valide de 12 caractères.')}><ArrowRight size={21}/></button>
               </div>
-            </div>
-            <div className="hero-badges">
-              <span>
-                <Check size={16} /> Audio & vidéo
-              </span>
-              <span>
-                <Check size={16} /> Partage d’écran
-              </span>
-              <span>
-                <Check size={16} /> Enregistrement & Drive
-              </span>
-            </div>
-          </div>
-          <div className="preview-art">
-            <div className="art-top">
-              <div className="art-dots">
-                <i />
-                <i />
-                <i />
-              </div>
-              <span>Réunion en cours</span>
-              <span className="art-lock">
-                <ShieldCheck size={14} />
-              </span>
-            </div>
-            <div className="art-grid">
-              <div className="art-person person-1">
-                <div className="avatar-shape a1" />
-                <span>Vous</span>
-              </div>
-              <div className="art-person person-2">
-                <div className="avatar-shape a2" />
-                <span>Invité</span>
-              </div>
-              <div className="art-person person-3">
-                <div className="avatar-shape a3" />
-                <span>Collègue</span>
-              </div>
-              <div className="art-person person-4">
-                <div className="avatar-shape a4" />
-                <span>Partenaire</span>
-              </div>
-            </div>
-            <div className="art-controls">
-              <span>
-                <Mic size={16} />
-              </span>
-              <span>
-                <Video size={16} />
-              </span>
-              <span>
-                <MonitorUp size={16} />
-              </span>
-              <span className="art-end">
-                <PhoneOff size={16} />
-              </span>
-            </div>
-            <div className="art-float">
-              <span className="small-purple">
-                <Circle size={13} fill="currentColor" />
-              </span>
-              <div>
-                <strong>Enregistrement prêt</strong>
-                <small>Sauvegarde Google Drive</small>
-              </div>
-              <Check size={16} />
-            </div>
+            </section>
           </div>
         </main>
       )}
