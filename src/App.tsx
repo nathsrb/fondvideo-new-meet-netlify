@@ -349,7 +349,7 @@ function App() {
     window.setTimeout(()=>URL.revokeObjectURL(url),30000);
   }
 
-  async function shareRecording(item:SavedRecording, destination: 'photos' | 'drive' | 'general' = 'general') {
+  async function shareRecording(item:SavedRecording, destination: 'photos' | 'drive' | 'youtube' | 'general' = 'general') {
     const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isVideo = item.mime.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(item.name);
     // Remove codecs parameters from the MIME type: iOS share targets expect
@@ -369,8 +369,10 @@ function App() {
     const canShareFile = !!navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }));
     if (canShareFile) {
       if (ios) toast(destination === 'drive'
-        ? 'Choisis Google Drive dans le partage iPhone. Connecte-toi à Drive si iOS le demande ; aucune clé OAuth n’est à saisir dans FondVidéo.'
-        : 'Choisis « Enregistrer la vidéo » dans le partage iPhone pour l’ajouter à Photos.');
+        ? 'Choisis Google Drive dans le partage iPhone. Aucune clé API à saisir.'
+        : destination === 'youtube'
+          ? 'Choisis YouTube si proposé. Sinon, enregistre la vidéo dans Photos puis ouvre YouTube → Créer → Vidéo.'
+          : 'Choisis « Enregistrer la vidéo » dans le partage iPhone pour l’ajouter à Photos.');
       try { await navigator.share(data); return; }
       catch(err) {
         if ((err as Error)?.name === 'AbortError') return;
@@ -378,7 +380,7 @@ function App() {
         return;
       }
     }
-    if (ios && isVideo && mime === 'video/mp4' && destination !== 'drive') {
+    if (ios && isVideo && mime === 'video/mp4' && destination !== 'drive' && destination !== 'youtube') {
       // Safari may support its own native video viewer even if Web Share files
       // are not supported. Keep the current preview/link as fallback.
       const url = URL.createObjectURL(item.blob);
@@ -392,8 +394,37 @@ function App() {
     }
     downloadRecording(item);
     toast(destination === 'drive'
-      ? 'Fichier téléchargé : ouvre Google Drive et importe-le depuis Fichiers. Aucun paramétrage OAuth n’est nécessaire dans FondVidéo.'
-      : 'Partage direct non disponible : le fichier a été téléchargé. Ouvre-le depuis Fichiers ou utilise Safari.');
+      ? 'Fichier téléchargé : ouvre Google Drive et importe-le depuis Fichiers.'
+      : destination === 'youtube'
+        ? 'Fichier téléchargé : ouvre l’application YouTube, touche Créer → Vidéo puis sélectionne le fichier.'
+        : 'Partage direct non disponible : le fichier a été téléchargé. Ouvre-le depuis Fichiers ou utilise Safari.');
+  }
+
+  function saveOnDrive(item: SavedRecording) {
+    if (driveConnected && tokenRef.current) {
+      void uploadToDrive({blob:item.blob, name:item.name, url:''});
+      return;
+    }
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      void shareRecording(item, 'drive');
+      return;
+    }
+    // Without a Google authorization there is no secure browser API that can
+    // upload a local Blob into the user's Drive. Prepare the file and destination.
+    downloadRecording(item);
+    window.open('https://drive.google.com/drive/u/0/my-drive', '_blank', 'noopener,noreferrer');
+    toast('Drive ouvert et fichier téléchargé. Dans Drive : Nouveau → Importer un fichier, puis sélectionne la vidéo.');
+  }
+
+  function publishOnYouTube(item: SavedRecording) {
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // YouTube is not guaranteed to be a target in the OS share sheet.
+      void shareRecording(item, 'youtube');
+      return;
+    }
+    downloadRecording(item);
+    window.open('https://studio.youtube.com/', '_blank', 'noopener,noreferrer');
+    toast('YouTube Studio ouvert et vidéo téléchargée. Dans Studio : Créer → Importer des vidéos.');
   }
 
   function previewRecording(item:SavedRecording) {
@@ -1297,10 +1328,10 @@ function App() {
           <button
             className={'drive-header-action ' + (driveConnected ? 'connected' : '')}
             title="Connexion Google Drive"
-            onClick={() => setShowSettings(true)}
+            onClick={() => driveConnected ? setShowSettings(true) : setLibraryOpen(true)}
           >
             <CloudUpload size={17} />
-            <span>{driveConnected ? 'Drive connecté' : 'Drive : en attente'}</span>
+            <span>{driveConnected ? 'Drive connecté' : 'Exporter Drive / YouTube'}</span>
           </button>
         </div>
       </header>
@@ -1731,11 +1762,15 @@ function App() {
                       id:'current',name:recordReady.name,blob:recordReady.blob,
                       mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
                     }, 'photos')}><Share2 size={15}/> {isPhone && recordMode === 'video' ? 'Enregistrer dans Photos' : 'Partager le fichier'}</button>
-                    <button onClick={()=>void shareRecording({
+                    <button onClick={()=>saveOnDrive({
                       id:'current',name:recordReady.name,blob:recordReady.blob,
                       mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
-                    }, 'drive')}><CloudUpload size={15}/> Envoyer vers Drive (Partager)</button>
-                    {isPhone && recordMode === 'video' && <span className="photos-help">iPhone : choisis « Enregistrer la vidéo » pour Photos ou sélectionne Google Drive dans le partage natif. Tu n’as aucune clé à configurer.</span>}
+                    })}><CloudUpload size={15}/> Enregistrer sur Google Drive</button>
+                    {recordMode === 'video' && <button onClick={()=>publishOnYouTube({
+                      id:'current',name:recordReady.name,blob:recordReady.blob,
+                      mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
+                    })}><ExternalLink size={15}/> Publier sur YouTube</button>}
+                    {isPhone && recordMode === 'video' && <span className="photos-help">iPhone : « Enregistrer sur Google Drive » ouvre le partage natif. Pour YouTube, choisis YouTube si proposé ; sinon enregistre la vidéo dans Photos, puis ouvre YouTube → Créer → Vidéo.</span>}
                     {uploadedLink ? (
                       <a href={uploadedLink} target="_blank" rel="noreferrer">
                         <ExternalLink size={15} /> Ouvrir dans Drive
@@ -1846,14 +1881,15 @@ function App() {
                     <button onClick={()=>previewRecording(item)}><PlayCircle size={15}/> {activePreview===item.id?'Fermer':'Lire'}</button>
                     <button onClick={()=>downloadRecording(item)}><Download size={15}/> Télécharger</button>
                     <button onClick={()=>void shareRecording(item, 'photos')}><Share2 size={15}/> {isPhone && item.mime.startsWith('video/') ? 'Enregistrer dans Photos' : 'Partager'}</button>
-                    <button onClick={()=>void shareRecording(item, 'drive')}><CloudUpload size={15}/> Envoyer vers Drive</button>
+                    <button onClick={()=>saveOnDrive(item)}><CloudUpload size={15}/> Enregistrer sur Google Drive</button>
+                    {item.mime.startsWith('video/') && <button onClick={()=>publishOnYouTube(item)}><ExternalLink size={15}/> Publier sur YouTube</button>}
                     <button className="danger" onClick={()=>void removeRecording(item)}><Trash2 size={15}/> Supprimer</button>
                   </div>
                 </article>)}
               </div>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
-              <p>Sur iPhone, « Enregistrer dans Photos » ouvre le partage natif : choisis « Enregistrer la vidéo ». « Envoyer vers Drive » ouvre le même partage : choisis l’application Google Drive et ton compte. Aucune configuration OAuth n’est nécessaire dans FondVidéo pour ce partage manuel. Pour un envoi totalement automatique en arrière-plan, une autorisation Google officielle reste obligatoire. Sur PC, tu peux télécharger le fichier puis l’importer sur drive.google.com.</p>
+              <p>Après l’enregistrement, choisis « Enregistrer sur Google Drive » ou « Publier sur YouTube ». Sur iPhone, la feuille de partage te permet de choisir Drive ou Photos. Si YouTube n’est pas proposé, enregistre d’abord la vidéo dans Photos puis ouvre YouTube → Créer → Vidéo. Sur ordinateur, le fichier est téléchargé et la page d’import de Drive ou YouTube s’ouvre. Seul l’envoi automatique vers Drive nécessite une autorisation Google.</p>
               <div><a href="https://drive.google.com/drive/u/0/my-drive" target="_blank" rel="noreferrer">Ouvrir Drive <ExternalLink size={13}/></a><a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Ouvrir YouTube Studio <ExternalLink size={13}/></a></div>
             </div>
           </section>
