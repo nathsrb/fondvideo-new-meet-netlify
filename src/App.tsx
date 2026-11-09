@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ws } from './netlify-transport';
 import { MeetingMusicMixer } from './meeting-music';
+import { ClearVoiceProcessor, type VoiceProfile } from './clearvoice';
 import {
   processCamera,
   videoDimensions,
@@ -45,6 +46,7 @@ import {
   Minimize2,
   PlayCircle,
   Music2,
+  AudioLines,
   Volume2,
   Pause,
   Play,
@@ -193,6 +195,11 @@ function App() {
   const [musicTime, setMusicTime] = useState(0);
   const [musicDuration, setMusicDuration] = useState(0);
   const [musicBusy, setMusicBusy] = useState(false);
+  const [noiseReduction, setNoiseReduction] = useState(true);
+  const [voiceEnhancement, setVoiceEnhancement] = useState(true);
+  const [voiceProfile, setVoiceProfile] = useState<VoiceProfile>('balanced');
+  const [clearVoiceOpen, setClearVoiceOpen] = useState(false);
+  const [clearVoiceReady, setClearVoiceReady] = useState(false);
 
   // Deep-link Vault from SCELYO Studio without changing meeting routing.
   useEffect(() => {
@@ -218,6 +225,7 @@ function App() {
   const [seconds, setSeconds] = useState(0);
 
   const musicRef = useRef<MeetingMusicMixer | null>(null);
+  const clearVoiceRef = useRef<ClearVoiceProcessor | null>(null);
   const peerId = useRef(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
@@ -456,10 +464,13 @@ function App() {
     }
   }
 
-  // Audio sent to participants is a single WebRTC track. When music is
-  // imported, it contains the microphone and the selected soundtrack.
+  // One stable processed microphone track is shared by Live, music and the
+  // recording mixer. Music is added AFTER ClearVoice, never noise-suppressed.
+  function processedMicrophoneTrack() {
+    return clearVoiceRef.current?.track || rawRef.current?.getAudioTracks()[0] || null;
+  }
   function outboundAudioTrack() {
-    return musicRef.current?.track || rawRef.current?.getAudioTracks()[0] || null;
+    return musicRef.current?.track || processedMicrophoneTrack();
   }
 
   async function restoreOutboundAudio(track: MediaStreamTrack | null) {
@@ -483,7 +494,7 @@ function App() {
       toast('Le fichier dépasse 150 Mo. Sélectionne une piste plus légère.');
       return;
     }
-    const microphone = rawRef.current?.getAudioTracks()[0];
+    const microphone = processedMicrophoneTrack();
     if (!microphone || microphone.readyState !== 'live') {
       toast('Autorise le microphone avant de diffuser de la musique.');
       return;
@@ -792,7 +803,11 @@ function App() {
     try {
       try {
         media = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: noiseReduction,
+            autoGainControl: true,
+          },
           video: {
             facingMode: face,
             width: { ideal: quality === '2160' ? 3840 : quality === '720' ? 1280 : 1920 },
@@ -806,6 +821,23 @@ function App() {
         toast('Caméra ou micro indisponible. Connexion en mode écoute seule.');
       }
       rawRef.current = media;
+      const microphoneTrack = media?.getAudioTracks()[0];
+      if (microphoneTrack) {
+        try {
+          const processor = new ClearVoiceProcessor(microphoneTrack, voiceEnhancement, voiceProfile);
+          if (await processor.resume()) {
+            clearVoiceRef.current = processor;
+            setClearVoiceReady(true);
+          } else {
+            await processor.destroy();
+            setClearVoiceReady(false);
+            toast('Amélioration de la voix indisponible sur ce navigateur ; le micro standard reste actif.');
+          }
+        } catch {
+          setClearVoiceReady(false);
+          toast('ClearVoice indisponible ; le micro standard reste actif.');
+        }
+      }
       localRef.current = media;
       setLocalStream(media);
       const settings = media?.getVideoTracks()[0]?.getSettings();
@@ -860,6 +892,10 @@ function App() {
       toast('Impossible de rejoindre : ' + readableError(e));
       connRef.current?.disconnect();
       connRef.current = null;
+      const clearVoice = clearVoiceRef.current;
+      clearVoiceRef.current = null;
+      if (clearVoice) await clearVoice.destroy();
+      setClearVoiceReady(false);
       media?.getTracks().forEach(t => t.stop());
       effectRef.current?.stop();
       effectRef.current = null;
@@ -876,6 +912,11 @@ function App() {
     const currentMusic = musicRef.current;
     musicRef.current = null;
     if (currentMusic) await currentMusic.destroy();
+    const clearVoice = clearVoiceRef.current;
+    clearVoiceRef.current = null;
+    if (clearVoice) await clearVoice.destroy();
+    setClearVoiceReady(false);
+    setClearVoiceOpen(false);
     setMusicName('');
     setMusicPlaying(false);
     setMusicTime(0);
@@ -932,6 +973,36 @@ function App() {
       ?.getAudioTracks()
       .forEach(t => (t.enabled = !micOn));
     setMicOn(!micOn);
+  }
+  async function changeNoiseReduction(enabled: boolean) {
+    const track = rawRef.current?.getAudioTracks()[0];
+    const supported = navigator.mediaDevices?.getSupportedConstraints?.().noiseSuppression;
+    if (track && !supported) {
+      toast('La réduction du bruit native n’est pas disponible dans ce navigateur.');
+      return;
+    }
+    if (track) {
+      try {
+        await track.applyConstraints({ noiseSuppression: enabled });
+        const actual = track.getSettings() as MediaTrackSettings & { noiseSuppression?: boolean };
+        if (typeof actual.noiseSuppression === 'boolean' && actual.noiseSuppression !== enabled) {
+          toast('Le navigateur n’a pas appliqué ce réglage audio.');
+          return;
+        }
+      } catch {
+        toast('Impossible de changer la réduction du bruit pendant cette session.');
+        return;
+      }
+    }
+    setNoiseReduction(enabled);
+  }
+  function changeVoiceEnhancement(enabled: boolean) {
+    clearVoiceRef.current?.setEnabled(enabled);
+    setVoiceEnhancement(enabled);
+  }
+  function changeVoiceProfile(profile: VoiceProfile) {
+    clearVoiceRef.current?.setProfile(profile);
+    setVoiceProfile(profile);
   }
   function toggleCam() {
     (rawRef.current || localRef.current)
@@ -1014,9 +1085,17 @@ function App() {
     void ctx.resume().catch(() => {});
     const dest = ctx.createMediaStreamDestination();
     const nodes: MediaStreamAudioSourceNode[] = [];
+    const local = localRef.current;
+    const mic = processedMicrophoneTrack();
+    // Capture the enhanced microphone once, without also capturing its raw
+    // counterpart. The video track remains the one selected by the camera.
+    const recordingLocal = local ? new MediaStream([
+      ...local.getVideoTracks(),
+      ...(mic ? [mic] : []),
+    ]) : null;
     const allStreams = () => {
       const candidates = [
-        { key: 'local', stream: localRef.current },
+        { key: 'local', stream: recordingLocal },
         ...Object.entries(streamsRef.current).map(([key, stream]) => ({
           key,
           stream,
@@ -1547,6 +1626,35 @@ function App() {
                   {camOn ? 'activée' : 'coupée'}
                 </button>
               </div>
+              <section className="scelyo-clearvoice-prejoin" aria-label="SCELYO ClearVoice avant la réunion">
+                <div className="scelyo-clearvoice-prejoin-header">
+                  <div className="scelyo-clearvoice-headline">
+                    <span className="scelyo-clearvoice-icon"><AudioLines size={20}/></span>
+                    <span><strong>SCELYO ClearVoice</strong><small>Ta voix, plus claire pendant la session</small></span>
+                  </div>
+                </div>
+                <label className="scelyo-clearvoice-option">
+                  <span><strong>Réduire les bruits de fond</strong><small>Traitement natif du navigateur</small></span>
+                  <input type="checkbox" checked={noiseReduction}
+                    onChange={event => void changeNoiseReduction(event.target.checked)}
+                    aria-label="Réduire les bruits de fond"/>
+                </label>
+                <label className="scelyo-clearvoice-option">
+                  <span><strong>Améliorer la voix</strong><small>Clarté, fréquences et volume</small></span>
+                  <input type="checkbox" checked={voiceEnhancement}
+                    onChange={event => changeVoiceEnhancement(event.target.checked)}
+                    aria-label="Améliorer la voix"/>
+                </label>
+                <label className="scelyo-clearvoice-level">Profil de voix
+                  <select value={voiceProfile} disabled={!voiceEnhancement}
+                    onChange={event => changeVoiceProfile(event.target.value as VoiceProfile)}>
+                    <option value="natural">Naturel</option>
+                    <option value="balanced">Équilibré</option>
+                    <option value="strong">Renforcé</option>
+                  </select>
+                </label>
+                <p className="scelyo-clearvoice-note">Gratuit et traité localement. L’efficacité de la réduction du bruit dépend de ton appareil.</p>
+              </section>
               <div className="camera-options">
                 <label>Caméra</label>
                 <select value={face} onChange={e => setFace(e.target.value)}>
@@ -1675,6 +1783,41 @@ function App() {
               </div>
             )}
           </div>
+          {clearVoiceOpen && (
+            <section className="scelyo-clearvoice-panel" aria-label="Réglages SCELYO ClearVoice">
+              <div className="scelyo-clearvoice-panel-header">
+                <div className="scelyo-clearvoice-headline">
+                  <span className="scelyo-clearvoice-icon"><AudioLines size={21}/></span>
+                  <span><strong>SCELYO ClearVoice</strong><small>Réglages audio de cette session</small></span>
+                </div>
+                <button type="button" className="scelyo-clearvoice-close" title="Fermer ClearVoice"
+                  onClick={() => setClearVoiceOpen(false)}><X size={18}/></button>
+              </div>
+              <label className="scelyo-clearvoice-option">
+                <span><strong>Réduction des bruits de fond</strong><small>Atténue les sons parasites pendant les échanges</small></span>
+                <input type="checkbox" checked={noiseReduction}
+                  onChange={event => void changeNoiseReduction(event.target.checked)}/>
+              </label>
+              <label className="scelyo-clearvoice-option">
+                <span><strong>Amélioration de la voix</strong><small>Filtre et équilibre la voix en temps réel</small></span>
+                <input type="checkbox" checked={voiceEnhancement}
+                  disabled={!clearVoiceReady}
+                  onChange={event => changeVoiceEnhancement(event.target.checked)}/>
+              </label>
+              <label className="scelyo-clearvoice-level">Intensité de l’amélioration
+                <select value={voiceProfile} disabled={!voiceEnhancement || !clearVoiceReady}
+                  onChange={event => changeVoiceProfile(event.target.value as VoiceProfile)}>
+                  <option value="natural">Naturel</option>
+                  <option value="balanced">Équilibré</option>
+                  <option value="strong">Renforcé</option>
+                </select>
+              </label>
+              <p className="scelyo-clearvoice-note">
+                {clearVoiceReady ? 'Traitement vocal local actif. Le micro amélioré est utilisé dans les réunions et enregistrements.' : 'Le traitement vocal avancé est indisponible sur cet appareil : micro standard conservé.'}
+                {' '}La musique partagée n’est pas filtrée.
+              </p>
+            </section>
+          )}
           {isHost && musicPanelOpen && (
             <section className="scelyo-music-panel" aria-label="Musique d’ambiance SCELYO Live">
               <div className="scelyo-music-panel-head">
@@ -1768,6 +1911,13 @@ function App() {
                   title={micOn ? 'Couper le micro' : 'Activer le micro'}
                 >
                   {micOn ? <Mic /> : <MicOff />}
+                </button>
+                <button type="button"
+                  className={clearVoiceOpen ? 'tool-btn active-tool' : 'tool-btn'}
+                  onClick={() => setClearVoiceOpen(open => !open)}
+                  title="SCELYO ClearVoice — Réglages audio" aria-label="Réglages SCELYO ClearVoice"
+                  aria-expanded={clearVoiceOpen}>
+                  <AudioLines />
                 </button>
                 <button
                   className={camOn ? 'tool-btn' : 'tool-btn disabled-tool'}
