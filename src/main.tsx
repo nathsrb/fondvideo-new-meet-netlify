@@ -5,6 +5,7 @@ import './index.css';
 import './fondvideo-workspace.css';
 import './scelyo.css';
 import './scelyo-music.css';
+import './scelyo-clearvoice.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
