@@ -10,6 +10,9 @@ export class ClearVoiceProcessor {
   readonly stream: MediaStream;
   private readonly context: AudioContext;
   private readonly input: MediaStreamAudioSourceNode;
+  private readonly gateInput: GainNode;
+  private noiseGate: AudioWorkletNode | null = null;
+  private noiseEnabled: boolean;
   private readonly output: MediaStreamAudioDestinationNode;
   private readonly dry: GainNode;
   private readonly enhanced: GainNode;
@@ -20,12 +23,14 @@ export class ClearVoiceProcessor {
   private readonly makeup: GainNode;
   private disposed = false;
 
-  constructor(microphone: MediaStreamTrack, enhanced: boolean, profile: VoiceProfile) {
+  constructor(microphone: MediaStreamTrack, enhanced: boolean, profile: VoiceProfile, noiseEnabled: boolean) {
     if (microphone.kind !== 'audio' || microphone.readyState !== 'live') {
       throw new Error('Microphone inaccessible.');
     }
     this.context = new AudioContext();
+    this.noiseEnabled = noiseEnabled;
     this.input = this.context.createMediaStreamSource(new MediaStream([microphone]));
+    this.gateInput = this.context.createGain();
     this.output = this.context.createMediaStreamDestination();
     this.dry = this.context.createGain();
     this.enhanced = this.context.createGain();
@@ -44,9 +49,10 @@ export class ClearVoiceProcessor {
     this.makeup = this.context.createGain();
 
     // Only one of the dry and enhanced paths has volume at steady state.
-    this.input.connect(this.dry);
+    this.input.connect(this.gateInput);
+    this.gateInput.connect(this.dry);
     this.dry.connect(this.output);
-    this.input.connect(this.highPass);
+    this.gateInput.connect(this.highPass);
     this.highPass.connect(this.lowPass);
     this.lowPass.connect(this.presence);
     this.presence.connect(this.compressor);
@@ -63,14 +69,40 @@ export class ClearVoiceProcessor {
     return this.stream.getAudioTracks()[0];
   }
 
+  get noiseGateReady(): boolean {
+    return this.noiseGate !== null;
+  }
+
   async resume(): Promise<boolean> {
     if (this.disposed) return false;
     try {
+      // Resume first to preserve the user gesture on iOS Safari.
       if (this.context.state === 'suspended') await this.context.resume();
+      if (this.context.audioWorklet) {
+        try {
+          await this.context.audioWorklet.addModule('/clearvoice-gate.js');
+          if (this.disposed) return false;
+          const gate = new AudioWorkletNode(this.context, 'scelyo-clearvoice-gate', {
+            parameterData: { enabled: this.noiseEnabled ? 1 : 0 },
+          });
+          this.gateInput.disconnect();
+          this.gateInput.connect(gate);
+          gate.connect(this.dry);
+          gate.connect(this.highPass);
+          this.noiseGate = gate;
+        } catch {
+          // Native capture suppression and voice EQ continue to work.
+        }
+      }
       return this.context.state === 'running';
     } catch {
       return false;
     }
+  }
+
+  setNoiseReduction(enabled: boolean) {
+    this.noiseEnabled = enabled;
+    this.noiseGate?.parameters.get('enabled')?.setValueAtTime(enabled ? 1 : 0, this.context.currentTime);
   }
 
   setEnabled(enabled: boolean) {
@@ -101,6 +133,8 @@ export class ClearVoiceProcessor {
     if (this.disposed) return;
     this.disposed = true;
     this.input.disconnect();
+    this.gateInput.disconnect();
+    this.noiseGate?.disconnect();
     this.dry.disconnect();
     this.highPass.disconnect();
     this.lowPass.disconnect();
