@@ -200,6 +200,7 @@ function App() {
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile>('balanced');
   const [clearVoiceOpen, setClearVoiceOpen] = useState(false);
   const [clearVoiceReady, setClearVoiceReady] = useState(false);
+  const [clearVoiceGateReady, setClearVoiceGateReady] = useState(false);
 
   // Deep-link Vault from SCELYO Studio without changing meeting routing.
   useEffect(() => {
@@ -220,6 +221,7 @@ function App() {
   const [fillStage, setFillStage] = useState(false);
   const [portraitView, setPortraitView] = useState(() => window.innerHeight >= window.innerWidth);
   const isPhone = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  const nativeNoiseSupported = Boolean(navigator.mediaDevices?.getSupportedConstraints?.().noiseSuppression);
   const [uploadedLink, setUploadedLink] = useState('');
   const [remoteRecording, setRemoteRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -538,8 +540,8 @@ function App() {
     if (!previous) return;
     setMusicBusy(true);
     try {
-      const rawTrack = rawRef.current?.getAudioTracks()[0] || null;
-      await restoreOutboundAudio(rawTrack);
+      const microphone = processedMicrophoneTrack();
+      await restoreOutboundAudio(microphone);
       musicRef.current = null;
       await previous.destroy();
       setMusicPlaying(false);
@@ -824,17 +826,20 @@ function App() {
       const microphoneTrack = media?.getAudioTracks()[0];
       if (microphoneTrack) {
         try {
-          const processor = new ClearVoiceProcessor(microphoneTrack, voiceEnhancement, voiceProfile);
+          const processor = new ClearVoiceProcessor(microphoneTrack, voiceEnhancement, voiceProfile, noiseReduction);
           if (await processor.resume()) {
             clearVoiceRef.current = processor;
             setClearVoiceReady(true);
+            setClearVoiceGateReady(processor.noiseGateReady);
           } else {
             await processor.destroy();
             setClearVoiceReady(false);
+            setClearVoiceGateReady(false);
             toast('Amélioration de la voix indisponible sur ce navigateur ; le micro standard reste actif.');
           }
         } catch {
           setClearVoiceReady(false);
+          setClearVoiceGateReady(false);
           toast('ClearVoice indisponible ; le micro standard reste actif.');
         }
       }
@@ -896,6 +901,7 @@ function App() {
       clearVoiceRef.current = null;
       if (clearVoice) await clearVoice.destroy();
       setClearVoiceReady(false);
+      setClearVoiceGateReady(false);
       media?.getTracks().forEach(t => t.stop());
       effectRef.current?.stop();
       effectRef.current = null;
@@ -916,6 +922,7 @@ function App() {
     clearVoiceRef.current = null;
     if (clearVoice) await clearVoice.destroy();
     setClearVoiceReady(false);
+    setClearVoiceGateReady(false);
     setClearVoiceOpen(false);
     setMusicName('');
     setMusicPlaying(false);
@@ -976,25 +983,21 @@ function App() {
   }
   async function changeNoiseReduction(enabled: boolean) {
     const track = rawRef.current?.getAudioTracks()[0];
-    const supported = navigator.mediaDevices?.getSupportedConstraints?.().noiseSuppression;
-    if (track && !supported) {
-      toast('La réduction du bruit native n’est pas disponible dans ce navigateur.');
+    if (track && !nativeNoiseSupported && !clearVoiceGateReady) {
+      toast('La réduction du bruit est indisponible dans ce navigateur.');
       return;
     }
-    if (track) {
+    // The local gate remains available even when the browser ignores native
+    // suppression (notably Safari). It filters only the microphone, not music.
+    clearVoiceRef.current?.setNoiseReduction(enabled);
+    setNoiseReduction(enabled);
+    if (track && nativeNoiseSupported) {
       try {
         await track.applyConstraints({ noiseSuppression: enabled });
-        const actual = track.getSettings() as MediaTrackSettings & { noiseSuppression?: boolean };
-        if (typeof actual.noiseSuppression === 'boolean' && actual.noiseSuppression !== enabled) {
-          toast('Le navigateur n’a pas appliqué ce réglage audio.');
-          return;
-        }
       } catch {
-        toast('Impossible de changer la réduction du bruit pendant cette session.');
-        return;
+        toast('Le réglage natif a échoué ; le filtrage local reste actif si disponible.');
       }
     }
-    setNoiseReduction(enabled);
   }
   function changeVoiceEnhancement(enabled: boolean) {
     clearVoiceRef.current?.setEnabled(enabled);
@@ -1634,7 +1637,7 @@ function App() {
                   </div>
                 </div>
                 <label className="scelyo-clearvoice-option">
-                  <span><strong>Réduire les bruits de fond</strong><small>Traitement natif du navigateur</small></span>
+                  <span><strong>Réduire les bruits de fond</strong><small>Traitement local, avec réduction native si disponible</small></span>
                   <input type="checkbox" checked={noiseReduction}
                     onChange={event => void changeNoiseReduction(event.target.checked)}
                     aria-label="Réduire les bruits de fond"/>
@@ -1796,6 +1799,7 @@ function App() {
               <label className="scelyo-clearvoice-option">
                 <span><strong>Réduction des bruits de fond</strong><small>Atténue les sons parasites pendant les échanges</small></span>
                 <input type="checkbox" checked={noiseReduction}
+                  disabled={!nativeNoiseSupported && !clearVoiceGateReady}
                   onChange={event => void changeNoiseReduction(event.target.checked)}/>
               </label>
               <label className="scelyo-clearvoice-option">
@@ -1814,6 +1818,7 @@ function App() {
               </label>
               <p className="scelyo-clearvoice-note">
                 {clearVoiceReady ? 'Traitement vocal local actif. Le micro amélioré est utilisé dans les réunions et enregistrements.' : 'Le traitement vocal avancé est indisponible sur cet appareil : micro standard conservé.'}
+                {' '}{clearVoiceGateReady ? 'Atténuation des bruits faibles active.' : nativeNoiseSupported ? 'Réduction du bruit fournie par le navigateur.' : 'Réduction du bruit non disponible sur ce navigateur.'}
                 {' '}La musique partagée n’est pas filtrée.
               </p>
             </section>
