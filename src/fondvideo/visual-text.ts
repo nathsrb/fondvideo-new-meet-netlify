@@ -169,7 +169,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     item.className='scelyo-text-hitbox'+(active?' editing':'');
     item.style.left=layer.x+'%';item.style.top=layer.y+'%';
     item.style.transform='translate(-50%,-50%)';
-    item.style.minWidth='min(160px, 30%)';
+    item.style.width=Math.min(88,Math.max(28,String(layer.text).length*layer.size*.48))+'%';
     item.style.maxWidth='88%';
     item.title='Cliquer pour éditer · glisser la poignée pour déplacer';
     if(active) {
@@ -239,7 +239,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     const t=clamp(now(),0,Math.max(0,getDuration()));
     const layer={
       id:crypto.randomUUID(),text:'Ton texte ici',
-      start:t,end:Math.min(Math.max(t+3,getDuration()),t+3),
+      start:t,end:Math.min(Math.max(t+.15,getDuration()),t+3),
       x:50,y:36,size:8.4,style:'impact',color:'#ffffff'
     };
     layers.push(layer);selectLayer(layer);
