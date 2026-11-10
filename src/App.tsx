@@ -205,6 +205,9 @@ function App() {
   const [musicDuration, setMusicDuration] = useState(0);
   const [musicBusy, setMusicBusy] = useState(false);
   const [noiseReduction, setNoiseReduction] = useState(true);
+  const [noiseStrength, setNoiseStrength] = useState(2);
+  const [noiseAttenuation, setNoiseAttenuation] = useState(0);
+  const [noiseActive, setNoiseActive] = useState(false);
   const [voiceEnhancement, setVoiceEnhancement] = useState(true);
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile>('balanced');
   const [clearVoiceOpen, setClearVoiceOpen] = useState(false);
@@ -868,6 +871,11 @@ function App() {
       if (microphoneTrack) {
         try {
           const processor = new ClearVoiceProcessor(microphoneTrack, voiceEnhancement, voiceProfile, noiseReduction);
+          processor.setNoiseStrength(noiseStrength);
+          processor.subscribeNoiseStats(stats => {
+            setNoiseAttenuation(stats.attenuationDb);
+            setNoiseActive(stats.isReducing);
+          });
           if (await processor.resume()) {
             clearVoiceRef.current = processor;
             setClearVoiceReady(true);
@@ -966,6 +974,8 @@ function App() {
     if (clearVoice) await clearVoice.destroy();
     setClearVoiceReady(false);
     setClearVoiceGateReady(false);
+    setNoiseAttenuation(0);
+    setNoiseActive(false);
     setClearVoiceOpen(false);
     setMusicName('');
     setMusicPlaying(false);
@@ -1036,6 +1046,10 @@ function App() {
     // suppression (notably Safari). It filters only the microphone, not music.
     clearVoiceRef.current?.setNoiseReduction(enabled);
     setNoiseReduction(enabled);
+    if (!enabled) {
+      setNoiseAttenuation(0);
+      setNoiseActive(false);
+    }
     if (track && nativeNoiseSupported) {
       try {
         await track.applyConstraints({ noiseSuppression: enabled });
@@ -1043,6 +1057,10 @@ function App() {
         toast('Le réglage natif a échoué ; le filtrage local reste actif si disponible.');
       }
     }
+  }
+  function changeNoiseStrength(level: number) {
+    setNoiseStrength(level);
+    clearVoiceRef.current?.setNoiseStrength(level);
   }
   function changeVoiceEnhancement(enabled: boolean) {
     clearVoiceRef.current?.setEnabled(enabled);
@@ -1865,7 +1883,7 @@ function App() {
                     <option value="strong">Renforcé</option>
                   </select>
                 </label>
-                <p className="scelyo-clearvoice-note">Gratuit et traité localement. L’efficacité de la réduction du bruit dépend de ton appareil.</p>
+                <p className="scelyo-clearvoice-note">Le filtre s’active dès que tu rejoins le Live et que le micro est disponible. Les bruits faibles sont atténués principalement pendant les pauses.</p>
               </section>
               <div className="camera-options">
                 <label>Caméra</label>
@@ -2011,6 +2029,29 @@ function App() {
                   disabled={!nativeNoiseSupported && !clearVoiceGateReady}
                   onChange={event => void changeNoiseReduction(event.target.checked)}/>
               </label>
+              <div className="scelyo-noise-status" role="status" aria-live="off">
+                <span className={'scelyo-noise-indicator '+(noiseReduction && (clearVoiceGateReady || nativeNoiseSupported) ? (noiseActive ? 'reducing' : 'enabled') : 'inactive')}/>
+                <div>
+                  <strong>{!noiseReduction ? 'Filtre désactivé'
+                    : !clearVoiceGateReady && !nativeNoiseSupported ? 'Filtre non disponible'
+                    : noiseActive ? 'Bruits atténués en ce moment'
+                    : 'Filtre actif · micro surveillé'}</strong>
+                  <small>{noiseReduction && clearVoiceGateReady
+                    ? (noiseAttenuation > 0 ? 'Atténuation locale : '+noiseAttenuation+' dB' : 'En attente d’un bruit à atténuer')
+                    : nativeNoiseSupported && noiseReduction ? 'Réduction du bruit gérée par le navigateur'
+                    : 'Active le filtre ou autorise le micro'}</small>
+                </div>
+              </div>
+              {clearVoiceGateReady && (
+                <label className="scelyo-clearvoice-level">Force du filtre anti-bruit
+                  <select value={noiseStrength} disabled={!noiseReduction}
+                    onChange={event=>changeNoiseStrength(Number(event.target.value))}>
+                    <option value={1}>Légère</option>
+                    <option value={2}>Normale</option>
+                    <option value={3}>Forte</option>
+                  </select>
+                </label>
+              )}
               <label className="scelyo-clearvoice-option">
                 <span><strong>Amélioration de la voix</strong><small>Filtre et équilibre la voix en temps réel</small></span>
                 <input type="checkbox" checked={voiceEnhancement}
@@ -2027,8 +2068,7 @@ function App() {
               </label>
               <p className="scelyo-clearvoice-note">
                 {clearVoiceReady ? 'Traitement vocal local actif. Le micro amélioré est utilisé dans les réunions et enregistrements.' : 'Le traitement vocal avancé est indisponible sur cet appareil : micro standard conservé.'}
-                {' '}{clearVoiceGateReady ? 'Atténuation des bruits faibles active.' : nativeNoiseSupported ? 'Réduction du bruit fournie par le navigateur.' : 'Réduction du bruit non disponible sur ce navigateur.'}
-                {' '}La musique partagée n’est pas filtrée.
+                {' '}Les bruits de fond sont surtout réduits pendant les silences, sans promettre de supprimer une autre voix qui parle en même temps. La musique partagée n’est pas filtrée.
               </p>
             </section>
           )}
