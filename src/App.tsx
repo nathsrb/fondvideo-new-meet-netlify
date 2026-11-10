@@ -198,7 +198,7 @@ function App() {
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
   const [musicName, setMusicName] = useState('');
   const [musicPlaying, setMusicPlaying] = useState(false);
-  const [musicVolume, setMusicVolume] = useState(20);
+  const [musicVolume, setMusicVolume] = useState(45);
   const [musicLoop, setMusicLoop] = useState(false);
   const [musicMonitor, setMusicMonitor] = useState(false);
   const [musicTime, setMusicTime] = useState(0);
@@ -1246,7 +1246,7 @@ function App() {
       const now = performance.now();
       if (rms > 0.018) lastSpeech = now;
       const voiceActive = rms > 0.012 || now - lastSpeech < 480;
-      const target = voiceActive ? 0.30 : 0.68;
+      const target = voiceActive ? 0.52 : 0.93;
       musicBus.gain.setTargetAtTime(target, ctx.currentTime, voiceActive ? 0.035 : 0.22);
     }, 90);
     linkAudio();
@@ -2118,7 +2118,7 @@ function App() {
                             musicRef.current?.setVolume(next);
                           }}/>
                       </label>
-                      <p className="scelyo-music-volume-note">Réglage indépendant du micro. Même à 100 %, la musique reste atténuée sous la voix, et baisse encore quand quelqu’un parle.</p>
+                      <p className="scelyo-music-volume-note">Réglage indépendant du micro : plus tu montes la jauge, plus la musique s’entend. Elle baisse automatiquement pendant les prises de parole.</p>
                       <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
                         onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
                         <Repeat2 size={17}/> En boucle</label>
