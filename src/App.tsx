@@ -187,14 +187,18 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordMode, setRecordMode] = useState<'video' | 'audio'>('video');
-  const [recordIncludeMusic, setRecordIncludeMusic] = useState(true);
+  const [recordIncludeMusic, setRecordIncludeMusic] = useState(false);
+  const [recordedWithMusic, setRecordedWithMusic] = useState(false);
+  const [downloadWithMusic, setDownloadWithMusic] = useState(false);
+  const [alternateRecording, setAlternateRecording] = useState<Recording | null>(null);
+  const [pendingRecordMode, setPendingRecordMode] = useState<'video' | 'audio' | null>(null);
   const [recordReady, setRecordReady] = useState<Recording | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
   const [musicName, setMusicName] = useState('');
   const [musicPlaying, setMusicPlaying] = useState(false);
-  const [musicVolume, setMusicVolume] = useState(35);
+  const [musicVolume, setMusicVolume] = useState(20);
   const [musicLoop, setMusicLoop] = useState(false);
   const [musicMonitor, setMusicMonitor] = useState(false);
   const [musicTime, setMusicTime] = useState(0);
@@ -254,6 +258,7 @@ function App() {
   const stopCaptureRef = useRef<(() => void) | null>(null);
   const tokenRef = useRef('');
   const readyRef = useRef<Recording | null>(null);
+  const alternateRef = useRef<Recording | null>(null);
   const handleRef = useRef<(msg: any) => void>(() => {});
   const roomRef = useRef(room);
   const nameRef = useRef(displayName);
@@ -299,6 +304,17 @@ function App() {
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
   }, []);
+
+  useEffect(() => {
+    if (recordReady && !recording) {
+      requestAnimationFrame(() => {
+        document.getElementById('scelyo-record-download')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      });
+    }
+  }, [recordReady, recording]);
 
   useEffect(() => {
     if (!recording) return;
@@ -1357,14 +1373,10 @@ function App() {
         setRecording(false);
         void keepRecording(blob,filename);
         void emit('recording', { active: false }).catch(() => {});
-        // Audio and video are uploaded immediately after stopping, whenever
-        // Drive is connected. No second click is needed.
-        if (tokenRef.current) {
-          void uploadToDrive(item);
-        } else {
-          setDriveStatus('idle');
-          toast('Enregistrement disponible dans SCELYO Vault : télécharge-le ou partage-le.');
-        }
+        // Do not download or upload anything without a user click.
+        // Local IndexedDB persistence is separate from file downloading.
+        setDriveStatus('idle');
+        toast('Enregistrement prêt : choisis la version, puis clique sur Télécharger.');
       };
       recorderRef.current = recorder;
       stopCaptureRef.current = cleanup;
@@ -1532,6 +1544,11 @@ function App() {
     String(Math.floor(seconds / 60)).padStart(2, '0') +
     ':' +
     String(seconds % 60).padStart(2, '0');
+  const chosenRecording = recordReady && (
+    recordedWithMusic === downloadWithMusic
+      ? recordReady
+      : alternateRecording || recordReady
+  );
 
   return (
     <div className="app-shell">
@@ -1945,14 +1962,15 @@ function App() {
                     </div>
                     <div className="scelyo-music-settings">
                       <label className="scelyo-music-volume">
-                        <Volume2 size={18}/> <span>Volume envoyé : {musicVolume}%</span>
+                        <Volume2 size={18}/> <span>Musique en arrière-plan : {musicVolume}%</span>
                         <input type="range" min="0" max="100" value={musicVolume}
-                          aria-label="Volume de diffusion" onChange={event => {
+                          aria-label="Volume de la musique d’ambiance" onChange={event => {
                             const next = Number(event.target.value);
                             setMusicVolume(next);
                             musicRef.current?.setVolume(next);
                           }}/>
                       </label>
+                      <p className="scelyo-music-volume-note">Réglage indépendant du micro. Même à 100 %, la musique reste atténuée sous la voix, et baisse encore quand quelqu’un parle.</p>
                       <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
                         onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
                         <Repeat2 size={17}/> En boucle</label>
@@ -2049,7 +2067,7 @@ function App() {
                 <button
                   className={recording ? 'tool-btn recording-tool' : 'tool-btn'}
                   onClick={
-                    recording ? stopRecording : () => startRecording('video')
+                    recording ? stopRecording : () => setPendingRecordMode('video')
                   }
                   title={
                     recording ? 'Arrêter l’enregistrement' : 'Enregistrer vidéo'
@@ -2067,16 +2085,14 @@ function App() {
                 </button>
               </div>
               <div className="secondary-actions">
-                <label className="scelyo-record-music-choice" title="Choisis si la musique diffusée pendant le live sera ajoutée au fichier final.">
-                  <input type="checkbox" checked={recordIncludeMusic} disabled={recording}
-                    onChange={e => setRecordIncludeMusic(e.target.checked)}/>
+                <div className="scelyo-record-music-choice">
                   <Music2 size={17}/>
-                  <span><b>{recordIncludeMusic?'Enregistrer avec musique':'Enregistrer sans musique'}</b>
-                    <small>La musique reste audible par les participants, quel que soit ce choix.</small>
+                  <span><b>{recording ? 'Enregistrement en cours' : 'Musique : à choisir avant de démarrer'}</b>
+                    <small>Au démarrage, choisis avec ou sans musique ; le téléchargement se fera seulement après la capture.</small>
                   </span>
-                </label>
+                </div>
                 {!recording && (
-                  <button onClick={() => startRecording('audio')} disabled={!isHost&&!roomSettings.allowRecording}>
+                  <button onClick={() => setPendingRecordMode('audio')} disabled={!isHost&&!roomSettings.allowRecording}>
                     <Headphones size={16} /> Enregistrer l’audio
                   </button>
                 )}
