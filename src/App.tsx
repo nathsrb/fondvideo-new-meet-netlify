@@ -1551,7 +1551,7 @@ function App() {
     return response.json();
   }
 
-  async function uploadToDrive(rec: Recording) {
+  async function uploadToDrive(rec: Pick<Recording, 'blob' | 'name'>) {
     if (!tokenRef.current) {
       setShowSettings(true);
       toast('Connecte ton compte Google Drive avant de sauvegarder.');
@@ -2407,13 +2407,14 @@ function App() {
                     <button onClick={()=>previewRecording(item)}><PlayCircle size={15}/> {activePreview===item.id?'Fermer':'Lire'}</button>
                     <button onClick={()=>downloadRecording(item)}><Download size={15}/> Télécharger</button>
                     <button onClick={()=>void shareRecording(item)}><Share2 size={15}/> Photos / Drive / Partager</button>
+                     <button disabled={uploading} onClick={()=>void uploadToDrive(item)}><CloudUpload size={15}/> {uploading?'Envoi en cours…':'Envoyer sur Drive'}</button>
                     <button className="danger" onClick={()=>void removeRecording(item)}><Trash2 size={15}/> Supprimer</button>
                   </div>
                 </article>)}
               </div>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
-              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire pour cet export manuel.</p>
+              <p>Pour envoyer directement dans Drive, connecte ton compte Google dans les paramètres. Tu peux aussi utiliser « Partager » sur iPhone ou télécharger le fichier sur PC, sans connexion OAuth.</p>
               <div><a href="https://drive.google.com/drive/u/0/my-drive" target="_blank" rel="noreferrer">Ouvrir Drive <ExternalLink size={13}/></a><a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Ouvrir YouTube Studio <ExternalLink size={13}/></a></div>
             </div>
           </section>
@@ -2453,7 +2454,7 @@ function App() {
               <div className="drive-icon"><CloudUpload size={30}/></div>
               <div>
                 <strong>Conserver tes enregistrements</strong>
-                <p>Après connexion, tes nouveaux enregistrements rejoignent le dossier dédié sur ton Google Drive après la fin de l’enregistrement.</p>
+                <p>Connecte Google Drive une seule fois par session, puis choisis les enregistrements à envoyer. Aucun fichier n’est transmis automatiquement.</p>
               </div>
             </div>
             {driveConnected ? (
