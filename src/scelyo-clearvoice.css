@@ -29,3 +29,17 @@
  .scelyo-clearvoice-level{align-items:flex-start;flex-direction:column}
  .scelyo-clearvoice-level select{max-width:100%;width:100%}
 }
+
+/* ClearVoice live telemetry reflects actual AudioWorklet gain reduction. */
+.scelyo-noise-status{
+  display:flex;align-items:center;gap:12px;margin:12px 0 14px;padding:13px;
+  border:1px solid #5d7094;border-radius:13px;background:#162942;color:#f3f5ff
+}
+.scelyo-noise-status>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.scelyo-noise-status strong{font-size:12px}
+.scelyo-noise-status small{font-size:11px;color:#b9cce3}
+.scelyo-noise-indicator{flex:none;position:relative;width:14px;height:14px;border-radius:50%;background:#747f99}
+.scelyo-noise-indicator.enabled{background:#84baff;box-shadow:0 0 0 4px #84baff26}
+.scelyo-noise-indicator.reducing{background:#64e2b1;box-shadow:0 0 0 4px #64e2b130,0 0 16px #64e2b166;animation:scelyo-noise-pulse 1s ease-in-out infinite alternate}
+@keyframes scelyo-noise-pulse{from{box-shadow:0 0 0 4px #64e2b130}to{box-shadow:0 0 0 8px #64e2b112}}
+@media(prefers-reduced-motion:reduce){.scelyo-noise-indicator.reducing{animation:none}}
