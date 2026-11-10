@@ -27,14 +27,14 @@ class ScelyoClearVoiceGate extends AudioWorkletProcessor {
     // Learn quiet, low-frequency background over time, with a conservative
     // ceiling so soft voices are not aggressively muted.
     if (rms < 0.045 || this.hold === 0) {
-      this.floor += 0.009 * (Math.min(0.027, rms) - this.floor);
+      this.floor += 0.009 * (Math.min(0.014, rms) - this.floor);
     }
-    const threshold = Math.max(0.009, Math.min(0.031, this.floor * 1.8));
-    if (rms >= threshold) this.hold = 48; // roughly 128 ms at 48 kHz
+    const threshold = Math.max(0.004, Math.min(0.013, this.floor * 1.5));
+    if (rms >= threshold) this.hold = 90; // ~240 ms at 48 kHz; protects quiet syllable tails
     else this.hold = Math.max(0, this.hold - 1);
     const enabled = parameters.enabled[0] >= 0.5;
-    const target = !enabled || this.hold > 0 ? 1 : 0.32;
-    const step = target > this.level ? 0.10 : 0.003;
+    const target = !enabled || this.hold > 0 ? 1 : 0.70;
+    const step = target > this.level ? 0.13 : 0.0015;
     for (let i = 0; i < frameSize; i++) {
       this.level += (target - this.level) * step;
       for (let channel = 0; channel < output.length; channel++) {
