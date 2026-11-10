@@ -193,3 +193,38 @@ body:has(#app) footer.scelyo-studio-footer{border-top:1px solid #ffffff15;displa
   box-shadow:0 6px 20px #0007;font-size:12px;font-weight:750;cursor:pointer
 }
 .scelyo-quick-add-text:hover,.scelyo-quick-add-text:focus-visible{background:#755bc4;outline:2px solid #c3b8fa}
+
+/* Studio V7: handles placed ON the image for CapCut-like caption layout */
+.scelyo-caption-hitbox.editing{
+  outline:2px solid #d6c3ff;
+  outline-offset:4px;
+  border-radius:12px;
+  filter:drop-shadow(0 8px 22px #0006);
+}
+.scelyo-caption-inline{overflow:visible!important;touch-action:auto}
+.scelyo-caption-editor-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px}
+.scelyo-caption-editor-head span{font-size:12px;color:#f5efff;font-weight:800}
+.scelyo-caption-editor-head small{font-size:10px;color:#c0b6df}
+.scelyo-caption-inline-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.scelyo-caption-inline-actions button{touch-action:manipulation;min-height:42px}
+.scelyo-caption-move-handle,.scelyo-caption-resize-handle{
+  background:#423679!important;
+  color:#fff!important;
+  border:1px solid #d7bfff!important;
+  cursor:grab!important;
+  touch-action:none!important;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.scelyo-caption-move-handle:active,.scelyo-caption-resize-handle:active{cursor:grabbing!important}
+.scelyo-caption-resize-handle{background:#5c3f93!important}
+.scelyo-caption-size-row{display:flex!important;align-items:center;gap:10px;padding:6px 3px;
+  color:#f3ebff;font-weight:750;font-size:12px;white-space:nowrap}
+.scelyo-caption-size-row input{min-width:0;flex:1;accent-color:#b29cfb;touch-action:pan-x}
+.scelyo-caption-size-row output{min-width:48px;color:#dac9ff;font-variant-numeric:tabular-nums;text-align:right}
+.scelyo-caption-tap{min-height:48px}
+@media(max-width:680px){
+  .scelyo-caption-inline{width:min(88vw,420px)!important;max-height:65vh;overflow-y:auto!important}
+  .scelyo-caption-editor-head small{display:none}
+  .scelyo-caption-inline-actions button{font-size:12px!important}
+}
