@@ -176,8 +176,11 @@ function App() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // Vite exposes this public OAuth client ID at build time. It is an identifier,
+  // not a client secret; users never need to configure it themselves.
+  const configuredGoogleClientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   const [clientId, setClientId] = useState(
-    localStorage.getItem('nexa_google_client') || ''
+    configuredGoogleClientId || localStorage.getItem('nexa_google_client') || ''
   );
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveEmail, setDriveEmail] = useState('');
@@ -271,6 +274,13 @@ function App() {
     // Public Google OAuth client ID can be configured once by the app owner.
     // End users only see the standard Google authorization window.
     let active = true;
+    // Prefer the preview's Vite variable. The API fallback preserves compatibility
+    // with older deployments without ever exposing a secret.
+    if (configuredGoogleClientId.endsWith('.apps.googleusercontent.com')) {
+      setClientId(configuredGoogleClientId);
+      localStorage.setItem('nexa_google_client', configuredGoogleClientId);
+      return () => { active = false; };
+    }
     api.get('/api/drive/config')
       .then(result => {
         const configured = result.data?.clientId;
@@ -1588,9 +1598,11 @@ function App() {
       if(!destination)throw Error('Navigateur non autorisé à démarrer le transfert Drive.');
       let file:any=null;
       const bytes=8*1024*1024;
+      if (!rec.blob.size) throw Error('Le fichier est vide : enregistre à nouveau avant de l’envoyer.');
       for(let pos=0;pos<rec.blob.size;pos+=bytes){
         const end=Math.min(rec.blob.size,pos+bytes);
         const result=await fetch(destination,{method:'PUT',headers:{Authorization:'Bearer '+tokenRef.current,'Content-Range':'bytes '+pos+'-'+(end-1)+'/'+rec.blob.size},body:rec.blob.slice(pos,end)});
+        if (result.status === 401 || result.status === 403) throw Error('Autorisation Google expirée. Reconnecte Google Drive puis réessaie.');
         if(result.status===308)continue;
         if(!result.ok)throw Error('Transfert Drive impossible ('+result.status+').');
         file=await result.json();
