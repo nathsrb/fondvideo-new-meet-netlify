@@ -427,7 +427,7 @@ function App() {
     } finally { setImportingLocal(false); }
   }
 
-  function downloadRecording(item:SavedRecording) {
+  function downloadRecording(item:Pick<SavedRecording,'name'|'blob'>) {
     const url=URL.createObjectURL(item.blob);
     const link=document.createElement('a');link.href=url;link.download=item.name;
     document.body.appendChild(link);link.click();link.remove();
@@ -1498,8 +1498,7 @@ function App() {
           } catch {
             // An unreadable account profile does not block the Drive upload.
           }
-          toast('Google Drive connecté. Les enregistrements audio et vidéo seront envoyés automatiquement après leur arrêt.');
-          if(readyRef.current)void uploadToDrive(readyRef.current);
+          toast('Google Drive connecté. Pour envoyer une capture, clique sur « Envoyer sur Drive » après l’enregistrement.');
         }
       });
       oauthClient.requestAccessToken({prompt:'consent'});
@@ -1584,7 +1583,7 @@ function App() {
           'https://drive.google.com/file/d/' + file.id + '/view'
       );
       setDriveStatus('saved');
-      toast((rec.blob.type.startsWith('audio/') ? 'Audio' : 'Vidéo') + ' sauvegardé automatiquement dans ton Google Drive.');
+      toast((rec.blob.type.startsWith('audio/') ? 'Audio' : 'Vidéo') + ' sauvegardé dans ton Google Drive.');
     } catch (e) {
       setDriveStatus('failed');
       toast('Envoi Drive échoué : ' + readableError(e) + ' — le fichier reste téléchargeable, réessaie depuis la réunion.');
@@ -2172,35 +2171,62 @@ function App() {
                   </span>
                 )}
                 {uploading && (
-                  <span className="drive-transfer"><CloudUpload size={16} /> Envoi automatique de l’enregistrement sur Drive…</span>
+                  <span className="drive-transfer"><CloudUpload size={16} /> Envoi de l’enregistrement vers Drive…</span>
                 )}
                 {driveStatus === 'saved' && uploadedLink && (
                   <span className="drive-transfer success"><Check size={16} /> Enregistrement sauvegardé sur Drive</span>
                 )}
-                {recordReady && !recording && (
-                  <div className="record-links">
-                    <button onClick={()=>setLibraryOpen(true)} disabled={savingLocal}><Library size={15}/>{savingLocal?'Enregistrement local…':'SCELYO Vault'}</button>
-                    <a href={recordReady.url} download={recordReady.name}>
-                      <Download size={15} /> Télécharger dans Fichiers
-                    </a>
-                    <button onClick={()=>void shareRecording({
-                      id:'current',name:recordReady.name,blob:recordReady.blob,
-                      mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
-                    })}><Share2 size={15}/> Photos / Drive / Partager</button>
-                    {uploadedLink ? (
-                      <a href={uploadedLink} target="_blank" rel="noreferrer">
-                        <ExternalLink size={15} /> Ouvrir dans Drive
-                      </a>
+                {recordReady && chosenRecording && !recording && (
+                  <section id="scelyo-record-download" className="scelyo-download-card" aria-label="Télécharger mon enregistrement">
+                    <div className="scelyo-download-card-head">
+                      <span className="scelyo-download-status"><Check size={21}/></span>
+                      <div><strong>Enregistrement terminé !</strong>
+                        <p>Ton fichier est prêt. Aucun téléchargement ni envoi Drive n'est lancé automatiquement.</p>
+                      </div>
+                    </div>
+                    {alternateRecording && recordMode === 'audio' ? (
+                      <fieldset className="scelyo-download-variants">
+                        <legend>Choisis la version à télécharger</legend>
+                        <label className={!downloadWithMusic?'selected':''}>
+                          <input type="radio" name="scelyo-finished-recording-music" checked={!downloadWithMusic} onChange={()=>{setDownloadWithMusic(false);setUploadedLink('');}} />
+                          <Mic size={18}/><span><b>Voix uniquement</b><small>Sans musique</small></span>
+                        </label>
+                        <label className={downloadWithMusic?'selected':''}>
+                          <input type="radio" name="scelyo-finished-recording-music" checked={downloadWithMusic} onChange={()=>{setDownloadWithMusic(true);setUploadedLink('');}} />
+                          <Music2 size={18}/><span><b>Voix + musique de fond</b><small>Musique atténuée sous la voix</small></span>
+                        </label>
+                      </fieldset>
                     ) : (
-                      <button
-                        disabled={uploading}
-                        onClick={() => driveConnected ? uploadToDrive(recordReady) : setShowSettings(true)}
-                      >
-                        <CloudUpload size={15} />{' '}
-                        {uploading ? 'Envoi automatique…' : driveConnected ? (driveStatus === 'failed' ? 'Réessayer l’envoi Drive' : 'Envoyer sur Drive') : 'Connecter Drive'}
-                      </button>
+                      <p className="scelyo-download-format-note">
+                        {recordedWithMusic ? 'Version avec musique' : 'Version sans musique'}
+                        {' · '}
+                        {recordMode === 'audio' ? 'Ton navigateur a conservé la version choisie avant la capture.' : 'Pour la vidéo, ce choix s’effectue avant de démarrer l’enregistrement.'}
+                      </p>
                     )}
-                  </div>
+                    <button type="button" className="scelyo-download-main"
+                      onClick={()=>downloadRecording(chosenRecording)}>
+                      <Download size={29}/>
+                      <span><strong>Télécharger {recordMode==='audio'?'l’audio':'la vidéo'}</strong>
+                        <small>{downloadWithMusic && alternateRecording ? 'Avec musique de fond' : !downloadWithMusic && alternateRecording ? 'Sans musique' : (recordedWithMusic ? 'Avec musique' : 'Sans musique')} · {(chosenRecording.blob.size/1048576).toFixed(1)} Mo</small>
+                      </span>
+                      <ArrowRight size={22}/>
+                    </button>
+                    <div className="scelyo-download-more">
+                      <button type="button" onClick={()=>setLibraryOpen(true)} disabled={savingLocal}>
+                        <Library size={15}/>{savingLocal?'Sauvegarde locale…':'Ouvrir SCELYO Vault'}
+                      </button>
+                      <button type="button" onClick={()=>void shareRecording({
+                        id:'current',name:chosenRecording.name,blob:chosenRecording.blob,
+                        mime:chosenRecording.blob.type,size:chosenRecording.blob.size,createdAt:Date.now()
+                      })}><Share2 size={15}/> Photos / Partager</button>
+                      <button type="button" disabled={uploading}
+                        onClick={() => driveConnected ? void uploadToDrive(chosenRecording) : setShowSettings(true)}>
+                        <CloudUpload size={15}/>
+                        {uploading?'Envoi en cours…':driveConnected?'Envoyer cette version sur Drive':'Connecter Google Drive'}
+                      </button>
+                    </div>
+                    {uploadedLink && <a href={uploadedLink} target="_blank" rel="noreferrer" className="scelyo-download-drive-link"><ExternalLink size={16}/> Voir dans Drive</a>}
+                  </section>
                 )}
               </div>
             </section>
@@ -2342,7 +2368,7 @@ function App() {
             <div className="drive-connect-intro">
               <div className="drive-icon"><CloudUpload size={30}/></div>
               <div>
-                <strong>Enregistrements automatiquement sauvegardés</strong>
+                <strong>Conserver tes enregistrements</strong>
                 <p>Après connexion, tes nouveaux enregistrements rejoignent le dossier dédié sur ton Google Drive après la fin de l’enregistrement.</p>
               </div>
             </div>
@@ -2371,7 +2397,7 @@ function App() {
             )}
             <div className="drive-automation">
               <Check size={17}/>
-              <span><strong>{driveConnected ? 'Envoi automatique activé' : 'Google Drive non connecté'}</strong><small>{driveConnected ? 'Envoi automatique en fin d’enregistrement.' : 'Sans OAuth, utilise Photos / Drive / Partager pour envoyer le fichier manuellement.'}</small></span>
+              <span><strong>{driveConnected ? 'Envoi vers Drive disponible' : 'Google Drive non connecté'}</strong><small>{driveConnected ? 'Envoi manuel après ton choix de fichier.' : 'Sans OAuth, utilise Photos / Drive / Partager pour envoyer le fichier manuellement.'}</small></span>
             </div>
             <details className="drive-advanced" open={driveAdvanced} onToggle={e=>setDriveAdvanced((e.currentTarget as HTMLDetailsElement).open)}>
               <summary>Configuration avancée (administrateur uniquement)</summary>
