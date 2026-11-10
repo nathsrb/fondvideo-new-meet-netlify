@@ -169,12 +169,24 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       slider.setAttribute('aria-label','Taille du sous-titre');
       const sizeValue=document.createElement('output');
       sizeValue.textContent=Number(group.size).toFixed(1)+' %';
-      slider.oninput=()=>{
-        const size=Number(slider.value);
-        sizeValue.textContent=size.toFixed(1)+' %';
-        getCaption().setSize(size);
+      const applySize = size => {
+        const next=clamp(size,2.5,24);
+        slider.value=String(next);
+        sizeValue.textContent=next.toFixed(1)+' %';
+        getCaption().setSize(next);
       };
-      sizeRow.append(sizeCaption,slider,sizeValue);
+      slider.oninput=()=>applySize(Number(slider.value));
+      const smaller=document.createElement('button');
+      smaller.type='button';smaller.className='scelyo-caption-size-step';
+      smaller.textContent='−';smaller.title='Réduire le sous-titre';
+      smaller.setAttribute('aria-label','Réduire la taille des sous-titres');
+      smaller.onclick=()=>applySize(Number(slider.value)-0.8);
+      const larger=document.createElement('button');
+      larger.type='button';larger.className='scelyo-caption-size-step';
+      larger.textContent='+';larger.title='Agrandir le sous-titre';
+      larger.setAttribute('aria-label','Agrandir la taille des sous-titres');
+      larger.onclick=()=>applySize(Number(slider.value)+0.8);
+      sizeRow.append(sizeCaption,smaller,slider,larger,sizeValue);
       const save=()=>{
         getCaption().replaceGroup(group.begin,group.length,input.value);
         selectedCaption=null;redraw();updateSurface(true);
@@ -222,6 +234,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
         handle.onpointercancel=endGesture;
         handle.onlostpointercapture=endGesture;
       };
+      connectPointerDrag(headline,'move');
       connectPointerDrag(dragButton,'move');
       connectPointerDrag(resizeButton,'size');
       actions.append(saveButton,dragButton,resizeButton,cancelButton);
