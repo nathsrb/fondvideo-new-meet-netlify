@@ -346,7 +346,7 @@ async function groqTranscribe(audio, seconds, language, report) {
     const part = audio.subarray(Math.round(start*16000),Math.round((start+length)*16000));
     if(!part.length) continue;
     report('Whisper Large V3 : extrait '+(i+1)+' / '+chunks+'…');
-    const response = await fetch('/api/transcribe', {
+    const response = await fetch('/scelyo-transcribe', {
       method: 'POST',
       headers: { 'Content-Type': 'audio/wav', 'x-scelyo-language': ({
         french:'fr', english:'en', spanish:'es'
@@ -354,7 +354,9 @@ async function groqTranscribe(audio, seconds, language, report) {
       body: wavOf(part),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Whisper Large V3 indisponible.');
+    if (!response.ok) throw new Error(response.status === 404
+      ? 'Service de transcription introuvable sur cette prévisualisation.'
+      : data.error || 'Whisper Large V3 indisponible (erreur '+response.status+').');
     const returned = (data.words || []).filter(w =>
       w.word?.trim() && Number.isFinite(w.start) && Number.isFinite(w.end));
     if(returned.length) {
@@ -654,7 +656,7 @@ export function createCaptionStudio({
     btn.disabled = true;
     btn.textContent = 'Transcription…';
     try {
-      report('Préparation audio locale…');
+      report('Préparation de la piste audio…');
       const audio = await extractAudio(file, seconds, report);
       const language = byId('capLanguage').value;
       let words = [];
