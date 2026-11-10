@@ -55,6 +55,7 @@ function drawText(ctx,layer,w,h) {
 export function createVisualTextEditor({stage, canvas, getTime, getDuration, getCaption, redraw, pause}) {
   const layers=[];
   let selected=null, selectedCaption=null, signature='';
+  let manipulating=false;
   const surface=document.getElementById('visualLayer');
   const btn=document.getElementById('textAdd');
   const list=document.getElementById('textList');
@@ -111,17 +112,19 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
   const closeCaption=()=>{selectedCaption=null;updateSurface(true);};
   function createCaptionOverlay(group) {
     const anchor=document.createElement('div');
-    anchor.className='scelyo-caption-hitbox'+(selectedCaption?' editing':'');
+    const active=Boolean(selectedCaption);
+    anchor.className='scelyo-caption-hitbox'+(active?' editing':'');
     anchor.style.left=(group.x||50)+'%';
     anchor.style.top=group.y+'%';
-    anchor.style.width='min(91%, 520px)';
+    anchor.style.width='min(91%, 540px)';
     anchor.style.minHeight=Math.max(32,canvas.clientHeight*group.size/100*2.0)+'px';
     anchor.style.transform='translate(-50%,-50%)';
-    anchor.title='Clique pour modifier ce sous-titre directement sur la vidéo';
-    if(!selectedCaption) {
+    anchor.title='Cliquer pour modifier, déplacer ou redimensionner le sous-titre';
+    if(!active) {
       const button=document.createElement('button');
-      button.className='scelyo-caption-tap';button.type='button';
-      button.textContent='Modifier les sous-titres';
+      button.className='scelyo-caption-tap';
+      button.type='button';
+      button.textContent='✎ Modifier le sous-titre';
       button.setAttribute('aria-label','Modifier le sous-titre : '+group.text);
       button.onclick=()=>{
         selected=null;selectedCaption={begin:group.begin,length:group.length};
@@ -131,35 +134,100 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     } else {
       const editor=document.createElement('div');
       editor.className='scelyo-caption-inline';
+      editor.setAttribute('aria-label','Modifier les sous-titres directement sur la vidéo');
+      const headline=document.createElement('div');
+      headline.className='scelyo-caption-editor-head';
+      const name=document.createElement('span');name.textContent='✎ Sous-titre sélectionné';
+      const hint=document.createElement('small');hint.textContent='Déplace ou redimensionne avec les poignées';
+      headline.append(name,hint);
       const input=document.createElement('textarea');
-      input.rows=2;input.value=group.text;
-      input.setAttribute('aria-label','Modifier le texte des sous-titres');
+      input.rows=2;
+      input.value=group.text;
+      input.setAttribute('aria-label','Texte du sous-titre');
       input.placeholder='Modifie le sous-titre directement ici…';
-      input.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();save();} if(e.key==='Escape')closeCaption();};
-      const actions=document.createElement('div');actions.className='scelyo-caption-inline-actions';
-      const saveButton=document.createElement('button');saveButton.type='button';saveButton.textContent='✓ Appliquer';
-      const cancelButton=document.createElement('button');cancelButton.type='button';cancelButton.textContent='Annuler';
-      const dragButton=document.createElement('button');dragButton.type='button';dragButton.textContent='↕ Déplacer';
-      const save=()=>{getCaption().replaceGroup(group.begin,group.length,input.value);selectedCaption=null;redraw();updateSurface(true)};
-      saveButton.onclick=save;cancelButton.onclick=closeCaption;
-      let initial=null,moved=false;
-      dragButton.onpointerdown=e=>{
-        e.preventDefault();e.stopPropagation();
-        initial={x:e.clientX,y:e.clientY,px:group.x||50,py:group.y};
-        dragButton.setPointerCapture(e.pointerId);
+      const actions=document.createElement('div');
+      actions.className='scelyo-caption-inline-actions';
+      const saveButton=document.createElement('button');
+      saveButton.type='button';saveButton.textContent='✓ Appliquer';
+      const cancelButton=document.createElement('button');
+      cancelButton.type='button';cancelButton.textContent='Fermer';
+      const dragButton=document.createElement('button');
+      dragButton.type='button';dragButton.className='scelyo-caption-move-handle';
+      dragButton.textContent='⠿ Déplacer';
+      dragButton.setAttribute('aria-label','Glisser pour déplacer les sous-titres');
+      const resizeButton=document.createElement('button');
+      resizeButton.type='button';resizeButton.className='scelyo-caption-resize-handle';
+      resizeButton.textContent='↘ Taille';
+      resizeButton.setAttribute('aria-label','Glisser pour agrandir ou réduire les sous-titres');
+      const sizeRow=document.createElement('label');
+      sizeRow.className='scelyo-caption-size-row';
+      const sizeCaption=document.createElement('span');
+      sizeCaption.textContent='Taille';
+      const slider=document.createElement('input');
+      slider.type='range';slider.min='2.5';slider.max='24';slider.step='.2';
+      slider.value=String(group.size);
+      slider.setAttribute('aria-label','Taille du sous-titre');
+      const sizeValue=document.createElement('output');
+      sizeValue.textContent=Number(group.size).toFixed(1)+' %';
+      slider.oninput=()=>{
+        const size=Number(slider.value);
+        sizeValue.textContent=size.toFixed(1)+' %';
+        getCaption().setSize(size);
       };
-      dragButton.onpointermove=e=>{
-        if(!initial)return;
-        moved=true;
-        const bounds=stage.getBoundingClientRect();
-        const x=clamp(initial.px+(e.clientX-initial.x)/bounds.width*100,8,92);
-        const y=clamp(initial.py+(e.clientY-initial.y)/bounds.height*100,12,90);
-        getCaption().movePosition(x,y);anchor.style.left=x+'%';anchor.style.top=y+'%';
+      sizeRow.append(sizeCaption,slider,sizeValue);
+      const save=()=>{
+        getCaption().replaceGroup(group.begin,group.length,input.value);
+        selectedCaption=null;redraw();updateSurface(true);
       };
-      dragButton.onpointerup=()=>{initial=null;if(moved){updateSurface(true);moved=false}};
-      actions.append(saveButton,dragButton,cancelButton);
-      editor.append(input,actions);anchor.append(editor);
-      requestAnimationFrame(()=>{if(input.isConnected)input.focus()});
+      input.onkeydown=e=>{
+        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();save()}
+        if(e.key==='Escape')closeCaption();
+      };
+      saveButton.onclick=save;
+      cancelButton.onclick=closeCaption;
+      const connectPointerDrag=(handle,kind)=>{
+        let gesture=null;
+        handle.onpointerdown=e=>{
+          if(e.button!==0&&e.pointerType==='mouse')return;
+          e.preventDefault();e.stopPropagation();
+          manipulating=true;
+          gesture={x:e.clientX,y:e.clientY,px:group.x||50,py:group.y,size:Number(slider.value)};
+          handle.setPointerCapture(e.pointerId);
+        };
+        handle.onpointermove=e=>{
+          if(!gesture)return;
+          e.preventDefault();
+          const bounds=stage.getBoundingClientRect();
+          const deltaX=e.clientX-gesture.x,deltaY=e.clientY-gesture.y;
+          if(kind==='move'){
+            const x=clamp(gesture.px+deltaX/Math.max(1,bounds.width)*100,8,92);
+            const y=clamp(gesture.py+deltaY/Math.max(1,bounds.height)*100,12,90);
+            getCaption().movePosition(x,y);
+            anchor.style.left=x+'%';anchor.style.top=y+'%';
+          }else{
+            const delta=Math.max(deltaX,deltaY*0.9);
+            const size=clamp(gesture.size+delta/Math.max(1,bounds.height)*100,2.5,24);
+            getCaption().setSize(size);
+            slider.value=String(size);
+            sizeValue.textContent=size.toFixed(1)+' %';
+            anchor.style.minHeight=Math.max(32,canvas.clientHeight*size/100*2.0)+'px';
+          }
+        };
+        const endGesture=()=>{
+          if(!gesture)return;
+          gesture=null;manipulating=false;
+          redraw();updateSurface(true);
+        };
+        handle.onpointerup=endGesture;
+        handle.onpointercancel=endGesture;
+        handle.onlostpointercapture=endGesture;
+      };
+      connectPointerDrag(dragButton,'move');
+      connectPointerDrag(resizeButton,'size');
+      actions.append(saveButton,dragButton,resizeButton,cancelButton);
+      editor.append(headline,input,sizeRow,actions);
+      anchor.append(editor);
+      requestAnimationFrame(()=>{if(input.isConnected&&!manipulating)input.focus()});
     }
     surface.append(anchor);
   }
@@ -218,7 +286,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     surface.append(item);
   }
   function updateSurface(force=false) {
-    if(!stage.isConnected)return;
+    if(!stage.isConnected || manipulating)return;
     const t=now(), caption=getCaption().activeGroup(t);
     if(selectedCaption && (!caption||caption.begin!==selectedCaption.begin))selectedCaption=null;
     const active=layers.filter(l=>t>=l.start&&t<l.end);
