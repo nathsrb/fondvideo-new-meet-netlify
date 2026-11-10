@@ -518,6 +518,35 @@ function App() {
     if (!voiceEnhancement && !noiseReduction) return native;
     return clearVoiceRef.current?.track || native;
   }
+  async function ensureClearVoice(enhancement = voiceEnhancement, suppression = noiseReduction) {
+    const track = rawRef.current?.getAudioTracks()[0];
+    if (!track || track.readyState !== 'live') return null;
+    if (clearVoiceRef.current) {
+      clearVoiceRef.current.setEnabled(enhancement);
+      clearVoiceRef.current.setNoiseReduction(suppression);
+      return clearVoiceRef.current;
+    }
+    let processor: ClearVoiceProcessor | null = null;
+    try {
+      processor = new ClearVoiceProcessor(track, enhancement, voiceProfile, suppression);
+      processor.setNoiseStrength(noiseStrength);
+      processor.subscribeNoiseStats(stats => {
+        setNoiseAttenuation(stats.attenuationDb);
+        setNoiseActive(stats.isReducing);
+      });
+      if (!await processor.resume()) throw new Error('Traitement non disponible');
+      clearVoiceRef.current = processor;
+      setClearVoiceReady(true);
+      setClearVoiceGateReady(processor.noiseGateReady);
+      return processor;
+    } catch {
+      if (processor) await processor.destroy().catch(()=>{});
+      setClearVoiceReady(false);
+      setClearVoiceGateReady(false);
+      toast('ClearVoice indisponible : le microphone naturel reste utilisé.');
+      return null;
+    }
+  }
   function outboundAudioTrack() {
     return musicRef.current?.track || processedMicrophoneTrack();
   }
@@ -872,30 +901,9 @@ function App() {
       }
       rawRef.current = media;
       const microphoneTrack = media?.getAudioTracks()[0];
-      if (microphoneTrack) {
-        try {
-          const processor = new ClearVoiceProcessor(microphoneTrack, voiceEnhancement, voiceProfile, noiseReduction);
-          processor.setNoiseStrength(noiseStrength);
-          processor.subscribeNoiseStats(stats => {
-            setNoiseAttenuation(stats.attenuationDb);
-            setNoiseActive(stats.isReducing);
-          });
-          if (await processor.resume()) {
-            clearVoiceRef.current = processor;
-            setClearVoiceReady(true);
-            setClearVoiceGateReady(processor.noiseGateReady);
-          } else {
-            await processor.destroy();
-            setClearVoiceReady(false);
-            setClearVoiceGateReady(false);
-            toast('Amélioration de la voix indisponible sur ce navigateur ; le micro standard reste actif.');
-          }
-        } catch {
-          setClearVoiceReady(false);
-          setClearVoiceGateReady(false);
-          toast('ClearVoice indisponible ; le micro standard reste actif.');
-        }
-      }
+      // In the natural default mode, do not launch worklets or resample the mic.
+      if (microphoneTrack && (voiceEnhancement || noiseReduction))
+        await ensureClearVoice(voiceEnhancement, noiseReduction);
       localRef.current = media;
       setLocalStream(media);
       const settings = media?.getVideoTracks()[0]?.getSettings();
@@ -1042,12 +1050,10 @@ function App() {
   }
   async function changeNoiseReduction(enabled: boolean) {
     const track = rawRef.current?.getAudioTracks()[0];
-    if (track && !nativeNoiseSupported && !clearVoiceGateReady) {
-      toast('La réduction du bruit est indisponible dans ce navigateur.');
+    if (enabled && track && !await ensureClearVoice(voiceEnhancement, true) && !nativeNoiseSupported) {
+      toast('La réduction du bruit est indisponible sur ce navigateur.');
       return;
     }
-    // The local gate remains available even when the browser ignores native
-    // suppression (notably Safari). It filters only the microphone, not music.
     clearVoiceRef.current?.setNoiseReduction(enabled);
     setNoiseReduction(enabled);
     if (!enabled) {
@@ -1055,11 +1061,8 @@ function App() {
       setNoiseActive(false);
     }
     if (track && nativeNoiseSupported) {
-      try {
-        await track.applyConstraints({ noiseSuppression: enabled });
-      } catch {
-        toast('Le réglage natif a échoué ; le filtrage local reste actif si disponible.');
-      }
+      try { await track.applyConstraints({ noiseSuppression: enabled }); }
+      catch { toast('Le navigateur n’a pas accepté le filtre anti-bruit natif.'); }
     }
     if (!musicRef.current) {
       const native=rawRef.current?.getAudioTracks()[0] || null;
@@ -1070,7 +1073,8 @@ function App() {
     setNoiseStrength(level);
     clearVoiceRef.current?.setNoiseStrength(level);
   }
-  function changeVoiceEnhancement(enabled: boolean) {
+  async function changeVoiceEnhancement(enabled: boolean) {
+    if (enabled && rawRef.current && !await ensureClearVoice(true, noiseReduction)) return;
     clearVoiceRef.current?.setEnabled(enabled);
     setVoiceEnhancement(enabled);
     if (!musicRef.current) {
@@ -1903,7 +1907,7 @@ function App() {
                 <label className="scelyo-clearvoice-option">
                   <span><strong>Améliorer la voix</strong><small>Clarté, fréquences et volume</small></span>
                   <input type="checkbox" checked={voiceEnhancement}
-                    onChange={event => changeVoiceEnhancement(event.target.checked)}
+                    onChange={event => void changeVoiceEnhancement(event.target.checked)}
                     aria-label="Améliorer la voix"/>
                 </label>
                 <label className="scelyo-clearvoice-level">Profil de voix
@@ -1914,7 +1918,7 @@ function App() {
                     <option value="strong">Renforcé</option>
                   </select>
                 </label>
-                <p className="scelyo-clearvoice-note">Le filtre s’active dès que tu rejoins le Live et que le micro est disponible. Les bruits faibles sont atténués principalement pendant les pauses.</p>
+                <p className="scelyo-clearvoice-note">Par défaut, le son est naturel sans traitement supplémentaire. Active ces filtres seulement si tu le souhaites ; les bruits faibles sont surtout atténués pendant les pauses.</p>
               </section>
               <div className="camera-options">
                 <label>Caméra</label>
@@ -2057,7 +2061,7 @@ function App() {
               <label className="scelyo-clearvoice-option">
                 <span><strong>Réduction des bruits de fond</strong><small>Atténue les sons parasites pendant les échanges</small></span>
                 <input type="checkbox" checked={noiseReduction}
-                  disabled={!nativeNoiseSupported && !clearVoiceGateReady}
+                  disabled={!rawRef.current?.getAudioTracks().length}
                   onChange={event => void changeNoiseReduction(event.target.checked)}/>
               </label>
               <div className="scelyo-noise-status" role="status" aria-live="off">
@@ -2086,8 +2090,8 @@ function App() {
               <label className="scelyo-clearvoice-option">
                 <span><strong>Amélioration de la voix</strong><small>Filtre et équilibre la voix en temps réel</small></span>
                 <input type="checkbox" checked={voiceEnhancement}
-                  disabled={!clearVoiceReady}
-                  onChange={event => changeVoiceEnhancement(event.target.checked)}/>
+                  disabled={!rawRef.current?.getAudioTracks().length}
+                  onChange={event => void changeVoiceEnhancement(event.target.checked)}/>
               </label>
               <label className="scelyo-clearvoice-level">Intensité de l’amélioration
                 <select value={voiceProfile} disabled={!voiceEnhancement || !clearVoiceReady}
