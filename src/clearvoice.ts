@@ -116,9 +116,9 @@ export class ClearVoiceProcessor {
     if (this.disposed) return;
     // Mild settings preserve natural speech and limit pumping/distortion.
     const settings = {
-      natural:  { highPass: 70, lowPass: 10000, presence: 1.0, threshold: -18, ratio: 1.7, gain: 1.0 },
-      balanced: { highPass: 90, lowPass: 8900, presence: 2.2, threshold: -22, ratio: 2.2, gain: 1.06 },
-      strong:   { highPass: 110, lowPass: 8200, presence: 3.0, threshold: -26, ratio: 2.8, gain: 1.1 },
+      natural:  { highPass: 65, lowPass: 11000, presence: 0.6, threshold: -14, ratio: 1.35, gain: 0.98 },
+      balanced: { highPass: 75, lowPass: 10500, presence: 1.2, threshold: -18, ratio: 1.65, gain: 1.0 },
+      strong:   { highPass: 90, lowPass: 9700, presence: 1.8, threshold: -22, ratio: 2.1, gain: 1.02 },
     }[profile];
     const t = this.context.currentTime;
     this.highPass.frequency.setTargetAtTime(settings.highPass, t, 0.02);
