@@ -99,3 +99,89 @@ body:has(#app) footer.scelyo-studio-footer{border-top:1px solid #ffffff15;displa
 #captions .cap-auto label{display:block;font-size:12px;font-weight:650;margin-top:7px}
 @media(max-width:700px){.scelyo-studio-audio-level{flex-direction:column;align-items:stretch!important}
 .scelyo-studio-audio-level select{max-width:100%}}
+
+/* SCELYO Studio V6: direct visual captions and editable, draggable text */
+.scelyo-visual-layer{position:absolute;inset:0;z-index:18;pointer-events:none}
+.scelyo-caption-hitbox,.scelyo-text-hitbox{
+  position:absolute;pointer-events:auto;touch-action:none;min-height:32px;
+  display:flex;align-items:center;justify-content:center;
+}
+.scelyo-caption-tap,.scelyo-text-hitbox-select{
+  width:100%;height:100%;min-height:40px;border:1px dashed transparent;
+  background:transparent;color:transparent;cursor:text;border-radius:10px;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.scelyo-caption-hitbox:not(.editing):hover .scelyo-caption-tap,
+.scelyo-caption-hitbox:not(.editing):focus-within .scelyo-caption-tap,
+.scelyo-text-hitbox:not(.editing):hover .scelyo-text-hitbox-select,
+.scelyo-text-hitbox:not(.editing):focus-within .scelyo-text-hitbox-select{
+  color:#f0eaff;background:#4633797f;border-color:#d5bcff;
+  box-shadow:0 0 0 2px #0007;
+}
+.scelyo-caption-inline{
+  display:flex;flex-direction:column;gap:8px;width:min(560px,80vw);
+  padding:12px;background:#131d35ee;backdrop-filter:blur(12px);
+  border:2px solid #beafff;border-radius:14px;box-shadow:0 18px 50px #000b;
+}
+.scelyo-caption-inline textarea{box-sizing:border-box;width:100%;resize:vertical;min-height:74px;
+  background:#192540;color:#fff;border:1px solid #7566b6;border-radius:9px;
+  padding:12px;font-family:inherit;font-size:16px;font-weight:750;text-align:center}
+.scelyo-caption-inline textarea:focus-visible{outline:2px solid #d0bbff}
+.scelyo-caption-inline-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:7px}
+.scelyo-caption-inline-actions button{
+  background:#2a3552;color:#f4f2ff;border:1px solid #7d79aa;
+  border-radius:8px;padding:9px 12px;font-size:12px;cursor:pointer;min-height:38px
+}
+.scelyo-caption-inline-actions button:first-child{background:#7559d5;border-color:#ab91fc}
+.scelyo-caption-inline-actions button:nth-child(2){touch-action:none;cursor:grab}
+.scelyo-text-hitbox{min-width:140px;min-height:52px}
+.scelyo-text-hitbox:not(.editing) .scelyo-text-hitbox-select{min-width:140px;min-height:48px}
+.scelyo-text-hitbox.editing{
+  flex-direction:column;gap:4px;min-width:min(220px,66vw);
+  padding:7px;border:2px solid #c7b4fa;border-radius:12px;
+  background:#17223de8;box-shadow:0 10px 40px #0009
+}
+.scelyo-text-drag{
+  touch-action:none;cursor:grab;width:100%;background:#5a4b9e;color:#fff;
+  border:0;border-radius:6px;font-size:11px;font-weight:750;padding:6px
+}
+.scelyo-text-inline{
+  color:#fff;line-height:1.25;min-width:120px;text-align:center;
+  padding:6px 10px;white-space:pre-wrap;word-break:break-word;outline:0;
+  cursor:text
+}
+.scelyo-text-inline:focus-visible{outline:2px solid #cdbdfa;border-radius:6px}
+.scelyo-text-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.scelyo-text-heading h3{font-size:19px;margin:0 0 8px;color:#faf8ff}
+.scelyo-text-heading p{font-size:12px;color:#bfc5df;line-height:1.5}
+.scelyo-text-pill{font-size:9px;letter-spacing:.08em;color:#d5c3ff;background:#61509a44;
+  padding:7px 10px;border-radius:100px;white-space:nowrap}
+.scelyo-add-text{display:flex;align-items:center;justify-content:center;min-height:56px;
+  background:#8062d9!important;border:1px solid #c8b5ff!important;font-size:15px!important;margin:18px 0}
+.scelyo-text-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 8px}
+.scelyo-text-list-head h4{margin:0}.scelyo-text-list-head small{font-size:11px;color:#a3abc5}
+.scelyo-text-layer-list{display:flex;flex-direction:column;gap:7px;font-size:12px;color:#9eaec9;margin-bottom:16px}
+.scelyo-text-layer{width:100%;text-align:left;padding:12px 14px;background:#1a2742;border:1px solid #5a6384;
+  border-radius:10px;color:#edf0ff;font-size:12px;cursor:pointer}
+.scelyo-text-layer.selected{border-color:#bca9ff;background:#42366b}
+.scelyo-text-form{padding:16px;background:#142239;border:1px solid #716a9a;border-radius:14px}
+.scelyo-text-form[hidden]{display:none!important}
+.scelyo-text-form label{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;
+  color:#eae6ff;font-size:12px;font-weight:700}
+.scelyo-text-form textarea,.scelyo-text-form select,.scelyo-text-form input[type=number]{
+  box-sizing:border-box;width:100%;border-radius:9px;padding:10px;background:#0f1930;
+  border:1px solid #68749d;color:#fff;font:inherit;font-weight:500
+}
+.scelyo-text-form textarea{resize:vertical;min-height:75px}
+.scelyo-text-form input[type=color]{width:100%;height:42px;border:1px solid #7c739c;background:#0e1c31;border-radius:9px}
+.scelyo-text-form input[type=range]{accent-color:#a78bfa}
+.scelyo-text-controls-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.scelyo-text-remove{padding:10px 14px;color:#ffccdc;background:#6c2c4255;border:1px solid #9f5d71;
+  border-radius:9px;cursor:pointer}
+@media(max-width:780px){
+  .scelyo-caption-inline{width:min(78vw,390px);padding:8px}
+  .scelyo-caption-inline textarea{font-size:13px;min-height:59px}
+  .scelyo-caption-inline-actions button{font-size:10px;padding:7px}
+  .scelyo-text-heading{flex-wrap:wrap}
+  .scelyo-text-inline{font-size:17px!important}
+}
