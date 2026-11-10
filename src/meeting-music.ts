@@ -84,8 +84,8 @@ export class MeetingMusicMixer {
     this.silence.connect(this.mixBus);
     this.source.connect(this.musicGain);
     this.musicGain.connect(this.duckGain);
+    this.musicGain.connect(this.musicOnlyOutput); // recording mixer ducks independently for every speaker
     this.duckGain.connect(this.mixBus);
-    this.duckGain.connect(this.musicOnlyOutput);
     this.duckGain.connect(this.monitorGain);
     this.monitorGain.connect(context.destination);
     this.mixBus.connect(this.limiter);
