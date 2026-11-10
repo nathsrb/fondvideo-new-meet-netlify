@@ -43,3 +43,8 @@
 .scelyo-noise-indicator.reducing{background:#64e2b1;box-shadow:0 0 0 4px #64e2b130,0 0 16px #64e2b166;animation:scelyo-noise-pulse 1s ease-in-out infinite alternate}
 @keyframes scelyo-noise-pulse{from{box-shadow:0 0 0 4px #64e2b130}to{box-shadow:0 0 0 8px #64e2b112}}
 @media(prefers-reduced-motion:reduce){.scelyo-noise-indicator.reducing{animation:none}}
+
+/* Live button reveals when ClearVoice is active, even with panel closed */
+.meeting-toolbar .tool-btn:has(.scelyo-toolbar-noise-dot){position:relative}
+.scelyo-toolbar-noise-dot{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:99px;background:#75aafa;box-shadow:0 0 0 2px #1a253c}
+.scelyo-toolbar-noise-dot.reducing{background:#75e5b3;box-shadow:0 0 0 2px #1a253c,0 0 10px #75e5b3}
