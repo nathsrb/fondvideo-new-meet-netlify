@@ -2177,9 +2177,13 @@ function App() {
                 <button type="button"
                   className={clearVoiceOpen ? 'tool-btn active-tool' : 'tool-btn'}
                   onClick={() => setClearVoiceOpen(open => !open)}
-                  title="SCELYO ClearVoice — Réglages audio" aria-label="Réglages SCELYO ClearVoice"
-                  aria-expanded={clearVoiceOpen}>
+                  title={noiseReduction ? (noiseActive ? 'ClearVoice atténue les bruits ('+noiseAttenuation+' dB)' : 'ClearVoice anti-bruit actif') : 'ClearVoice désactivé'}
+                  aria-label="Réglages SCELYO ClearVoice" aria-expanded={clearVoiceOpen}>
                   <AudioLines />
+                  {noiseReduction && (clearVoiceGateReady || nativeNoiseSupported) && (
+                    <span className={'scelyo-toolbar-noise-dot '+(noiseActive?'reducing':'enabled')}
+                      aria-hidden="true"/>
+                  )}
                 </button>
                 <button
                   className={camOn ? 'tool-btn' : 'tool-btn disabled-tool'}
