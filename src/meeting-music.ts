@@ -52,7 +52,7 @@ export class MeetingMusicMixer {
     this.output = context.createMediaStreamDestination();
     this.musicOnlyOutput = context.createMediaStreamDestination();
     this.musicGain = context.createGain();
-    this.musicGain.gain.value = 0.35;
+    this.musicGain.gain.value = 0.07; // music stays underneath voice by default
     this.duckGain = context.createGain();
     this.duckGain.gain.value = 0.55;
     this.speechGain = context.createGain();
@@ -129,11 +129,11 @@ export class MeetingMusicMixer {
   get track(): MediaStreamTrack { return this.mixedStream.getAudioTracks()[0]; }
 
   setVolume(level: number) {
-    this.musicGain.gain.setTargetAtTime(
-      Math.max(0, Math.min(1, level / 100)),
-      this.context.currentTime,
-      0.04
-    );
+    // Slider is a background-music scale, not 100% raw audio power.
+    // Even at maximum the soundtrack cannot overwhelm a normal speech level.
+    const normalized = Math.max(0, Math.min(1, level / 100));
+    const backgroundGain = 0.38 * Math.pow(normalized, 1.05);
+    this.musicGain.gain.setTargetAtTime(backgroundGain, this.context.currentTime, 0.04);
   }
 
   setVoicePriority(enabled: boolean) { this.voicePriority = enabled; }
