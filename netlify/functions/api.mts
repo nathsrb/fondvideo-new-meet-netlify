@@ -23,6 +23,13 @@ const store = () => getDeployStore({ name: 'fondvideo-preview-signal', consisten
 const roomPattern = /^[a-z2-9]{12}$/;
 const uuidPattern = /^[0-9a-f-]{36}$/i;
 const maxAge = 2 * 60 * 60 * 1000;
+type RoomSettings = { locked: boolean; allowScreenShare: boolean; allowRecording: boolean };
+const defaultSettings: RoomSettings = { locked: false, allowScreenShare: true, allowRecording: true };
+const settingsKey = (room: string) => `settings/${room}`;
+async function getSettings(room: string): Promise<RoomSettings> {
+  const value = await store().get(settingsKey(room), { type: 'json' }) as Partial<RoomSettings> | null;
+  return { ...defaultSettings, ...(value || {}) };
+}
 
 function success(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -111,7 +118,7 @@ export default async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET' && action === '') {
       const members = await membersOf(room);
-      return success({ members: members.map(m => ({ id: m.id, name: m.name })), hostId: members[0]?.id || null });
+      return success({ members: members.map(m => ({ id: m.id, name: m.name })), hostId: members[0]?.id || null, settings: await getSettings(room) });
     }
     if (method !== 'POST') return fail('Méthode non autorisée.', 405);
     const body = await parseBody(request);
@@ -122,6 +129,10 @@ export default async function handler(request: Request): Promise<Response> {
           typeof name !== 'string' || !name.trim() || name.length > 40) return fail('Participant invalide.');
       const members = await membersOf(room);
       if (members.length >= 6) return fail('Prévisualisation limitée à six participants.', 409);
+      const settings = await getSettings(room);
+      if (members.length && settings.locked) return fail('Cette réunion est verrouillée par son organisateur.', 403);
+      // Reset previous room restrictions for the first member of a new session.
+      if (!members.length) await store().setJSON(settingsKey(room), defaultSettings);
       if (members.some(m => m.id === peer_id)) return fail('Participant déjà connecté.', 409);
       const member: Member = {
         id: peer_id, connection_id, name: name.trim(), joined_at: Date.now(), session_token: crypto.randomUUID(),
@@ -133,6 +144,7 @@ export default async function handler(request: Request): Promise<Response> {
         members: members.map(m => ({ id: m.id, name: m.name })),
         hostId: members[0]?.id || peer_id,
         sessionToken: member.session_token,
+        settings: members.length ? settings : defaultSettings,
       });
     }
 
@@ -143,8 +155,25 @@ export default async function handler(request: Request): Promise<Response> {
     if (action === 'leave') {
       await store().delete(memberKey(room, sender.id));
       const remaining = await membersOf(room);
+      if (!remaining.length) await store().delete(settingsKey(room));
       await notifyRoom(room, { kind: 'leave', id: sender.id, hostId: remaining[0]?.id || null });
       return success({ ok: true });
+    }
+    if (action === 'settings') {
+      const members = await membersOf(room);
+      if (members[0]?.id !== sender.id) return fail('Réservé à l’hôte.', 403);
+      const current = await getSettings(room);
+      const changes: Partial<RoomSettings> = {};
+      for (const key of ['locked', 'allowScreenShare', 'allowRecording'] as const) {
+        if (key in body) {
+          if (typeof body[key] !== 'boolean') return fail('Réglage de sécurité invalide.', 400);
+          changes[key] = body[key];
+        }
+      }
+      const settings = { ...current, ...changes };
+      await store().setJSON(settingsKey(room), settings);
+      await notifyRoom(room, { kind: 'settings', settings, hostId: sender.id });
+      return success({ settings });
     }
     if (action === 'signal') {
       const { to, signal } = body;
@@ -159,6 +188,13 @@ export default async function handler(request: Request): Promise<Response> {
     if (action === 'event') {
       const { kind, text, active, ts } = body;
       if (!['chat', 'recording', 'screen'].includes(kind)) return fail('Type de message invalide.');
+      const settings = await getSettings(room);
+      const members = await membersOf(room);
+      const host = members[0]?.id === sender.id;
+      if (kind === 'screen' && active && !settings.allowScreenShare && !host)
+        return fail('L’organisateur a désactivé le partage d’écran.', 403);
+      if (kind === 'recording' && active && !settings.allowRecording && !host)
+        return fail('L’organisateur a désactivé les enregistrements.', 403);
       if (kind === 'chat' && (typeof text !== 'string' || text.length < 1 || text.length > 2000)) {
         return fail('Message vide ou trop long.');
       }
