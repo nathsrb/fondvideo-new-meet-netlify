@@ -54,19 +54,19 @@ export class MeetingMusicMixer {
     this.musicGain = context.createGain();
     this.musicGain.gain.value = 0.30; // slider sets actual level on creation
     this.duckGain = context.createGain();
-    this.duckGain.gain.value = 0.72;
+    this.duckGain.gain.value = 0.78;
     this.speechGain = context.createGain();
-    this.speechGain.gain.value = 0.96;
+    this.speechGain.gain.value = 1; // never lower speech merely to make room for music
     this.monitorGain = context.createGain();
     this.monitorGain.gain.value = 0;
     this.mixBus = context.createGain();
-    this.mixBus.gain.value = 0.96;
+    this.mixBus.gain.value = 1; // unity gain for the original microphone
     this.limiter = context.createDynamicsCompressor();
-    this.limiter.threshold.value = -9;
-    this.limiter.knee.value = 2;
-    this.limiter.ratio.value = 7;
-    this.limiter.attack.value = 0.003;
-    this.limiter.release.value = 0.14;
+    this.limiter.threshold.value = -1; // safety ceiling only for simultaneous peaks
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 16;
+    this.limiter.attack.value = 0.001;
+    this.limiter.release.value = 0.08;
     this.source = context.createMediaElementSource(this.audio);
     this.microphoneSource = context.createMediaStreamSource(new MediaStream([microphone]));
     this.analyser = context.createAnalyser();
@@ -110,8 +110,9 @@ export class MeetingMusicMixer {
     const now = performance.now();
     if (rms > 0.018) this.lastSpeechAt = now;
     const speaking = rms > 0.012 || now - this.lastSpeechAt < 430;
-    // Voice first: music at ~35% of the slider level while speaking.
-    const target = this.voicePriority && speaking ? 0.57 : 1;
+    // Speech stays at its original level. Only the soundtrack ducks.
+    // Keep the background audible rather than crushing it beneath the voice.
+    const target = this.voicePriority && speaking ? 0.78 : 1;
     this.duckGain.gain.setTargetAtTime(
       target, this.context.currentTime, target < this.duckGain.gain.value ? 0.035 : 0.22
     );
@@ -141,7 +142,7 @@ export class MeetingMusicMixer {
   setLoop(enabled: boolean) { this.audio.loop = enabled; }
 
   setMonitor(enabled: boolean) {
-    this.monitorGain.gain.setTargetAtTime(enabled ? 0.5 : 0, this.context.currentTime, 0.025);
+    this.monitorGain.gain.setTargetAtTime(enabled ? 0.75 : 0, this.context.currentTime, 0.025);
   }
 
   async play() {
