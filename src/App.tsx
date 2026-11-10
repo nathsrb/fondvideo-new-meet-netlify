@@ -1167,8 +1167,6 @@ function App() {
     let audioContext: AudioContext | null = null;
     let mixedDestination: MediaStreamAudioDestinationNode | null = null;
     let voiceDestination: MediaStreamAudioDestinationNode | null = null;
-    let voiceBus: GainNode | null = null;
-    let musicBus: GainNode | null = null;
     let audioTimer = 0;
     const nodes = new Map<string,{track:MediaStreamTrack;source:MediaStreamAudioSourceNode;voice:boolean}>();
 
@@ -1181,10 +1179,8 @@ function App() {
       mixedDestination = ctx.createMediaStreamDestination();
       voiceDestination = ctx.createMediaStreamDestination();
       const speech = ctx.createGain();
-      voiceBus = speech;
       speech.gain.value = 0.9;
       const soundtrack = ctx.createGain();
-      musicBus = soundtrack;
       soundtrack.gain.value = 0.75;
 
       const dryProtection = ctx.createDynamicsCompressor();
@@ -1675,7 +1671,7 @@ function App() {
               <div><span>SCELYO LIVE / CAPTURE</span><h2 id="scelyo-rec-title">Avant d’enregistrer</h2></div>
               <button type="button" onClick={()=>setPendingRecordMode(null)} aria-label="Annuler l'enregistrement"><X size={22}/></button>
             </div>
-            <p>Choisis ce que le fichier final doit contenir. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
+            <p>Choisis ce que le fichier final doit contenir. Le micro naturel est privilégié pour la capture, sans effet vocal supplémentaire. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
             <fieldset className="scelyo-rec-music-options">
               <legend>Musique dans l’enregistrement</legend>
               <label className={!recordIncludeMusic?'selected':''}>
