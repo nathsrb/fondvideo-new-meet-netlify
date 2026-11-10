@@ -228,3 +228,9 @@ body:has(#app) footer.scelyo-studio-footer{border-top:1px solid #ffffff15;displa
   .scelyo-caption-editor-head small{display:none}
   .scelyo-caption-inline-actions button{font-size:12px!important}
 }
+
+.scelyo-caption-editor-head{cursor:grab!important;touch-action:none!important;user-select:none}
+.scelyo-caption-editor-head:active{cursor:grabbing!important}
+.scelyo-caption-size-step{min-width:30px;min-height:30px;padding:3px 7px;border:1px solid #a492e2;
+  border-radius:8px;background:#59478c;color:#fff;font-size:19px;font-weight:800;cursor:pointer}
+.scelyo-caption-size-step:hover{background:#765eb5}
