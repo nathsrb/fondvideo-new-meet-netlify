@@ -1170,9 +1170,7 @@ function App() {
     let voiceBus: GainNode | null = null;
     let musicBus: GainNode | null = null;
     let audioTimer = 0;
-    const nodes: MediaStreamAudioSourceNode[] = [];
-    const linkedAudioTracks = new Set<string>();
-    let voiceCount = 0;
+    const nodes = new Map<string,{track:MediaStreamTrack;source:MediaStreamAudioSourceNode;voice:boolean}>();
 
     // For a solo capture WITHOUT music, the browser records the microphone
     // directly. No Web Audio, resampling, worklet or second encoder involved.
@@ -1221,22 +1219,30 @@ function App() {
       const samples = new Float32Array(512);
       let lastSpeech = 0;
 
-      const link = (track: MediaStreamTrack, bus: GainNode, voice: boolean) => {
-        if (track.readyState !== 'live' || linkedAudioTracks.has(track.id)) return;
+      const link = (track: MediaStreamTrack, bus: GainNode, voice: boolean, active: Set<string>) => {
+        if (track.readyState !== 'live') return;
+        active.add(track.id);
+        if (nodes.has(track.id)) return;
         try {
           const source = ctx.createMediaStreamSource(new MediaStream([track]));
           source.connect(bus);
-          nodes.push(source);
-          linkedAudioTracks.add(track.id);
-          if (voice) voiceCount++;
+          nodes.set(track.id,{track,source,voice});
         } catch { /* Ignore an unsupported individual source track. */ }
       };
       const sync = () => {
-        if (mic) link(mic, speech, true);
+        const active = new Set<string>();
+        if (mic) link(mic, speech, true, active);
         for (const stream of Object.values(streamsRef.current))
-          for (const track of stream.getAudioTracks()) link(track, speech, true);
-        if (musicAudio) link(musicAudio, soundtrack, false);
-        // Several open microphones must not sum to an overloaded voice bus.
+          for (const track of stream.getAudioTracks()) link(track, speech, true, active);
+        const currentMusic = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+        if (currentMusic && hasMusic) link(currentMusic, soundtrack, false, active);
+        for (const [id,node] of nodes) {
+          if (active.has(id) && node.track.readyState === 'live') continue;
+          node.source.disconnect();
+          nodes.delete(id);
+        }
+        // Rebalance dynamically when participants join or leave.
+        const voiceCount = [...nodes.values()].filter(node=>node.voice).length;
         const voiceGain = voiceCount ? Math.min(0.93, 0.93 / Math.sqrt(voiceCount)) : 0.93;
         speech.gain.setTargetAtTime(voiceGain, ctx.currentTime, 0.15);
 
@@ -1341,7 +1347,8 @@ function App() {
       window.clearInterval(interval);
       window.clearInterval(audioTimer);
       if (!fallback) videoStream?.getTracks().forEach(track => track.stop());
-      nodes.forEach(node => node.disconnect());
+      nodes.forEach(node => node.source.disconnect());
+      nodes.clear();
       mixedDestination?.stream.getTracks().forEach(track => track.stop());
       voiceDestination?.stream.getTracks().forEach(track => track.stop());
       if (audioContext) void audioContext.close().catch(() => {});
