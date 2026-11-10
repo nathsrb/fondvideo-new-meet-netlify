@@ -1334,7 +1334,9 @@ function App() {
       return;
     }
     try {
-      const { stream, cleanup, fallback } = recordCanvasAndAudio(mode, recordIncludeMusic);
+      const hadMusic = Boolean(musicRef.current);
+      const selectedWithMusic = hadMusic && recordIncludeMusic;
+      const { stream, alternateStream, cleanup, fallback } = recordCanvasAndAudio(mode, selectedWithMusic);
       if(fallback)toast('Capture directe iPhone plus stable : les effets virtuels et changements automatiques d’intervenant ne seront pas inclus dans ce fichier.');
       const types =
         mode === 'video'
@@ -1352,12 +1354,36 @@ function App() {
         }catch(e){recorderError=e;}
       }
       if(!recorder)throw new Error('Format vidéo non pris en charge : '+readableError(recorderError));
+      let alternateRecorder: MediaRecorder | null = null;
+      const alternateChunks: BlobPart[] = [];
+      // An audio-only session can be saved in both variants without any
+      // postprocessing or extra video encoder. If the browser rejects the
+      // second recorder, the original selected mix remains available.
+      if (alternateStream) {
+        try {
+          alternateRecorder = new MediaRecorder(alternateStream, {
+            ...(recorder.mimeType ? { mimeType: recorder.mimeType } : {}),
+            audioBitsPerSecond: 128000,
+          });
+          alternateRecorder.ondataavailable = event => {
+            if (event.data.size) alternateChunks.push(event.data);
+          };
+        } catch {
+          alternateRecorder = null;
+        }
+      }
       recorder.onerror=()=>toast('La capture vidéo a rencontré une erreur du navigateur. Essaie 720p.');
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = e => {
         if (e.data.size) chunks.push(e.data);
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
+        if (alternateRecorder && alternateRecorder.state === 'recording') {
+          await new Promise<void>(resolve => {
+            alternateRecorder!.addEventListener('stop', () => resolve(), { once: true });
+            try { alternateRecorder!.stop(); } catch { resolve(); }
+          });
+        }
         cleanup();
         stopCaptureRef.current = null;
         const type =
@@ -1375,17 +1401,31 @@ function App() {
             ? 'mp4'
             : 'm4a'
           : 'webm';
-        const filename =
-          'SCELYO-Live-' +
-          roomRef.current +
-          '-' +
-          new Date().toISOString().replace(/[:.]/g, '-') +
-          '.' +
-          ext;
+        const baseName =
+          'SCELYO-Live-' + roomRef.current + '-' +
+          new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = baseName + (selectedWithMusic ? '-avec-musique' : '-sans-musique') + '.' + ext;
         const item = { blob, name: filename, url: URL.createObjectURL(blob) };
         if (readyRef.current) URL.revokeObjectURL(readyRef.current.url);
         readyRef.current = item;
         setRecordReady(item);
+        if (alternateChunks.length && alternateRecorder) {
+          const alternateType = alternateRecorder.mimeType || type;
+          const alternateBlob = new Blob(alternateChunks, { type: alternateType });
+          if (alternateBlob.size) {
+            const otherExt = alternateType.includes('mp4') ? 'm4a' : 'webm';
+            const otherFilename = baseName + (selectedWithMusic ? '-sans-musique' : '-avec-musique') + '.' + otherExt;
+            const otherItem = {
+              blob: alternateBlob, name: otherFilename, url: URL.createObjectURL(alternateBlob),
+            };
+            if (alternateRef.current) URL.revokeObjectURL(alternateRef.current.url);
+            alternateRef.current = otherItem;
+            setAlternateRecording(otherItem);
+            void saveRecording(alternateBlob, otherFilename)
+              .then(saved => setSavedItems(previous => [saved, ...previous]))
+              .catch(() => toast('La seconde version est disponible au téléchargement, mais pas enregistrée dans Vault.'));
+          }
+        }
         setRecording(false);
         void keepRecording(blob,filename);
         void emit('recording', { active: false }).catch(() => {});
@@ -1397,11 +1437,24 @@ function App() {
       recorderRef.current = recorder;
       stopCaptureRef.current = cleanup;
       setRecordReady(null);
+      setAlternateRecording(null);
+      if (readyRef.current) URL.revokeObjectURL(readyRef.current.url);
+      if (alternateRef.current) URL.revokeObjectURL(alternateRef.current.url);
       readyRef.current = null;
+      alternateRef.current = null;
+      setRecordedWithMusic(selectedWithMusic);
+      setDownloadWithMusic(selectedWithMusic);
       setUploadedLink('');
       setSeconds(0);
       setRecordMode(mode);
-      recorder.start();
+      recorder.start(1000);
+      if (alternateRecorder) {
+        try { alternateRecorder.start(1000); }
+        catch {
+          alternateRecorder = null;
+          toast('Le navigateur ne permet pas deux versions simultanées. La version choisie avant la capture sera conservée.');
+        }
+      }
       setRecording(true);
       void emit('recording', { active: true }).catch(() => {});
     } catch (e) {
