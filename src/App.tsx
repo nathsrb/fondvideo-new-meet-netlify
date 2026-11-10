@@ -1174,7 +1174,9 @@ function App() {
       .filter(([, stream]) => stream.getAudioTracks().some(track => track.readyState === 'live'));
     const musicAudio = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
     const hasMusic = Boolean(musicAudio && musicAudio.readyState === 'live');
-    const directMicRecording = Boolean(mic && !remoteAudio.length && !hasMusic);
+    // Even if music is loaded, an audio-only recording without soundtrack
+    // must stay on the ORIGINAL native microphone track.
+    const directMicRecording = Boolean(mic && !remoteAudio.length && !includeMusic);
 
     let audioContext: AudioContext | null = null;
     let mixedDestination: MediaStreamAudioDestinationNode | null = null;
@@ -1191,27 +1193,24 @@ function App() {
       mixedDestination = ctx.createMediaStreamDestination();
       voiceDestination = ctx.createMediaStreamDestination();
       const speech = ctx.createGain();
-      speech.gain.value = 0.9;
+      speech.gain.value = 1; // all speech tracks enter the recorder at unity gain
       const soundtrack = ctx.createGain();
-      soundtrack.gain.value = 0.75;
+      soundtrack.gain.value = 0.82; // background music already follows the Live volume slider
 
-      const dryProtection = ctx.createDynamicsCompressor();
-      dryProtection.threshold.value = -4;
-      dryProtection.knee.value = 7;
-      dryProtection.ratio.value = 1.7;
-      dryProtection.attack.value = 0.007;
-      dryProtection.release.value = 0.25;
-      speech.connect(dryProtection);
-      dryProtection.connect(voiceDestination);
+      // No compressor, EQ or resampler after the microphone's native input.
+      // The clean voice-only track is an unchanged unity-gain copy.
+      speech.connect(voiceDestination);
 
       const mixedBus = ctx.createGain();
-      mixedBus.gain.value = 0.94;
+      mixedBus.gain.value = 1;
+      // Peak-only protection: speech is NOT continuously compressed to
+      // make room for the soundtrack; gain reduction only near digital clipping.
       const mixProtection = ctx.createDynamicsCompressor();
-      mixProtection.threshold.value = -5;
-      mixProtection.knee.value = 6;
-      mixProtection.ratio.value = 1.9;
-      mixProtection.attack.value = 0.006;
-      mixProtection.release.value = 0.23;
+      mixProtection.threshold.value = -0.8;
+      mixProtection.knee.value = 0;
+      mixProtection.ratio.value = 16;
+      mixProtection.attack.value = 0.001;
+      mixProtection.release.value = 0.09;
       speech.connect(mixedBus);
       soundtrack.connect(mixedBus);
       mixedBus.connect(mixProtection);
@@ -1249,10 +1248,9 @@ function App() {
           node.source.disconnect();
           nodes.delete(id);
         }
-        // Rebalance dynamically when participants join or leave.
-        const voiceCount = [...nodes.values()].filter(node=>node.voice).length;
-        const voiceGain = voiceCount ? Math.min(0.93, 0.93 / Math.sqrt(voiceCount)) : 0.93;
-        speech.gain.setTargetAtTime(voiceGain, ctx.currentTime, 0.15);
+        // Never turn voices down in response to music or participant count.
+        // The final peak-only limiter protects simultaneous speech peaks.
+        speech.gain.setTargetAtTime(1, ctx.currentTime, 0.05);
 
         analyser.getFloatTimeDomainData(samples);
         let energy = 0;
@@ -1261,7 +1259,9 @@ function App() {
         const now = performance.now();
         if (rms > 0.02) lastSpeech = now;
         const speaking = rms > 0.013 || now - lastSpeech < 550;
-        soundtrack.gain.setTargetAtTime(speaking ? 0.37 : 0.75, ctx.currentTime, speaking ? 0.04 : 0.28);
+        // Music follows the user's slider upstream. Only music is ducked:
+        // voice always stays at unity gain and remains the focus.
+        soundtrack.gain.setTargetAtTime(speaking ? 0.70 : 1, ctx.currentTime, speaking ? 0.06 : 0.28);
       };
       sync();
       audioTimer = window.setInterval(sync, 130);
@@ -1348,9 +1348,10 @@ function App() {
     ]);
     // Dual capture is limited to desktop audio, only when music exists. On
     // phones we preserve one high-quality recording to avoid encoder overload.
-    const alternateStream = mode === 'audio' && hasMusic && !nativeIOS && mixedAudio && dryAudio
-      ? new MediaStream([includeMusic ? dryAudio : mixedAudio])
-      : null;
+    // Prioritize the fidelity of the main recording over a simultaneous
+    // second encoder, which can overload Safari and lower-powered devices.
+    // The soundtrack is chosen before recording; no automatic second capture.
+    const alternateStream: MediaStream | null = null;
     const cleanup = () => {
       window.clearInterval(interval);
       window.clearInterval(audioTimer);
@@ -1695,14 +1696,12 @@ function App() {
                 <input type="radio" name="scelyo-record-music" checked={recordIncludeMusic}
                   disabled={!musicName} onChange={()=>setRecordIncludeMusic(true)}/>
                 <Music2 size={21}/><span><strong>Avec la musique de fond</strong>
-                  <small>{musicName?'La musique reste discrète sous les voix':'Importe d’abord une musique dans Live'}</small></span>
+                  <small>{musicName?'Le niveau musical suit la jauge ; la voix ne baisse pas.':'Importe d’abord une musique dans Live'}</small></span>
               </label>
             </fieldset>
             <p className="scelyo-rec-setup-footnote">
               {pendingRecordMode==='audio' && musicName
-                ? (/iPhone|iPad|iPod/i.test(navigator.userAgent)
-                  ? 'Pour préserver la qualité sur iPhone, seule la version choisie avant la capture sera enregistrée.'
-                  : 'Sur ordinateur, SCELYO peut conserver deux versions audio. Si le navigateur ne le permet pas, ton choix initial est préservé.')
+                ? 'Pour préserver le son des voix, SCELYO enregistre une seule version de haute qualité : choisis avec ou sans musique avant de démarrer.'
                 : 'Tu pourras télécharger le fichier en un clic après l’arrêt. Pour la vidéo, choisis la musique avant la capture.'}
             </p>
             <div className="scelyo-rec-setup-actions">
