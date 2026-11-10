@@ -84,3 +84,18 @@ body:has(#app) footer.scelyo-studio-footer{border-top:1px solid #ffffff15;displa
 }
 @media(max-width:380px){.scelyo-studio-nav a,.scelyo-studio-nav span{padding:8px}.scelyo-studio-brand>span{font-size:15px}.scelyo-studio-actions{flex-direction:column}.scelyo-studio-actions :is(.primary,.secondary){width:100%}}
 @media(prefers-reduced-motion:reduce){body:has(#app) *{scroll-behavior:auto}}
+
+/* SCELYO Studio: dedicated local audio controls and focused subtitle editing. */
+.scelyo-studio-audio-toggle{display:flex!important;align-items:center!important;justify-content:space-between;gap:14px;
+  background:#1b2740;border:1px solid #625a92;border-radius:12px;padding:15px;margin:12px 0;color:#f2eeff;cursor:pointer}
+.scelyo-studio-audio-toggle span{display:flex;flex-direction:column;gap:5px}
+.scelyo-studio-audio-toggle strong{font-size:13px}
+.scelyo-studio-audio-toggle small{font-size:11px;color:#aeb8d2;line-height:1.5}
+.scelyo-studio-audio-toggle input{width:19px;height:19px;accent-color:#ab94fb;flex:none;cursor:pointer}
+.scelyo-studio-audio-level{display:flex!important;align-items:center;justify-content:space-between;gap:15px;margin:20px 0;color:#e6e4ff}
+.scelyo-studio-audio-level select{max-width:200px;border-radius:8px;background:#1e2b47!important;border:1px solid #8278af!important;color:#fff!important;padding:10px}
+#captions .cap-word-text:focus{outline:2px solid #c2a7ff;outline-offset:2px;background:#261f45!important}
+#captions .cap-auto select{width:100%;max-width:100%;margin:7px 0 13px;min-height:42px;background:#16213a;color:#fff;border:1px solid #6e7194;border-radius:9px;padding:9px}
+#captions .cap-auto label{display:block;font-size:12px;font-weight:650;margin-top:7px}
+@media(max-width:700px){.scelyo-studio-audio-level{flex-direction:column;align-items:stretch!important}
+.scelyo-studio-audio-level select{max-width:100%}}
