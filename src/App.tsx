@@ -1120,6 +1120,32 @@ function App() {
     const ctx = new AudioContext();
     void ctx.resume().catch(() => {});
     const dest = ctx.createMediaStreamDestination();
+    // Voice bus is always on top. The separate music bus ducks under all
+    // participants' voices and a gentle limiter prevents peak distortion.
+    const voiceBus = ctx.createGain();
+    voiceBus.gain.value = 0.94;
+    const musicBus = ctx.createGain();
+    musicBus.gain.value = 0.68;
+    const mixBus = ctx.createGain();
+    mixBus.gain.value = 0.95;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -8;
+    limiter.knee.value = 2;
+    limiter.ratio.value = 6;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.18;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    const voiceSamples = new Float32Array(512);
+    const silentAnalysis = ctx.createGain();
+    silentAnalysis.gain.value = 0;
+    voiceBus.connect(mixBus);
+    voiceBus.connect(analyser);
+    analyser.connect(silentAnalysis);
+    silentAnalysis.connect(mixBus);
+    musicBus.connect(mixBus);
+    mixBus.connect(limiter);
+    limiter.connect(dest);
     const nodes: MediaStreamAudioSourceNode[] = [];
     const local = localRef.current;
     const mic = processedMicrophoneTrack();
@@ -1154,7 +1180,7 @@ function App() {
         if (linked.has(s.key) || !s.stream.getAudioTracks().length) continue;
         try {
           const node = ctx.createMediaStreamSource(s.stream);
-          node.connect(dest);
+          node.connect(s.key.startsWith('music-') ? musicBus : voiceBus);
           nodes.push(node);
           linked.add(s.key);
         } catch {
@@ -1168,6 +1194,18 @@ function App() {
     oscillator.connect(silence);
     silence.connect(dest);
     oscillator.start();
+    let lastSpeech = 0;
+    const duckTimer = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(voiceSamples);
+      let energy = 0;
+      for (const value of voiceSamples) energy += value * value;
+      const rms = Math.sqrt(energy / voiceSamples.length);
+      const now = performance.now();
+      if (rms > 0.018) lastSpeech = now;
+      const voiceActive = rms > 0.012 || now - lastSpeech < 480;
+      const target = voiceActive ? 0.30 : 0.68;
+      musicBus.gain.setTargetAtTime(target, ctx.currentTime, voiceActive ? 0.035 : 0.22);
+    }, 90);
     linkAudio();
     // Attach newly imported music even when iOS uses direct camera recording.
     const audioSyncInterval = window.setInterval(linkAudio, 500);
@@ -1238,8 +1276,11 @@ function App() {
     const cleanup = () => {
       window.clearInterval(interval);
       window.clearInterval(audioSyncInterval);
+      window.clearInterval(duckTimer);
       if(!fallback)videoStream?.getTracks().forEach(t => t.stop());
       nodes.forEach(n => n.disconnect());
+      voiceBus.disconnect();musicBus.disconnect();mixBus.disconnect();
+      limiter.disconnect();analyser.disconnect();silentAnalysis.disconnect();
       oscillator.stop();
       void ctx.close();
       videos.forEach(v => {
