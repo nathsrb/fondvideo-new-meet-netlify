@@ -186,6 +186,8 @@ function App() {
 
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [micTestRecording, setMicTestRecording] = useState(false);
+  const [micTestUrl, setMicTestUrl] = useState('');
   const [recordMode, setRecordMode] = useState<'video' | 'audio'>('video');
   const [recordIncludeMusic, setRecordIncludeMusic] = useState(false);
   const [recordedWithMusic, setRecordedWithMusic] = useState(false);
@@ -258,6 +260,7 @@ function App() {
   });
   const screenRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const micTestUrlRef = useRef('');
   const stopCaptureRef = useRef<(() => void) | null>(null);
   const tokenRef = useRef('');
   const readyRef = useRef<Recording | null>(null);
@@ -1370,6 +1373,68 @@ function App() {
     return { stream: combined, alternateStream, cleanup, fallback, directMicRecording };
   }
 
+  function testMicrophone() {
+    if (micTestRecording) return;
+    const microphone=rawRef.current?.getAudioTracks()[0];
+    if (!microphone || microphone.readyState!=='live') {
+      toast('Le microphone est indisponible. Active-le avant ce test.');
+      return;
+    }
+    if (typeof MediaRecorder==='undefined') {
+      toast('Le test de capture audio n’est pas compatible avec ce navigateur.');
+      return;
+    }
+    if (micTestUrlRef.current) URL.revokeObjectURL(micTestUrlRef.current);
+    micTestUrlRef.current='';
+    setMicTestUrl('');
+    let clone: MediaStreamTrack | null=null;
+    try {
+      clone=microphone.clone();
+      const ua=navigator.userAgent;
+      const preferMp4=/iPhone|iPad|iPod|Safari(?!.*Chrome|.*CriOS)/i.test(ua);
+      const candidates=preferMp4
+        ? ['audio/mp4','audio/webm;codecs=opus','audio/webm']
+        : ['audio/webm;codecs=opus','audio/webm','audio/mp4'];
+      let recorder:MediaRecorder|null=null;
+      for(const mimeType of candidates) {
+        if(!MediaRecorder.isTypeSupported(mimeType))continue;
+        try {
+          recorder=new MediaRecorder(new MediaStream([clone]),{
+            mimeType,audioBitsPerSecond:192000
+          });
+          break;
+        } catch {/* another codec may work */}
+      }
+      if(!recorder)recorder=new MediaRecorder(new MediaStream([clone]),{audioBitsPerSecond:192000});
+      const activeRecorder=recorder;
+      const captured:BlobPart[]=[];
+      setMicTestRecording(true);
+      activeRecorder.ondataavailable=event=>{if(event.data.size)captured.push(event.data)};
+      activeRecorder.onerror=()=>toast('Échec du test audio natif sur ce navigateur.');
+      activeRecorder.onstop=()=>{
+        clone?.stop();
+        setMicTestRecording(false);
+        const file=new Blob(captured,{type:activeRecorder.mimeType || 'audio/webm'});
+        if(!file.size) {
+          toast('Le test audio est vide. Vérifie l’autorisation du microphone.');
+          return;
+        }
+        const url=URL.createObjectURL(file);
+        micTestUrlRef.current=url;
+        setMicTestUrl(url);
+        toast('Test prêt : écoute ta voix, puis compare avec l’enregistrement SCELYO.');
+      };
+      activeRecorder.start();
+      window.setTimeout(()=>{
+        if(activeRecorder.state==='recording')activeRecorder.stop();
+      },4000);
+    } catch (error) {
+      clone?.stop();
+      setMicTestRecording(false);
+      toast('Test micro impossible : '+readableError(error));
+    }
+  }
+
   async function startRecording(mode: 'video' | 'audio') {
     if (!joined || recording) return;
     if (hostId !== peerId.current && !roomSettings.allowRecording) {
@@ -1708,6 +1773,12 @@ function App() {
                 ? 'Pour préserver le son des voix, SCELYO enregistre une seule version de haute qualité : choisis avec ou sans musique avant de démarrer.'
                 : 'Tu pourras télécharger le fichier en un clic après l’arrêt. Pour la vidéo, choisis la musique avant la capture.'}
             </p>
+            <div className="scelyo-mic-test-box">
+              <div><strong>Vérifier la qualité du microphone</strong><small>Test local de 4 secondes, sans musique, sans filtre ni envoi sur Internet. Utilise un casque pour éviter les échos.</small></div>
+              <button type="button" disabled={micTestRecording}
+                onClick={testMicrophone}>{micTestRecording?'Enregistrement du test…':'Tester mon micro (4 s)'}</button>
+              {micTestUrl && <audio controls src={micTestUrl} preload="metadata" aria-label="Écouter le test du microphone naturel"/>}
+            </div>
             <div className="scelyo-rec-setup-actions">
               <button type="button" className="scelyo-rec-cancel" onClick={()=>setPendingRecordMode(null)}>Annuler</button>
               <button type="button" className="scelyo-rec-start" onClick={()=>{
