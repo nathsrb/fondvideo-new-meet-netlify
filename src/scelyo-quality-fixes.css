@@ -94,3 +94,20 @@
 .scelyo-download-more button:disabled{opacity:.55}
 .scelyo-download-drive-link{display:inline-flex;gap:8px;margin-top:12px;color:#b9e8cb}
 @media(max-width:560px){.scelyo-rec-setup{padding:18px}.scelyo-download-card{padding:16px}.scelyo-download-main{min-height:82px;padding:15px}.scelyo-download-main strong{font-size:17px}}
+
+/* V8 — short native microphone recording to isolate audio capture problems. */
+.scelyo-mic-test-box{
+  margin-top:16px;display:flex;flex-direction:column;gap:9px;
+  padding:13px 14px;border:1px solid #716d96;border-radius:13px;
+  background:linear-gradient(135deg,#1b2844,#18223a);
+}
+.scelyo-mic-test-box>div{display:flex;flex-direction:column;gap:5px}
+.scelyo-mic-test-box strong{font-size:13px;color:#f5f1ff}
+.scelyo-mic-test-box small{font-size:11px;color:#b9c6e5;line-height:1.55}
+.scelyo-mic-test-box button{
+  align-self:flex-start;min-height:39px;padding:9px 12px;background:#5a4a9f;
+  border:1px solid #aa95ea;border-radius:9px;cursor:pointer;
+  color:#fff;font-size:12px;font-weight:700;
+}
+.scelyo-mic-test-box button:disabled{opacity:.6;cursor:progress}
+.scelyo-mic-test-box audio{display:block;width:100%;max-width:100%;height:46px}
