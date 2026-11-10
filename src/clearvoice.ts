@@ -5,6 +5,7 @@
  * it is NOT a speech-isolation model and cannot eliminate every noise.
  */
 export type VoiceProfile = 'natural' | 'balanced' | 'strong';
+export type NoiseStats = { attenuationDb: number; isReducing: boolean; inputRms: number };
 
 export class ClearVoiceProcessor {
   readonly stream: MediaStream;
@@ -13,6 +14,8 @@ export class ClearVoiceProcessor {
   private readonly gateInput: GainNode;
   private noiseGate: AudioWorkletNode | null = null;
   private noiseEnabled: boolean;
+  private noiseStrength = 2;
+  private onNoiseStats: ((stats: NoiseStats) => void) | null = null;
   private readonly output: MediaStreamAudioDestinationNode;
   private readonly dry: GainNode;
   private readonly enhanced: GainNode;
@@ -83,8 +86,13 @@ export class ClearVoiceProcessor {
           await this.context.audioWorklet.addModule('/clearvoice-gate.js');
           if (this.disposed) return false;
           const gate = new AudioWorkletNode(this.context, 'scelyo-clearvoice-gate', {
-            parameterData: { enabled: this.noiseEnabled ? 1 : 0 },
+            parameterData: { enabled: this.noiseEnabled ? 1 : 0, strength: this.noiseStrength },
           });
+          gate.port.onmessage = event => {
+            if (!this.disposed && event.data?.type === 'noise-stats') {
+              this.onNoiseStats?.(event.data as NoiseStats);
+            }
+          };
           this.gateInput.disconnect();
           this.gateInput.connect(gate);
           gate.connect(this.dry);
@@ -103,6 +111,15 @@ export class ClearVoiceProcessor {
   setNoiseReduction(enabled: boolean) {
     this.noiseEnabled = enabled;
     this.noiseGate?.parameters.get('enabled')?.setValueAtTime(enabled ? 1 : 0, this.context.currentTime);
+  }
+
+  setNoiseStrength(strength: number) {
+    this.noiseStrength = Math.min(3, Math.max(1, Math.round(strength)));
+    this.noiseGate?.parameters.get('strength')?.setValueAtTime(this.noiseStrength, this.context.currentTime);
+  }
+
+  subscribeNoiseStats(listener: ((stats: NoiseStats) => void) | null) {
+    this.onNoiseStats = listener;
   }
 
   setEnabled(enabled: boolean) {
@@ -134,7 +151,11 @@ export class ClearVoiceProcessor {
     this.disposed = true;
     this.input.disconnect();
     this.gateInput.disconnect();
-    this.noiseGate?.disconnect();
+    if (this.noiseGate) {
+      this.noiseGate.port.onmessage = null;
+      this.noiseGate.disconnect();
+    }
+    this.onNoiseStats = null;
     this.dry.disconnect();
     this.highPass.disconnect();
     this.lowPass.disconnect();
