@@ -99,6 +99,7 @@
                 <button class="tab active" data-panel="fond">Décors</button
                 ><button class="tab" data-panel="format">Format</button
                 ><button class="tab" data-panel="captions">Sous-titres</button
+                ><button class="tab" data-panel="audio">Audio</button
                 ><button class="tab" data-panel="adjust">Ajuster</button
                 ><button class="tab" data-panel="export">Exporter</button>
               </div>
@@ -139,7 +140,7 @@
                 <div class="cap-heading">
                   <div>
                     <h3>Sous-titres premium</h3>
-                    <p class="hint">36 styles animés • 0 API payante</p>
+                    <p class="hint">36 styles animés • Whisper Large V3 ou transcription locale</p>
                   </div>
                   <label class="cap-check"
                     ><input id="capEnabled" type="checkbox" checked />
@@ -147,6 +148,11 @@
                   >
                 </div>
                 <div class="cap-auto">
+                  <label for="capEngine">Qualité de transcription</label>
+                  <select id="capEngine">
+                    <option value="groq" selected>Whisper Large V3 — meilleure précision (Groq)</option>
+                    <option value="local">Whisper Tiny — sur mon appareil</option>
+                  </select>
                   <label for="capLanguage">Langue de la vidéo</label>
                   <select id="capLanguage">
                     <option value="auto">Automatique</option>
@@ -158,9 +164,9 @@
                     Générer automatiquement
                   </button>
                   <p class="hint">
-                    Whisper fonctionne sur ton appareil. Au premier usage, un
-                    modèle gratuit est téléchargé. Sur iPhone, calcul CPU pour
-                    plus de stabilité.
+                    Whisper Large V3 utilise la connexion Groq configurée pour la prévisualisation.
+                    Des extraits audio sont envoyés pour la transcription. Le mode local
+                    ne transmet pas ton audio à Groq.
                   </p>
                 </div>
                 <details class="cap-manual">
@@ -211,6 +217,7 @@
                   <h4>Éditer les mots</h4>
                   <span id="capCount">0 mots</span>
                 </div>
+                <p class="hint">Clique sur un sous-titre dans l’aperçu pour sélectionner son mot actif, puis corrige-le directement.</p>
                 <p class="hint">Début (s) • Fin (s) • Texte</p>
                 <h4>Piste des sous-titres — glisser pour déplacer, tirer les bords pour modifier la durée</h4>
                 <div id="capTimeline" class="cap-timeline"></div>
@@ -231,6 +238,26 @@
                 >
                   Sous-titres prêts.
                 </p>
+              </section>
+              <section id="audio" class="panel">
+                <h3>SCELYO ClearVoice · Studio</h3>
+                <p class="hint">Améliore le son du fichier exporté. Traitement local, sans API.</p>
+                <label class="scelyo-studio-audio-toggle">
+                  <span><strong>Réduire les bruits de fond</strong><small>Atténuation douce des bruits faibles, sans couper les mots.</small></span>
+                  <input id="audioNoiseReduction" type="checkbox" checked />
+                </label>
+                <label class="scelyo-studio-audio-toggle">
+                  <span><strong>Améliorer la voix</strong><small>Clarté et volume équilibrés, sans saturation.</small></span>
+                  <input id="audioVoiceEnhancement" type="checkbox" checked />
+                </label>
+                <label class="scelyo-studio-audio-level">Intensité
+                  <select id="audioProfile">
+                    <option value="natural">Naturel</option>
+                    <option value="balanced" selected>Équilibré</option>
+                    <option value="strong">Renforcé</option>
+                  </select>
+                </label>
+                <p class="hint">Effets appliqués à l’export. La suppression de bruits forts ou de voix superposées nécessiterait un moteur spécialisé.</p>
               </section>
               <section id="adjust" class="panel">
                 <label
