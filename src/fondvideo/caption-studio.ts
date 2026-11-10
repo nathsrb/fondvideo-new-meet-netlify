@@ -87,7 +87,7 @@ export function drawCaption(ctx, time, w, h, model) {
     words = model.words.slice(start, start + 4),
     active = index - start;
   const preset = catalog.find(item => item.id === model.style) || catalog[0];
-  const font = Math.max(12, Math.min(120, (Math.min(w, h) * model.size) / 100));
+  const font = Math.max(9, Math.min(240, (Math.min(w, h) * model.size) / 100));
   const kind = preset.kind,
     width = w * 0.88;
   ctx.save();
@@ -746,9 +746,15 @@ export function createCaptionStudio({
       return true;
     },
     movePosition: (x,y) => {
-      state.x=Math.max(8,Math.min(92,x));
-      state.y=Math.max(12,Math.min(90,y));
+      state.x=Math.max(8,Math.min(92,Number(x)||50));
+      state.y=Math.max(12,Math.min(90,Number(y)||76));
       byId('capPosition').value=String(state.y);
+      repaint();
+    },
+    setSize: size => {
+      state.size=Math.max(2.5,Math.min(24,Number(size)||8.2));
+      byId('capSize').value=String(state.size);
+      byId('capSizeValue').textContent=state.size.toFixed(1)+' %';
       repaint();
     },
     setStyle: value => {
