@@ -55,6 +55,8 @@ import {
 } from 'lucide-react';
 
 type Member = { id: string; name: string };
+type RoomSettings = { locked: boolean; allowScreenShare: boolean; allowRecording: boolean };
+const defaultRoomSettings: RoomSettings = { locked: false, allowScreenShare: true, allowRecording: true };
 type ChatItem = {
   id: string;
   from: string;
@@ -152,6 +154,8 @@ function App() {
   const [shareOwner,setShareOwner]=useState<string|null>(null);
   const [pinned,setPinned]=useState<string|null>(null);
   const [participantsOpen,setParticipantsOpen]=useState(false);
+  const [roomSettings,setRoomSettings]=useState<RoomSettings>(defaultRoomSettings);
+  const [hostBusy,setHostBusy]=useState(false);
   const [gallery,setGallery]=useState(false);
   const [streams, setStreams] = useState<Record<string, MediaStream>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -183,6 +187,7 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordMode, setRecordMode] = useState<'video' | 'audio'>('video');
+  const [recordIncludeMusic, setRecordIncludeMusic] = useState(true);
   const [recordReady, setRecordReady] = useState<Recording | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -288,6 +293,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullStage(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, []);
+
+  useEffect(() => {
     if (!recording) return;
     const t = window.setInterval(() => setSeconds(s => s + 1), 1000);
     return () => window.clearInterval(t);
@@ -331,6 +344,17 @@ function App() {
   function pinParticipant(id:string){
     const next=pinRef.current===id?null:id;
     pinRef.current=next;setPinned(next);
+  }
+  async function updateHostSettings(changes: Partial<RoomSettings>) {
+    if (hostId !== peerId.current || hostBusy) return;
+    setHostBusy(true);
+    try {
+      const response = await api.post('/api/rooms/'+roomRef.current+'/settings', { from: peerId.current, ...changes });
+      setRoomSettings(response.data.settings as RoomSettings);
+      toast('Paramètres de la réunion actualisés.');
+    } catch(err) {
+      toast('Modification impossible : ' + readableError(err));
+    } finally { setHostBusy(false); }
   }
   async function muteParticipant(id:string){
     try{await api.post('/api/rooms/'+roomRef.current+'/mute',{from:peerId.current,to:id});toast('Micro coupé.');}
@@ -433,7 +457,7 @@ function App() {
     setNotice('');
     setChat([]);
     setMembers([]);
-    setHostId(null);setShareOwner(null);shareRef.current=null;
+    setHostId(null);setRoomSettings(defaultRoomSettings);setShareOwner(null);shareRef.current=null;
     setPinned(null);pinRef.current=null;focusRef.current=peerId.current;setActiveSpeaker(peerId.current);
     setRecordReady(null);
     setUploadedLink('');
@@ -691,6 +715,7 @@ function App() {
       return;
     const data = msg.data;
     if(data?.hostId)setHostId(data.hostId);
+    if(data?.kind==='settings'&&data.settings)setRoomSettings(data.settings as RoomSettings);
     if (data?.kind === 'join' && data.member?.id !== peerId.current) {
       setMembers(prev => [
         ...prev.filter(m => m.id !== data.member.id),
@@ -878,6 +903,7 @@ function App() {
       // Initial load, subscription, then join: prevents missed events.
       const state = await api.get('/api/rooms/' + id);
       setMembers(state.data.members || []);setHostId(state.data.hostId||peerId.current);
+      setRoomSettings(state.data.settings || defaultRoomSettings);
       await api.post('/api/subscriptions', {
         entity_type: 'room',
         entity_id: id,
@@ -889,6 +915,7 @@ function App() {
         name,
       });
       setMembers(joinedRoom.data.members || []);setHostId(joinedRoom.data.hostId||peerId.current);
+      setRoomSettings(joinedRoom.data.settings || defaultRoomSettings);
       isJoinedRef.current = true;focusRef.current=peerId.current;setActiveSpeaker(peerId.current);
       setJoined(true);
       for (const member of joinedRoom.data.members || [])
@@ -966,6 +993,8 @@ function App() {
     setMembers([]);setHostId(null);setShareOwner(null);shareRef.current=null;
     setPinned(null);pinRef.current=null;
     setJoined(false);
+    setFullStage(false);
+    setRoomSettings(defaultRoomSettings);
     isJoinedRef.current = false;
     setSharing(false);
     setRemoteRecording(false);
@@ -1014,6 +1043,10 @@ function App() {
     setCamOn(!camOn);
   }
   async function toggleScreen() {
+    if (!screenRef.current && hostId !== peerId.current && !roomSettings.allowScreenShare) {
+      toast('L’organisateur a désactivé le partage d’écran.');
+      return;
+    }
     if (screenRef.current) {
       const videoTrack = localRef.current?.getVideoTracks()[0];
       for (const pc of pcs.current.values()) {
@@ -1083,7 +1116,7 @@ function App() {
     }
   }
 
-  function recordCanvasAndAudio(mode: 'video' | 'audio') {
+  function recordCanvasAndAudio(mode: 'video' | 'audio', includeMusic: boolean) {
     const ctx = new AudioContext();
     void ctx.resume().catch(() => {});
     const dest = ctx.createMediaStreamDestination();
@@ -1105,7 +1138,7 @@ function App() {
         })),
         // Record the soundtrack separately: the local microphone is already
         // included above, so we must not record the mixed track twice.
-        ...(musicRef.current ? [{
+        ...(includeMusic && musicRef.current ? [{
           key: 'music-' + musicRef.current.musicOnlyStream.getAudioTracks()[0]?.id,
           stream: musicRef.current.musicOnlyStream,
         }] : []),
@@ -1219,12 +1252,16 @@ function App() {
 
   async function startRecording(mode: 'video' | 'audio') {
     if (!joined || recording) return;
+    if (hostId !== peerId.current && !roomSettings.allowRecording) {
+      toast('L’organisateur a désactivé les enregistrements.');
+      return;
+    }
     if (typeof MediaRecorder === 'undefined') {
       toast('Enregistrement non pris en charge sur ce navigateur.');
       return;
     }
     try {
-      const { stream, cleanup, fallback } = recordCanvasAndAudio(mode);
+      const { stream, cleanup, fallback } = recordCanvasAndAudio(mode, recordIncludeMusic);
       if(fallback)toast('Capture directe iPhone plus stable : les effets virtuels et changements automatiques d’intervenant ne seront pas inclus dans ce fichier.');
       const types =
         mode === 'video'
@@ -1457,6 +1494,12 @@ function App() {
 
   return (
     <div className="app-shell">
+      {fullStage && joined && !gallery && (
+        <button type="button" className="scelyo-fullscreen-exit"
+          onClick={() => setFullStage(false)} aria-label="Quitter le plein écran" title="Échap pour quitter">
+          <Minimize2 size={19}/> Quitter le plein écran <span>Échap</span>
+        </button>
+      )}
       <header className="header scelyo-header">
         <button type="button" className="scelyo-brand" aria-label="SCELYO · Accueil"
           onClick={() => { if (!joined) { location.hash = ''; setRoom(''); setMenuOpen(false); } }}>
@@ -1903,6 +1946,13 @@ function App() {
               </div>
               {participantsOpen&&<div className="moderation-panel">
                 <div className="moderation-head"><strong>Participants ({count})</strong>{isHost&&<button onClick={muteAllParticipants}>Couper tous les micros</button>}</div>
+                {isHost && <div className="scelyo-host-security">
+                  <strong><ShieldCheck size={17}/> Sécurité de la réunion</strong>
+                  <label><span><b>Verrouiller la réunion</b><small>Empêche de nouveaux participants de rejoindre.</small></span><input type="checkbox" disabled={hostBusy} checked={roomSettings.locked} onChange={e => void updateHostSettings({locked:e.target.checked})}/></label>
+                  <label><span><b>Autoriser le partage d’écran</b><small>Pour les participants (l’hôte conserve ce droit).</small></span><input type="checkbox" disabled={hostBusy} checked={roomSettings.allowScreenShare} onChange={e => void updateHostSettings({allowScreenShare:e.target.checked})}/></label>
+                  <label><span><b>Autoriser les enregistrements</b><small>Pour les participants (l’hôte conserve ce droit).</small></span><input type="checkbox" disabled={hostBusy} checked={roomSettings.allowRecording} onChange={e => void updateHostSettings({allowRecording:e.target.checked})}/></label>
+                  <p>Tu peux également couper les micros ou retirer une personne ci-dessous. La salle reste accessible aux invités déjà présents.</p>
+                </div>}
                 <div className="moderation-row"><strong>{displayName} (vous){isHost?' — Hôte':''}</strong><span>{micOn?'Micro activé':'Micro coupé'}</span></div>
                 {members.map(m=><div className="moderation-row" key={m.id}><strong>{m.name}{hostId===m.id?' — Hôte':''}</strong><div>
                   <button onClick={()=>pinParticipant(m.id)}>Épingler</button>
@@ -1943,7 +1993,8 @@ function App() {
                 <button
                   className={sharing ? 'tool-btn active-tool' : 'tool-btn'}
                   onClick={toggleScreen}
-                  title="Partager l’écran"
+                  title={!isHost&&!roomSettings.allowScreenShare?'Partage d’écran désactivé par l’hôte':'Partager l’écran'}
+                  disabled={!sharing&&!isHost&&!roomSettings.allowScreenShare}
                 >
                   {sharing ? <MonitorOff /> : <MonitorUp />}
                 </button>
@@ -1962,6 +2013,7 @@ function App() {
                   title={
                     recording ? 'Arrêter l’enregistrement' : 'Enregistrer vidéo'
                   }
+                  disabled={!recording&&!isHost&&!roomSettings.allowRecording}
                 >
                   {recording ? <Square fill="currentColor" /> : <Circle />}
                 </button>
@@ -1974,8 +2026,16 @@ function App() {
                 </button>
               </div>
               <div className="secondary-actions">
+                <label className="scelyo-record-music-choice" title="Choisis si la musique diffusée pendant le live sera ajoutée au fichier final.">
+                  <input type="checkbox" checked={recordIncludeMusic} disabled={recording}
+                    onChange={e => setRecordIncludeMusic(e.target.checked)}/>
+                  <Music2 size={17}/>
+                  <span><b>{recordIncludeMusic?'Enregistrer avec musique':'Enregistrer sans musique'}</b>
+                    <small>La musique reste audible par les participants, quel que soit ce choix.</small>
+                  </span>
+                </label>
                 {!recording && (
-                  <button onClick={() => startRecording('audio')}>
+                  <button onClick={() => startRecording('audio')} disabled={!isHost&&!roomSettings.allowRecording}>
                     <Headphones size={16} /> Enregistrer l’audio
                   </button>
                 )}
