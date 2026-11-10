@@ -204,11 +204,11 @@ function App() {
   const [musicTime, setMusicTime] = useState(0);
   const [musicDuration, setMusicDuration] = useState(0);
   const [musicBusy, setMusicBusy] = useState(false);
-  const [noiseReduction, setNoiseReduction] = useState(true);
+  const [noiseReduction, setNoiseReduction] = useState(false);
   const [noiseStrength, setNoiseStrength] = useState(2);
   const [noiseAttenuation, setNoiseAttenuation] = useState(0);
   const [noiseActive, setNoiseActive] = useState(false);
-  const [voiceEnhancement, setVoiceEnhancement] = useState(true);
+  const [voiceEnhancement, setVoiceEnhancement] = useState(false);
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile>('balanced');
   const [clearVoiceOpen, setClearVoiceOpen] = useState(false);
   const [clearVoiceReady, setClearVoiceReady] = useState(false);
@@ -512,7 +512,11 @@ function App() {
   // One stable processed microphone track is shared by Live, music and the
   // recording mixer. Music is added AFTER ClearVoice, never noise-suppressed.
   function processedMicrophoneTrack() {
-    return clearVoiceRef.current?.track || rawRef.current?.getAudioTracks()[0] || null;
+    // The neutral/default mode must never route the voice through WebAudio.
+    // ClearVoice becomes opt-in; the native mic goes straight to WebRTC.
+    const native = rawRef.current?.getAudioTracks()[0] || null;
+    if (!voiceEnhancement && !noiseReduction) return native;
+    return clearVoiceRef.current?.track || native;
   }
   function outboundAudioTrack() {
     return musicRef.current?.track || processedMicrophoneTrack();
@@ -852,7 +856,7 @@ function App() {
           audio: {
             echoCancellation: true,
             noiseSuppression: noiseReduction,
-            autoGainControl: true,
+            autoGainControl: false,
           },
           video: {
             facingMode: face,
@@ -1057,6 +1061,10 @@ function App() {
         toast('Le réglage natif a échoué ; le filtrage local reste actif si disponible.');
       }
     }
+    if (!musicRef.current) {
+      const native=rawRef.current?.getAudioTracks()[0] || null;
+      void restoreOutboundAudio((enabled || voiceEnhancement) ? clearVoiceRef.current?.track || native : native);
+    }
   }
   function changeNoiseStrength(level: number) {
     setNoiseStrength(level);
@@ -1065,6 +1073,10 @@ function App() {
   function changeVoiceEnhancement(enabled: boolean) {
     clearVoiceRef.current?.setEnabled(enabled);
     setVoiceEnhancement(enabled);
+    if (!musicRef.current) {
+      const native = rawRef.current?.getAudioTracks()[0] || null;
+      void restoreOutboundAudio((enabled || noiseReduction) ? clearVoiceRef.current?.track || native : native);
+    }
   }
   function changeVoiceProfile(profile: VoiceProfile) {
     clearVoiceRef.current?.setProfile(profile);
@@ -2087,7 +2099,9 @@ function App() {
                 </select>
               </label>
               <p className="scelyo-clearvoice-note">
-                {clearVoiceReady ? 'Traitement vocal local actif. Le micro amélioré est utilisé dans les réunions et enregistrements.' : 'Le traitement vocal avancé est indisponible sur cet appareil : micro standard conservé.'}
+                {clearVoiceReady && (voiceEnhancement || noiseReduction)
+                  ? 'ClearVoice est activé volontairement pour le Live. La piste native reste prioritaire pour les enregistrements.'
+                  : 'Qualité naturelle : le microphone natif reste prioritaire, sans égalisation ou compression supplémentaire.'}
                 {' '}Les bruits de fond sont surtout réduits pendant les silences, sans promettre de supprimer une autre voix qui parle en même temps. La musique partagée n’est pas filtrée.
               </p>
             </section>
