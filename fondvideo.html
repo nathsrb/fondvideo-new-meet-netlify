@@ -75,6 +75,7 @@
                 <div id="stage" class="stage">
                   <video id="video" playsinline preload="metadata"></video
                   ><canvas id="canvas"></canvas>
+                  <div id="visualLayer" class="scelyo-visual-layer" aria-label="Textes et sous-titres modifiables directement sur la vidéo"></div>
                   <div id="overlay" class="overlay hidden">
                     <div class="spinner"></div>
                     <b id="overlayTitle">Préparation…</b
@@ -99,6 +100,7 @@
                 <button class="tab active" data-panel="fond">Décors</button
                 ><button class="tab" data-panel="format">Format</button
                 ><button class="tab" data-panel="captions">Sous-titres</button
+                ><button class="tab" data-panel="text">Texte</button
                 ><button class="tab" data-panel="audio">Audio</button
                 ><button class="tab" data-panel="adjust">Ajuster</button
                 ><button class="tab" data-panel="export">Exporter</button>
@@ -217,7 +219,7 @@
                   <h4>Éditer les mots</h4>
                   <span id="capCount">0 mots</span>
                 </div>
-                <p class="hint">Clique sur un sous-titre dans l’aperçu pour sélectionner son mot actif, puis corrige-le directement.</p>
+                <p class="hint">Pendant la lecture ou sur une image fixe, clique directement sur le sous-titre dans l’aperçu pour corriger la phrase sur place et la déplacer. Tu peux ensuite changer son style ici.</p>
                 <p class="hint">Début (s) • Fin (s) • Texte</p>
                 <h4>Piste des sous-titres — glisser pour déplacer, tirer les bords pour modifier la durée</h4>
                 <div id="capTimeline" class="cap-timeline"></div>
@@ -238,6 +240,46 @@
                 >
                   Sous-titres prêts.
                 </p>
+              </section>
+              <section id="text" class="panel">
+                <div class="scelyo-text-heading">
+                  <div>
+                    <h3>Texte sur la vidéo</h3>
+                    <p>Ajoute des titres, des phrases ou des légendes exactement là où tu veux.</p>
+                  </div>
+                  <span class="scelyo-text-pill">ÉDITION VISUELLE</span>
+                </div>
+                <button id="textAdd" type="button" class="primary full scelyo-add-text">
+                  + Ajouter du texte
+                </button>
+                <p id="textHint" class="hint">Clique sur Ajouter, puis sur le texte dans l’aperçu. Glisse sa poignée pour le déplacer.</p>
+                <div class="scelyo-text-list-head"><h4>Mes textes</h4><small>Cliquer pour sélectionner</small></div>
+                <div id="textList" class="scelyo-text-layer-list"></div>
+                <div id="textEditorForm" class="scelyo-text-form" hidden>
+                  <label>Texte à afficher
+                    <textarea id="textContent" rows="3" maxlength="350" placeholder="Écris ton texte ici…"></textarea>
+                  </label>
+                  <div class="scelyo-text-controls-grid">
+                    <label>Style
+                      <select id="textStyle"></select>
+                    </label>
+                    <label>Couleur
+                      <input type="color" id="textColor" value="#ffffff" />
+                    </label>
+                  </div>
+                  <label>Taille du texte
+                    <input type="range" id="textSize" min="3" max="18" value="8.4" step=".2" />
+                  </label>
+                  <div class="scelyo-text-controls-grid">
+                    <label>Début (secondes)
+                      <input type="number" id="textStart" min="0" step=".1" value="0" />
+                    </label>
+                    <label>Fin (secondes)
+                      <input type="number" id="textEnd" min=".1" step=".1" value="3" />
+                    </label>
+                  </div>
+                  <button type="button" id="textDelete" class="scelyo-text-remove">Supprimer ce texte</button>
+                </div>
               </section>
               <section id="audio" class="panel">
                 <h3>SCELYO ClearVoice · Studio</h3>
