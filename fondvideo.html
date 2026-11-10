@@ -3,69 +3,68 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FondVidéo — Studio vidéo gratuit</title>
-    <meta name="theme-color" content="#08090d" />
+    <title>SCELYO Studio — Mets tes vidéos en scène</title>
+    <meta name="theme-color" content="#090B12" />
+    <meta name="description" content="SCELYO Studio : décors vidéo, formats et sous-titres réunis dans un espace de création." />
+    <link rel="icon" type="image/svg+xml" href="./scelyo-mark.svg" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./src/fondvideo/styles.css" />
+    <link rel="stylesheet" href="./src/fondvideo-design.css" />
+    <link rel="stylesheet" href="./src/scelyo-studio.css" />
   </head>
   <body>
     <div id="app">
-      <header class="topbar">
-        <div class="brand">
-          Fond<span>Vidéo</span
-          ><a
-            href="./index.html#/meet"
-            style="
-              margin-left: 16px;
-              color: #b6a8ff;
-              font-size: 12px;
-              text-decoration: none;
-            "
-            >← Revenir à Meet</a
-          >
-        </div>
+      <header class="topbar scelyo-studio-header">
+        <a class="scelyo-studio-brand" href="./index.html#/meet" aria-label="SCELYO — Accueil">
+          <img src="./scelyo-mark.svg" width="42" height="42" alt="" />
+          <span>SCELYO <small>STUDIO</small></span>
+        </a>
+        <nav class="scelyo-studio-nav" aria-label="Espaces SCELYO">
+          <a href="./index.html#/meet">Live</a>
+          <span class="active" aria-current="page">Studio</span>
+          <a href="./index.html#/vault">Vault</a>
+        </nav>
         <button id="newProject" class="ghost hidden">Nouveau projet</button>
       </header>
       <main>
-        <section id="landing" class="landing">
-          <div class="pill">100 % local • Sans watermark</div>
-          <h1>Change le fond de ta vidéo <span>gratuitement</span></h1>
-          <p>
-            Importe ta vidéo, supprime automatiquement l’arrière-plan et ajoute
-            le décor de ton choix.
-          </p>
-          <a class="primary" href="./index.html#/meet" style="margin:10px;text-decoration:none">Lancer une visioconférence</a>
-          <label class="primary" for="videoInput">Importer une vidéo</label
-          ><input
-            id="videoInput"
-            type="file"
-            accept="video/*,.mov,.mp4,.webm"
-            hidden
-          /><button id="demoBtn" class="secondary" type="button">
-            Tester l’éditeur sans vidéo
-          </button>
-          <div class="privacy">
-            ✓ Ta vidéo reste sur ton appareil. Aucun upload cloud.
+        <section id="landing" class="landing scelyo-studio-landing">
+          <div class="scelyo-studio-copy">
+            <div class="scelyo-studio-overline"><span></span> SCELYO / STUDIO CRÉATIF</div>
+            <div class="scelyo-studio-pill">Ton studio vidéo, directement dans ton navigateur</div>
+            <h1>Chaque image mérite <span>sa propre scène.</span></h1>
+            <p>Découpe tes sujets, change de décor, ajuste ton format et habille tes vidéos de sous-titres — dans un espace pensé pour créer.</p>
+            <div class="scelyo-studio-actions">
+              <label class="primary" for="videoInput"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4m-4 4 4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg> Importer une vidéo</label>
+              <input id="videoInput" type="file" accept="video/*,.mov,.mp4,.webm" hidden />
+              <button id="demoBtn" class="secondary" type="button">Explorer le Studio <span aria-hidden="true">↗</span></button>
+            </div>
+            <div class="scelyo-studio-trust"><span>✓ Traitement local</span><span>✓ Sans filigrane</span><span>✓ Formats sociaux</span></div>
           </div>
-          <div class="cards">
-            <article>
-              <b>Import rapide</b><span>Lecture directe du fichier local.</span>
-            </article>
-            <article>
-              <b>IA locale</b
-              ><span>Le détourage tourne dans ton navigateur.</span>
-            </article>
-            <article>
-              <b>Qualité source</b
-              ><span>Le fichier original n’est jamais modifié.</span>
-            </article>
+          <div class="scelyo-studio-art" aria-hidden="true">
+            <div class="scelyo-art-halo"></div>
+            <div class="scelyo-art-device">
+              <div class="scelyo-art-top"><span>● &nbsp; SCELYO STUDIO</span><span>16:9</span></div>
+              <div class="scelyo-art-screen">
+                <div class="scelyo-art-light"></div>
+                <div class="scelyo-art-person"><div class="scelyo-art-head"></div><div class="scelyo-art-body"></div></div>
+                <span class="scelyo-art-label">TON UNIVERS, TON DÉCOR</span>
+              </div>
+              <div class="scelyo-art-timeline"><span></span><i></i><i></i><i></i></div>
+              <div class="scelyo-art-bottom"><span>00:16 / 00:45</span><span>● APERÇU</span></div>
+            </div>
+            <div class="scelyo-art-floating"><span>✦</span><div><strong>Libère tes idées.</strong><small>Un décor à la fois.</small></div></div>
+          </div>
+          <div class="scelyo-studio-benefits">
+            <div class="scelyo-studio-benefit"><span>01 / IMPORTER</span><strong>Commence par ton image.</strong><p>Import rapide depuis ton appareil.</p></div>
+            <div class="scelyo-studio-benefit"><span>02 / COMPOSER</span><strong>Choisis ton univers.</strong><p>Détourage, décors, formats et sous-titres.</p></div>
+            <div class="scelyo-studio-benefit"><span>03 / EXPORTER</span><strong>Emporte ta création.</strong><p>Un export local, à ton rythme.</p></div>
           </div>
         </section>
         <section id="editor" class="editor hidden">
           <div class="editorHead">
             <div>
-              <h2 id="fileName">Vidéo</h2>
+              <div class="scelyo-editor-overline">SCELYO STUDIO / PROJET EN COURS</div><h2 id="fileName">Vidéo</h2>
               <div id="fileMeta" class="meta"></div>
             </div>
             <div id="status" class="status">IA en attente</div>
@@ -76,6 +75,8 @@
                 <div id="stage" class="stage">
                   <video id="video" playsinline preload="metadata"></video
                   ><canvas id="canvas"></canvas>
+                  <div id="visualLayer" class="scelyo-visual-layer" aria-label="Textes et sous-titres modifiables directement sur la vidéo"></div>
+                  <button type="button" id="quickAddText" class="scelyo-quick-add-text">+ Texte</button>
                   <div id="overlay" class="overlay hidden">
                     <div class="spinner"></div>
                     <b id="overlayTitle">Préparation…</b
@@ -97,9 +98,11 @@
             </div>
             <div class="controlsColumn">
               <div class="tabs">
-                <button class="tab active" data-panel="fond">Fond</button
+                <button class="tab active" data-panel="fond">Décors</button
                 ><button class="tab" data-panel="format">Format</button
                 ><button class="tab" data-panel="captions">Sous-titres</button
+                ><button class="tab" data-panel="text">Texte</button
+                ><button class="tab" data-panel="audio">Audio</button
                 ><button class="tab" data-panel="adjust">Ajuster</button
                 ><button class="tab" data-panel="export">Exporter</button>
               </div>
@@ -140,7 +143,7 @@
                 <div class="cap-heading">
                   <div>
                     <h3>Sous-titres premium</h3>
-                    <p class="hint">36 styles animés • 0 API payante</p>
+                    <p class="hint">36 styles animés • Whisper Large V3 ou transcription locale</p>
                   </div>
                   <label class="cap-check"
                     ><input id="capEnabled" type="checkbox" checked />
@@ -148,6 +151,11 @@
                   >
                 </div>
                 <div class="cap-auto">
+                  <label for="capEngine">Qualité de transcription</label>
+                  <select id="capEngine">
+                    <option value="groq" selected>Whisper Large V3 — meilleure précision (Groq)</option>
+                    <option value="local">Whisper Tiny — sur mon appareil</option>
+                  </select>
                   <label for="capLanguage">Langue de la vidéo</label>
                   <select id="capLanguage">
                     <option value="auto">Automatique</option>
@@ -159,9 +167,9 @@
                     Générer automatiquement
                   </button>
                   <p class="hint">
-                    Whisper fonctionne sur ton appareil. Au premier usage, un
-                    modèle gratuit est téléchargé. Sur iPhone, calcul CPU pour
-                    plus de stabilité.
+                    Whisper Large V3 utilise la connexion Groq configurée pour la prévisualisation.
+                    Des extraits audio sont envoyés pour la transcription. Le mode local
+                    ne transmet pas ton audio à Groq.
                   </p>
                 </div>
                 <details class="cap-manual">
@@ -212,6 +220,7 @@
                   <h4>Éditer les mots</h4>
                   <span id="capCount">0 mots</span>
                 </div>
+                <p class="hint">Pendant la lecture ou sur une image fixe, clique directement sur le sous-titre dans l’aperçu pour corriger la phrase sur place et la déplacer. Tu peux ensuite changer son style ici.</p>
                 <p class="hint">Début (s) • Fin (s) • Texte</p>
                 <h4>Piste des sous-titres — glisser pour déplacer, tirer les bords pour modifier la durée</h4>
                 <div id="capTimeline" class="cap-timeline"></div>
@@ -232,6 +241,66 @@
                 >
                   Sous-titres prêts.
                 </p>
+              </section>
+              <section id="text" class="panel">
+                <div class="scelyo-text-heading">
+                  <div>
+                    <h3>Texte sur la vidéo</h3>
+                    <p>Ajoute des titres, des phrases ou des légendes exactement là où tu veux.</p>
+                  </div>
+                  <span class="scelyo-text-pill">ÉDITION VISUELLE</span>
+                </div>
+                <button id="textAdd" type="button" class="primary full scelyo-add-text">
+                  + Ajouter du texte
+                </button>
+                <p id="textHint" class="hint">Clique sur Ajouter, puis sur le texte dans l’aperçu. Glisse sa poignée pour le déplacer.</p>
+                <div class="scelyo-text-list-head"><h4>Mes textes</h4><small>Cliquer pour sélectionner</small></div>
+                <div id="textList" class="scelyo-text-layer-list"></div>
+                <div id="textEditorForm" class="scelyo-text-form" hidden>
+                  <label>Texte à afficher
+                    <textarea id="textContent" rows="3" maxlength="350" placeholder="Écris ton texte ici…"></textarea>
+                  </label>
+                  <div class="scelyo-text-controls-grid">
+                    <label>Style
+                      <select id="textStyle"></select>
+                    </label>
+                    <label>Couleur
+                      <input type="color" id="textColor" value="#ffffff" />
+                    </label>
+                  </div>
+                  <label>Taille du texte
+                    <input type="range" id="textSize" min="3" max="18" value="8.4" step=".2" />
+                  </label>
+                  <div class="scelyo-text-controls-grid">
+                    <label>Début (secondes)
+                      <input type="number" id="textStart" min="0" step=".1" value="0" />
+                    </label>
+                    <label>Fin (secondes)
+                      <input type="number" id="textEnd" min=".1" step=".1" value="3" />
+                    </label>
+                  </div>
+                  <button type="button" id="textDelete" class="scelyo-text-remove">Supprimer ce texte</button>
+                </div>
+              </section>
+              <section id="audio" class="panel">
+                <h3>SCELYO ClearVoice · Studio</h3>
+                <p class="hint">Améliore le son du fichier exporté. Traitement local, sans API.</p>
+                <label class="scelyo-studio-audio-toggle">
+                  <span><strong>Réduire les bruits de fond</strong><small>Atténuation douce des bruits faibles, sans couper les mots.</small></span>
+                  <input id="audioNoiseReduction" type="checkbox" checked />
+                </label>
+                <label class="scelyo-studio-audio-toggle">
+                  <span><strong>Améliorer la voix</strong><small>Clarté et volume équilibrés, sans saturation.</small></span>
+                  <input id="audioVoiceEnhancement" type="checkbox" checked />
+                </label>
+                <label class="scelyo-studio-audio-level">Intensité
+                  <select id="audioProfile">
+                    <option value="natural">Naturel</option>
+                    <option value="balanced" selected>Équilibré</option>
+                    <option value="strong">Renforcé</option>
+                  </select>
+                </label>
+                <p class="hint">Effets appliqués à l’export. La suppression de bruits forts ou de voix superposées nécessiterait un moteur spécialisé.</p>
               </section>
               <section id="adjust" class="panel">
                 <label
@@ -321,7 +390,7 @@
                 <a
                   id="download"
                   class="primary full hidden"
-                  download="fondvideo.webm"
+                  download="scelyo.webm"
                   >Télécharger la vidéo</a
                 >
               </section>
@@ -329,7 +398,7 @@
           </div>
         </section>
       </main>
-      <footer>Traitement local • Pas de compte • Pas de watermark</footer>
+      <footer class="scelyo-studio-footer">SCELYO Studio <span>Le live devient création.</span> <a href="./index.html#/meet">Retour à SCELYO Live ↗</a></footer>
     </div>
     <script type="module" src="./src/fondvideo/main.ts"></script>
   </body>

@@ -45,6 +45,7 @@ const initial = () => ({
   style: 'viral',
   size: 8.2,
   y: 76,
+  x: 50,
   enabled: true,
 });
 const byId = id => document.getElementById(id);
@@ -129,7 +130,7 @@ export function drawCaption(ctx, time, w, h, model) {
     const total =
       line.reduce((a, v) => a + v.tw, 0) +
       Math.max(0, line.length - 1) * font * 0.28;
-    let x = w / 2 - total / 2;
+    let x = (w * (model.x ?? 50)) / 100 - total / 2;
     line.forEach(word => {
       const focus = word.j === active,
         p =
@@ -318,6 +319,64 @@ async function extractAudio(file, seconds, report) {
   }
   return output;
 }
+// 16 kHz mono PCM WAV makes upload size predictable, with word-level
+// timestamps returned directly by Groq Whisper Large V3.
+function wavOf(part) {
+  const buffer = new ArrayBuffer(44 + part.length * 2);
+  const view = new DataView(buffer);
+  const ascii = (offset, text) => { for (let i=0;i<text.length;i++) view.setUint8(offset+i,text.charCodeAt(i)); };
+  ascii(0, 'RIFF');
+  view.setUint32(4, 36 + part.length*2, true);
+  ascii(8, 'WAVE');ascii(12, 'fmt ');
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);
+  view.setUint32(24,16000,true);view.setUint32(28,32000,true);
+  view.setUint16(32,2,true);view.setUint16(34,16,true);
+  ascii(36,'data');view.setUint32(40,part.length*2,true);
+  for (let i=0;i<part.length;i++) {
+    const n = Math.max(-1, Math.min(1,part[i]));
+    view.setInt16(44+i*2, Math.round(n < 0 ? n*32768 : n*32767),true);
+  }
+  return buffer;
+}
+async function groqTranscribe(audio, seconds, language, report) {
+  const words = [];
+  const chunks = Math.ceil(seconds / 25);
+  for (let i=0;i<chunks;i++) {
+    const start = i * 25;
+    const length = Math.min(25, seconds - start);
+    const part = audio.subarray(Math.round(start*16000),Math.round((start+length)*16000));
+    if(!part.length) continue;
+    report('Whisper Large V3 : extrait '+(i+1)+' / '+chunks+'…');
+    const response = await fetch('/scelyo-transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/wav', 'x-scelyo-language': ({
+        french:'fr', english:'en', spanish:'es'
+      })[language] || 'auto' },
+      body: wavOf(part),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(response.status === 404
+      ? 'Service de transcription introuvable sur cette prévisualisation.'
+      : data.error || 'Whisper Large V3 indisponible (erreur '+response.status+').');
+    const returned = (data.words || []).filter(w =>
+      w.word?.trim() && Number.isFinite(w.start) && Number.isFinite(w.end));
+    if(returned.length) {
+      words.push(...returned.map(w => ({
+        text: w.word.trim(),
+        start: Math.max(0, start+w.start),
+        end: Math.max(start+w.start+0.05, start+w.end)
+      })));
+    } else if(data.segments?.length) {
+      for (const segment of data.segments) {
+        words.push(...distribute(segment.text||'',start+segment.start,start+segment.end));
+      }
+    } else if(data.text) {
+      words.push(...distribute(data.text,start,start+length));
+    }
+  }
+  if (!words.length) throw new Error('Aucune parole reconnue avec Whisper Large V3.');
+  return words;
+}
 let whisper = null;
 async function getWhisper(report) {
   if (whisper) return whisper;
@@ -462,7 +521,8 @@ export function createCaptionStudio({
       label.type = 'text';
       label.value = word.text;
       label.maxLength = 120;
-      label.title = 'Mot';
+      label.title = 'Mot — clique pour corriger';
+      label.className = 'cap-word-text';
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = '×';
@@ -592,19 +652,24 @@ export function createCaptionStudio({
       return;
     }
     const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const seconds = Math.min(duration, mobile ? 180 : 600);
+    const seconds = Math.min(duration, mobile ? 600 : 1200);
     const btn = byId('capGenerate');
     btn.disabled = true;
     btn.textContent = 'Transcription…';
     try {
-      report('Préparation audio locale…');
+      report('Préparation de la piste audio…');
       const audio = await extractAudio(file, seconds, report);
-      const pipe = await getWhisper(report);
-      const language = byId('capLanguage').value,
-        params = { task: 'transcribe', return_timestamps: true };
-      if (language !== 'auto') params.language = language;
-      const words = [];
-      for (let start = 0; start < audio.length / 16000; start += 25) {
+      const language = byId('capLanguage').value;
+      let words = [];
+      let engine = 'Whisper Large V3 (Groq)';
+      if (byId('capEngine').value === 'groq') {
+        words = await groqTranscribe(audio, seconds, language, report);
+      } else {
+        const pipe = await getWhisper(report);
+        const params = { task: 'transcribe', return_timestamps: true };
+        if (language !== 'auto') params.language = language;
+        engine = 'Whisper Tiny (local)';
+        for (let start = 0; start < audio.length / 16000; start += 25) {
         const len = Math.min(25, audio.length / 16000 - start);
         report(
           'Transcription sur ton appareil… ' +
@@ -623,15 +688,15 @@ export function createCaptionStudio({
           report('Horodatage approximatif utilisé pour ce modèle Whisper…');
           piece = await pipe(audioPart, { ...params, return_timestamps: false });
         }
-        words.push(...resultsToWords(piece, start, len));
+          words.push(...resultsToWords(piece, start, len));
+        }
       }
       if (!words.length) throw new Error('Aucune parole reconnue.');
       state.words = words;
       refresh();
       repaint();
       report(
-        words.length +
-          ' mots transcrits localement. Horodatages estimés par segment : vérifie et ajuste les mots.' +
+        words.length + ' mots transcrits avec ' + engine + '. Vérifie et corrige les noms propres.' +
           (seconds < duration
             ? ' Les premières ' +
               Math.round(seconds) +
@@ -653,6 +718,58 @@ export function createCaptionStudio({
   refresh();
   return {
     render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
+    activeGroup: time => {
+      if (!state.enabled) return null;
+      const index=state.words.findIndex(word=>time>=word.start && time<word.end);
+      if(index<0)return null;
+      const begin=Math.floor(index/4)*4;
+      const group=state.words.slice(begin,begin+4);
+      return {
+        begin, length:group.length,
+        text:group.map(w=>w.text).join(' '),
+        start:group[0].start,end:group.at(-1).end,
+        x:state.x??50,y:state.y,size:state.size,style:state.style
+      };
+    },
+    replaceGroup: (begin,length,text) => {
+      const group=state.words.slice(begin,begin+length);
+      if(!group.length || !text.trim())return false;
+      const tokens=wordsOf(text);
+      if(tokens.length===group.length){
+        group.forEach((word,index)=>word.text=tokens[index]);
+      }else{
+        const first=group[0].start,end=group.at(-1).end;
+        state.words.splice(begin,length,...distribute(tokens,first,end));
+      }
+      refresh();repaint();
+      report('Sous-titre modifié directement depuis l’aperçu.');
+      return true;
+    },
+    movePosition: (x,y) => {
+      state.x=Math.max(8,Math.min(92,x));
+      state.y=Math.max(12,Math.min(90,y));
+      byId('capPosition').value=String(state.y);
+      repaint();
+    },
+    setStyle: value => {
+      if(!catalog.some(style=>style.id===value))return;
+      state.style=value;
+      refresh();repaint();
+    },
+    styles: catalog.map(style=>({id:style.id,name:style.name})),
+    editAtTime: time => {
+      const index = state.words.findIndex(w => time>=w.start && time<w.end);
+      if(index < 0) return false;
+      page = Math.floor(index / pageSize);
+      refresh();
+      const input = byId('capWords').querySelectorAll('.cap-word-text')[index % pageSize];
+      if (!input) return false;
+      input.scrollIntoView({ block:'center', behavior:'smooth' });
+      input.focus();
+      input.select();
+      report('Corrige le mot sélectionné, puis continue la lecture.');
+      return true;
+    },
     reset: () => {
       Object.assign(state, initial());page=0;
       byId('capText').value = '';
