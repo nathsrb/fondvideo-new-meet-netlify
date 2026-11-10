@@ -1151,107 +1151,114 @@ function App() {
   }
 
   function recordCanvasAndAudio(mode: 'video' | 'audio', includeMusic: boolean) {
-    const ctx = new AudioContext();
-    void ctx.resume().catch(() => {});
-    const dest = ctx.createMediaStreamDestination();
-    const voiceOnlyDest = ctx.createMediaStreamDestination();
-    // Voice bus is always on top. The separate music bus ducks under all
-    // participants' voices and a gentle limiter prevents peak distortion.
-    const voiceBus = ctx.createGain();
-    voiceBus.gain.value = 0.94;
-    const musicBus = ctx.createGain();
-    musicBus.gain.value = 0.68;
-    const mixBus = ctx.createGain();
-    mixBus.gain.value = 0.95;
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -8;
-    limiter.knee.value = 2;
-    limiter.ratio.value = 6;
-    limiter.attack.value = 0.003;
-    limiter.release.value = 0.18;
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 512;
-    const voiceSamples = new Float32Array(512);
-    const silentAnalysis = ctx.createGain();
-    silentAnalysis.gain.value = 0;
-    voiceBus.connect(mixBus);
-    const dryLimiter = ctx.createDynamicsCompressor();
-    dryLimiter.threshold.value = -9;
-    dryLimiter.knee.value = 3;
-    dryLimiter.ratio.value = 5;
-    voiceBus.connect(dryLimiter);
-    dryLimiter.connect(voiceOnlyDest);
-    voiceBus.connect(analyser);
-    analyser.connect(silentAnalysis);
-    silentAnalysis.connect(mixBus);
-    musicBus.connect(mixBus);
-    mixBus.connect(limiter);
-    limiter.connect(dest);
+    // Prefer the unprocessed microphone for recordings. Live ClearVoice,
+    // the WebRTC music path and compression have already shaped that track:
+    // running those processors through a second recording compressor can
+    // make speech metallic, pump or stutter.
+    const mic = rawRef.current?.getAudioTracks().find(track => track.readyState === 'live')
+      || processedMicrophoneTrack();
+    const nativeIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const remoteAudio = Object.entries(streamsRef.current)
+      .filter(([, stream]) => stream.getAudioTracks().some(track => track.readyState === 'live'));
+    const musicAudio = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+    const hasMusic = Boolean(musicAudio && musicAudio.readyState === 'live');
+    const directMicRecording = Boolean(mic && !remoteAudio.length && !hasMusic);
+
+    let audioContext: AudioContext | null = null;
+    let mixedDestination: MediaStreamAudioDestinationNode | null = null;
+    let voiceDestination: MediaStreamAudioDestinationNode | null = null;
+    let voiceBus: GainNode | null = null;
+    let musicBus: GainNode | null = null;
+    let audioTimer = 0;
     const nodes: MediaStreamAudioSourceNode[] = [];
-    const local = localRef.current;
-    const mic = processedMicrophoneTrack();
-    // Capture the enhanced microphone once, without also capturing its raw
-    // counterpart. The video track remains the one selected by the camera.
-    const recordingLocal = local ? new MediaStream([
-      ...local.getVideoTracks(),
-      ...(mic ? [mic] : []),
-    ]) : null;
-    // Both mixes exist while capturing; an audio-only recording can thus
-    // offer the music choice *after* stopping without re-recording speech.
-    const allStreams = () => {
-      const candidates = [
-        { key: 'local', stream: recordingLocal },
-        ...Object.entries(streamsRef.current).map(([key, stream]) => ({
-          key,
-          stream,
-        })),
-        // Record the soundtrack separately: the local microphone is already
-        // included above, so we must not record the mixed track twice.
-        ...(musicRef.current ? [{
-          key: 'music-' + musicRef.current.musicOnlyStream.getAudioTracks()[0]?.id,
-          stream: musicRef.current.musicOnlyStream,
-        }] : []),
-      ];
-      return candidates.filter(x => x.stream) as Array<{
-        key: string;
-        stream: MediaStream;
-      }>;
-    };
-    const linked = new Set<string>();
-    const linkAudio = () => {
-      for (const s of allStreams()) {
-        if (linked.has(s.key) || !s.stream.getAudioTracks().length) continue;
+    const linkedAudioTracks = new Set<string>();
+    let voiceCount = 0;
+
+    // For a solo capture WITHOUT music, the browser records the microphone
+    // directly. No Web Audio, resampling, worklet or second encoder involved.
+    if (!directMicRecording) {
+      const ctx = new AudioContext({ latencyHint: 'playback' });
+      audioContext = ctx;
+      void ctx.resume().catch(() => {});
+      mixedDestination = ctx.createMediaStreamDestination();
+      voiceDestination = ctx.createMediaStreamDestination();
+      const speech = ctx.createGain();
+      voiceBus = speech;
+      speech.gain.value = 0.9;
+      const soundtrack = ctx.createGain();
+      musicBus = soundtrack;
+      soundtrack.gain.value = 0.75;
+
+      const dryProtection = ctx.createDynamicsCompressor();
+      dryProtection.threshold.value = -4;
+      dryProtection.knee.value = 7;
+      dryProtection.ratio.value = 1.7;
+      dryProtection.attack.value = 0.007;
+      dryProtection.release.value = 0.25;
+      speech.connect(dryProtection);
+      dryProtection.connect(voiceDestination);
+
+      const mixedBus = ctx.createGain();
+      mixedBus.gain.value = 0.94;
+      const mixProtection = ctx.createDynamicsCompressor();
+      mixProtection.threshold.value = -5;
+      mixProtection.knee.value = 6;
+      mixProtection.ratio.value = 1.9;
+      mixProtection.attack.value = 0.006;
+      mixProtection.release.value = 0.23;
+      speech.connect(mixedBus);
+      soundtrack.connect(mixedBus);
+      mixedBus.connect(mixProtection);
+      mixProtection.connect(mixedDestination);
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      const analysisMute = ctx.createGain();
+      analysisMute.gain.value = 0;
+      speech.connect(analyser);
+      analyser.connect(analysisMute);
+      analysisMute.connect(mixedBus);
+      const samples = new Float32Array(512);
+      let lastSpeech = 0;
+
+      const link = (track: MediaStreamTrack, bus: GainNode, voice: boolean) => {
+        if (track.readyState !== 'live' || linkedAudioTracks.has(track.id)) return;
         try {
-          const node = ctx.createMediaStreamSource(s.stream);
-          node.connect(s.key.startsWith('music-') ? musicBus : voiceBus);
-          nodes.push(node);
-          linked.add(s.key);
-        } catch {
-          /* no audio track */
-        }
-      }
-    };
-    const oscillator = ctx.createOscillator();
-    const silence = ctx.createGain();
-    silence.gain.value = 0;
-    oscillator.connect(silence);
-    silence.connect(dest);
-    oscillator.start();
-    let lastSpeech = 0;
-    const duckTimer = window.setInterval(() => {
-      analyser.getFloatTimeDomainData(voiceSamples);
-      let energy = 0;
-      for (const value of voiceSamples) energy += value * value;
-      const rms = Math.sqrt(energy / voiceSamples.length);
-      const now = performance.now();
-      if (rms > 0.018) lastSpeech = now;
-      const voiceActive = rms > 0.012 || now - lastSpeech < 480;
-      const target = voiceActive ? 0.52 : 0.93;
-      musicBus.gain.setTargetAtTime(target, ctx.currentTime, voiceActive ? 0.035 : 0.22);
-    }, 90);
-    linkAudio();
-    // Attach newly imported music even when iOS uses direct camera recording.
-    const audioSyncInterval = window.setInterval(linkAudio, 500);
+          const source = ctx.createMediaStreamSource(new MediaStream([track]));
+          source.connect(bus);
+          nodes.push(source);
+          linkedAudioTracks.add(track.id);
+          if (voice) voiceCount++;
+        } catch { /* Ignore an unsupported individual source track. */ }
+      };
+      const sync = () => {
+        if (mic) link(mic, speech, true);
+        for (const stream of Object.values(streamsRef.current))
+          for (const track of stream.getAudioTracks()) link(track, speech, true);
+        if (musicAudio) link(musicAudio, soundtrack, false);
+        // Several open microphones must not sum to an overloaded voice bus.
+        const voiceGain = voiceCount ? Math.min(0.93, 0.93 / Math.sqrt(voiceCount)) : 0.93;
+        speech.gain.setTargetAtTime(voiceGain, ctx.currentTime, 0.15);
+
+        analyser.getFloatTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) energy += sample * sample;
+        const rms = Math.sqrt(energy / samples.length);
+        const now = performance.now();
+        if (rms > 0.02) lastSpeech = now;
+        const speaking = rms > 0.013 || now - lastSpeech < 550;
+        soundtrack.gain.setTargetAtTime(speaking ? 0.37 : 0.75, ctx.currentTime, speaking ? 0.04 : 0.28);
+      };
+      sync();
+      audioTimer = window.setInterval(sync, 130);
+    }
+
+    const local = localRef.current;
+    const localVideo = local ? new MediaStream(local.getVideoTracks()) : null;
+    const videoStreams = () => [
+      { key: 'local', stream: localVideo },
+      ...Object.entries(streamsRef.current).map(([key, stream]) => ({ key, stream })),
+    ].filter(item => item.stream) as Array<{key:string;stream:MediaStream}>;
     const canvas = document.createElement('canvas');
     const dimensions = videoDimensions(
       format === 'original' ? '16:9' : format,
@@ -1262,83 +1269,85 @@ function App() {
     const canvasCtx = canvas.getContext('2d')!;
     const videos = new Map<string, HTMLVideoElement>();
     const draw = () => {
-      linkAudio();
-      if(mode==='audio')return;
-      const items=allStreams();
-      const key=shareRef.current||pinRef.current||focusRef.current;
-      const item=items.find(v=>v.key===key)||items.find(v=>v.key==='local')||items[0];
-      canvasCtx.fillStyle='#090d19';canvasCtx.fillRect(0,0,canvas.width,canvas.height);
-      if(!item)return;
-      const source=item.key==='local'&&screenRef.current?screenRef.current:item.stream;
-      let v=videos.get(item.key);
-      if(!v||v.srcObject!==source){
-        if(v){v.pause();v.srcObject=null;}
-        v=document.createElement('video');
-        v.srcObject=source;v.muted=true;v.playsInline=true;void v.play().catch(()=>{});
-        videos.set(item.key,v);
+      if (mode === 'audio') return;
+      const items = videoStreams();
+      const key = shareRef.current || pinRef.current || focusRef.current;
+      const item = items.find(v => v.key === key) || items.find(v => v.key === 'local') || items[0];
+      canvasCtx.fillStyle = '#090d19';
+      canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+      if (!item) return;
+      const source = item.key === 'local' && screenRef.current ? screenRef.current : item.stream;
+      let v = videos.get(item.key);
+      if (!v || v.srcObject !== source) {
+        if (v) { v.pause(); v.srcObject = null; }
+        v = document.createElement('video');
+        v.srcObject = source;
+        v.muted = true;
+        v.playsInline = true;
+        void v.play().catch(() => {});
+        videos.set(item.key, v);
       }
-      if(v.readyState>=2&&v.videoWidth){
-        // Frame fills visually with a dim blurred background, but the full
-        // camera/screen remains visible in the center: no face cropping.
-        const sourceRatio=v.videoWidth/v.videoHeight;
-        if(Math.abs(sourceRatio-canvas.width/canvas.height)>0.02){
-          const cover=Math.max(canvas.width/v.videoWidth,canvas.height/v.videoHeight);
-          const bw=v.videoWidth*cover,bh=v.videoHeight*cover;
+      if (v.readyState >= 2 && v.videoWidth) {
+        const sourceRatio = v.videoWidth / v.videoHeight;
+        if (Math.abs(sourceRatio - canvas.width / canvas.height) > 0.02) {
+          const cover = Math.max(canvas.width / v.videoWidth, canvas.height / v.videoHeight);
+          const bw = v.videoWidth * cover, bh = v.videoHeight * cover;
           canvasCtx.save();
-          canvasCtx.filter='blur(20px) brightness(0.4)';
-          canvasCtx.drawImage(v,(canvas.width-bw)/2,(canvas.height-bh)/2,bw,bh);
+          canvasCtx.filter = 'blur(20px) brightness(0.4)';
+          canvasCtx.drawImage(v, (canvas.width - bw) / 2, (canvas.height - bh) / 2, bw, bh);
           canvasCtx.restore();
         }
-        const scale=Math.min(canvas.width/v.videoWidth,canvas.height/v.videoHeight);
-        const width=v.videoWidth*scale,height=v.videoHeight*scale;
-        canvasCtx.drawImage(v,(canvas.width-width)/2,(canvas.height-height)/2,width,height);
+        const scale = Math.min(canvas.width / v.videoWidth, canvas.height / v.videoHeight);
+        const width = v.videoWidth * scale, height = v.videoHeight * scale;
+        canvasCtx.drawImage(v, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
       }
     };
     draw();
-    const nativeIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const interval = nativeIOS ? 0 : window.setInterval(draw, 80);
+    const interval = mode === 'video' && !nativeIOS ? window.setInterval(draw, 80) : 0;
     let videoStream: MediaStream | null = null;
     let fallback = false;
-    if(mode==='video'){
-      try { if(!nativeIOS && typeof canvas.captureStream==='function') videoStream=canvas.captureStream(24); }
-      catch { /* provide source-track recording fallback */ }
-      if(!videoStream?.getVideoTracks().length){
-        const items=allStreams();
-        const focus=shareRef.current||pinRef.current||focusRef.current;
-        const chosen=items.find(x=>x.key===focus)||items.find(x=>x.key==='local')||items[0];
-        const source=(chosen?.key==='local' ? screenRef.current?.getVideoTracks()[0] || (nativeIOS ? rawRef.current?.getVideoTracks()[0] : null) : null) || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
-        if(!source)throw new Error('La caméra ne fournit pas de piste vidéo enregistrable.');
-        videoStream=new MediaStream([source]);
-        fallback=true;
+    if (mode === 'video') {
+      try {
+        if (!nativeIOS && typeof canvas.captureStream === 'function') videoStream = canvas.captureStream(24);
+      } catch { /* Fallback to the camera's own track. */ }
+      if (!videoStream?.getVideoTracks().length) {
+        const items = videoStreams();
+        const focus = shareRef.current || pinRef.current || focusRef.current;
+        const chosen = items.find(x => x.key === focus) || items.find(x => x.key === 'local') || items[0];
+        const track = (chosen?.key === 'local'
+          ? screenRef.current?.getVideoTracks()[0] || (nativeIOS ? rawRef.current?.getVideoTracks()[0] : null)
+          : null)
+          || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
+        if (!track) throw new Error('Aucune caméra disponible pour enregistrer la vidéo.');
+        videoStream = new MediaStream([track]);
+        fallback = true;
       }
     }
-    const combined=new MediaStream([
-      ...(videoStream?.getVideoTracks()||[]),
-      ...(includeMusic ? dest.stream.getAudioTracks() : voiceOnlyDest.stream.getAudioTracks()),
+
+    const dryAudio = directMicRecording ? mic : voiceDestination?.stream.getAudioTracks()[0];
+    const mixedAudio = hasMusic ? mixedDestination?.stream.getAudioTracks()[0] : dryAudio;
+    const chosenAudio = includeMusic ? mixedAudio : dryAudio;
+    if (mode === 'audio' && !chosenAudio) throw new Error('Aucun son du micro à enregistrer.');
+    const combined = new MediaStream([
+      ...(videoStream?.getVideoTracks() || []),
+      ...(chosenAudio ? [chosenAudio] : []),
     ]);
-    const alternateStream=mode==='audio' && musicRef.current
-      ? new MediaStream([
-          ...(includeMusic ? voiceOnlyDest.stream.getAudioTracks() : dest.stream.getAudioTracks()),
-        ])
+    // Dual capture is limited to desktop audio, only when music exists. On
+    // phones we preserve one high-quality recording to avoid encoder overload.
+    const alternateStream = mode === 'audio' && hasMusic && !nativeIOS && mixedAudio && dryAudio
+      ? new MediaStream([includeMusic ? dryAudio : mixedAudio])
       : null;
     const cleanup = () => {
       window.clearInterval(interval);
-      window.clearInterval(audioSyncInterval);
-      window.clearInterval(duckTimer);
-      if(!fallback)videoStream?.getTracks().forEach(t => t.stop());
-      nodes.forEach(n => n.disconnect());
-      voiceBus.disconnect();musicBus.disconnect();mixBus.disconnect();
-      limiter.disconnect();dryLimiter.disconnect();analyser.disconnect();silentAnalysis.disconnect();
-      dest.stream.getTracks().forEach(track=>track.stop());
-      voiceOnlyDest.stream.getTracks().forEach(track=>track.stop());
-      oscillator.stop();
-      void ctx.close();
-      videos.forEach(v => {
-        v.pause();
-        v.srcObject = null;
-      });
+      window.clearInterval(audioTimer);
+      if (!fallback) videoStream?.getTracks().forEach(track => track.stop());
+      nodes.forEach(node => node.disconnect());
+      mixedDestination?.stream.getTracks().forEach(track => track.stop());
+      voiceDestination?.stream.getTracks().forEach(track => track.stop());
+      if (audioContext) void audioContext.close().catch(() => {});
+      videos.forEach(v => { v.pause(); v.srcObject = null; });
     };
-    return { stream: combined, alternateStream, cleanup, fallback };
+    return { stream: combined, alternateStream, cleanup, fallback, directMicRecording };
   }
 
   async function startRecording(mode: 'video' | 'audio') {
