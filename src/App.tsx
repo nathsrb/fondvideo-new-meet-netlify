@@ -1626,6 +1626,46 @@ function App() {
           <Minimize2 size={19}/> Quitter le plein écran <span>Échap</span>
         </button>
       )}
+      {pendingRecordMode && joined && (
+        <div className="modal-backdrop scelyo-rec-setup-backdrop"
+          onMouseDown={event=>{if(event.target===event.currentTarget)setPendingRecordMode(null);}}>
+          <section className="scelyo-rec-setup" role="dialog" aria-modal="true" aria-labelledby="scelyo-rec-title">
+            <div className="scelyo-rec-setup-head">
+              <span className="scelyo-rec-setup-icon">{pendingRecordMode==='audio'?<Headphones size={26}/>:<Video size={26}/>}</span>
+              <div><span>SCELYO LIVE / CAPTURE</span><h2 id="scelyo-rec-title">Avant d’enregistrer</h2></div>
+              <button type="button" onClick={()=>setPendingRecordMode(null)} aria-label="Annuler l'enregistrement"><X size={22}/></button>
+            </div>
+            <p>Choisis ce que le fichier final doit contenir. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
+            <fieldset className="scelyo-rec-music-options">
+              <legend>Musique dans l’enregistrement</legend>
+              <label className={!recordIncludeMusic?'selected':''}>
+                <input type="radio" name="scelyo-record-music" checked={!recordIncludeMusic}
+                  onChange={()=>setRecordIncludeMusic(false)}/>
+                <Mic size={21}/><span><strong>Sans musique</strong><small>Voix des participants uniquement</small></span>
+              </label>
+              <label className={recordIncludeMusic?'selected':''}>
+                <input type="radio" name="scelyo-record-music" checked={recordIncludeMusic}
+                  disabled={!musicName} onChange={()=>setRecordIncludeMusic(true)}/>
+                <Music2 size={21}/><span><strong>Avec la musique de fond</strong>
+                  <small>{musicName?'La musique reste discrète sous les voix':'Importe d’abord une musique dans Live'}</small></span>
+              </label>
+            </fieldset>
+            <p className="scelyo-rec-setup-footnote">
+              {pendingRecordMode==='audio' && musicName
+                ? 'Pour un enregistrement audio, SCELYO essaiera de conserver les deux versions afin de te laisser choisir après la capture.'
+                : 'Tu pourras télécharger le fichier en un clic après l’arrêt. Pour la vidéo, choisis la musique avant la capture.'}
+            </p>
+            <div className="scelyo-rec-setup-actions">
+              <button type="button" className="scelyo-rec-cancel" onClick={()=>setPendingRecordMode(null)}>Annuler</button>
+              <button type="button" className="scelyo-rec-start" onClick={()=>{
+                const mode = pendingRecordMode;
+                setPendingRecordMode(null);
+                if(mode) void startRecording(mode);
+              }}><Circle size={17} fill="currentColor"/> Démarrer l’enregistrement {pendingRecordMode==='audio'?'audio':'vidéo'}</button>
+            </div>
+          </section>
+        </div>
+      )}
       <header className="header scelyo-header">
         <button type="button" className="scelyo-brand" aria-label="SCELYO · Accueil"
           onClick={() => { if (!joined) { location.hash = ''; setRoom(''); setMenuOpen(false); } }}>
