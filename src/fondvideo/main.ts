@@ -488,6 +488,11 @@ async function loadFile(file) {
   }
 }
 // Direct preview editing is handled by the interactive layer mounted on #visualLayer.
+$('quickAddText').addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(button=>button.classList.toggle('active',button.dataset.panel==='text'));
+  document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('activePanel',panel.id==='text'));
+  $('textAdd').click();
+});
 
 $('audioNoiseReduction').addEventListener('change',event => {
   state.audioNoiseReduction = event.target.checked;
