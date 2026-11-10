@@ -1136,6 +1136,7 @@ function App() {
     const ctx = new AudioContext();
     void ctx.resume().catch(() => {});
     const dest = ctx.createMediaStreamDestination();
+    const voiceOnlyDest = ctx.createMediaStreamDestination();
     // Voice bus is always on top. The separate music bus ducks under all
     // participants' voices and a gentle limiter prevents peak distortion.
     const voiceBus = ctx.createGain();
@@ -1156,6 +1157,12 @@ function App() {
     const silentAnalysis = ctx.createGain();
     silentAnalysis.gain.value = 0;
     voiceBus.connect(mixBus);
+    const dryLimiter = ctx.createDynamicsCompressor();
+    dryLimiter.threshold.value = -9;
+    dryLimiter.knee.value = 3;
+    dryLimiter.ratio.value = 5;
+    voiceBus.connect(dryLimiter);
+    dryLimiter.connect(voiceOnlyDest);
     voiceBus.connect(analyser);
     analyser.connect(silentAnalysis);
     silentAnalysis.connect(mixBus);
@@ -1171,6 +1178,8 @@ function App() {
       ...local.getVideoTracks(),
       ...(mic ? [mic] : []),
     ]) : null;
+    // Both mixes exist while capturing; an audio-only recording can thus
+    // offer the music choice *after* stopping without re-recording speech.
     const allStreams = () => {
       const candidates = [
         { key: 'local', stream: recordingLocal },
@@ -1180,7 +1189,7 @@ function App() {
         })),
         // Record the soundtrack separately: the local microphone is already
         // included above, so we must not record the mixed track twice.
-        ...(includeMusic && musicRef.current ? [{
+        ...(musicRef.current ? [{
           key: 'music-' + musicRef.current.musicOnlyStream.getAudioTracks()[0]?.id,
           stream: musicRef.current.musicOnlyStream,
         }] : []),
@@ -1287,8 +1296,13 @@ function App() {
     }
     const combined=new MediaStream([
       ...(videoStream?.getVideoTracks()||[]),
-      ...dest.stream.getAudioTracks(),
+      ...(includeMusic ? dest.stream.getAudioTracks() : voiceOnlyDest.stream.getAudioTracks()),
     ]);
+    const alternateStream=mode==='audio' && musicRef.current
+      ? new MediaStream([
+          ...(includeMusic ? voiceOnlyDest.stream.getAudioTracks() : dest.stream.getAudioTracks()),
+        ])
+      : null;
     const cleanup = () => {
       window.clearInterval(interval);
       window.clearInterval(audioSyncInterval);
@@ -1296,7 +1310,9 @@ function App() {
       if(!fallback)videoStream?.getTracks().forEach(t => t.stop());
       nodes.forEach(n => n.disconnect());
       voiceBus.disconnect();musicBus.disconnect();mixBus.disconnect();
-      limiter.disconnect();analyser.disconnect();silentAnalysis.disconnect();
+      limiter.disconnect();dryLimiter.disconnect();analyser.disconnect();silentAnalysis.disconnect();
+      dest.stream.getTracks().forEach(track=>track.stop());
+      voiceOnlyDest.stream.getTracks().forEach(track=>track.stop());
       oscillator.stop();
       void ctx.close();
       videos.forEach(v => {
@@ -1304,7 +1320,7 @@ function App() {
         v.srcObject = null;
       });
     };
-    return { stream: combined, cleanup, fallback };
+    return { stream: combined, alternateStream, cleanup, fallback };
   }
 
   async function startRecording(mode: 'video' | 'audio') {
