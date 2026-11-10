@@ -14,6 +14,7 @@ import {
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { createCaptionStudio } from './caption-studio';
+import { createStudioAudioProcessor } from './audio-enhancement';
 
 const $ = id => document.getElementById(id);
 const video = $('video');
@@ -52,6 +53,9 @@ const state = {
   exportObjectUrl: '',
   aacFallbackRegistered: false,
   exportProfile: 'balanced',
+  audioNoiseReduction: true,
+  audioVoiceEnhancement: true,
+  audioProfile: 'balanced',
   maskWorkA: null,
   maskWorkB: null,
   maskRefined: null,
@@ -468,6 +472,23 @@ async function loadFile(file) {
       'Le codec de ce fichier n’est pas pris en charge par ce navigateur. Essaie Safari sur iPhone ou un MP4 H.264.';
   }
 }
+// Click the caption in the preview to focus the corresponding editable word.
+$('stage').addEventListener('click', event => {
+  if (!state.file || !document.getElementById('captions')?.classList.contains('activePanel')) return;
+  const bounds = $('stage').getBoundingClientRect();
+  const y = (event.clientY - bounds.top) / Math.max(1,bounds.height);
+  if (y < 0.42) return;
+  captions.editAtTime(video.currentTime);
+});
+$('audioNoiseReduction').addEventListener('change',event => {
+  state.audioNoiseReduction = event.target.checked;
+});
+$('audioVoiceEnhancement').addEventListener('change',event => {
+  state.audioVoiceEnhancement = event.target.checked;
+});
+$('audioProfile').addEventListener('change',event => {
+  state.audioProfile = event.target.value;
+});
 $('videoInput').addEventListener('change', e => {
   const f = e.target.files?.[0];
   if (f) loadFile(f);
@@ -965,6 +986,17 @@ $('exportBtn').addEventListener('click', async () => {
       input,
       output,
       tracks: 'primary',
+      audio: (state.audioVoiceEnhancement || state.audioNoiseReduction)
+        ? {
+          codec: 'aac',
+          quality: new Quality('high'),
+          forceTranscode: true,
+          process: createStudioAudioProcessor({
+            noiseReduction: state.audioNoiseReduction,
+            enhanceVoice: state.audioVoiceEnhancement,
+            profile: state.audioProfile,
+          }),
+        } : undefined,
       video: {
         codec: 'avc',
         quality: new Quality('very-high'),
@@ -1121,7 +1153,7 @@ $('savePhotos').addEventListener('click', async () => {
       !navigator.canShare?.({ files: [state.exportFile] })
     )
       throw new Error('file sharing unavailable');
-    await navigator.share({ files: [state.exportFile], title: 'FondVidéo' });
+    await navigator.share({ files: [state.exportFile], title: 'SCELYO Studio' });
     $('exportInfo').textContent =
       'Dans le menu iPhone, choisis « Enregistrer la vidéo » pour l’ajouter à Photos.';
   } catch (e) {
