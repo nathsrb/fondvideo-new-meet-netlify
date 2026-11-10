@@ -45,6 +45,7 @@ const initial = () => ({
   style: 'viral',
   size: 8.2,
   y: 76,
+  x: 50,
   enabled: true,
 });
 const byId = id => document.getElementById(id);
@@ -129,7 +130,7 @@ export function drawCaption(ctx, time, w, h, model) {
     const total =
       line.reduce((a, v) => a + v.tw, 0) +
       Math.max(0, line.length - 1) * font * 0.28;
-    let x = w / 2 - total / 2;
+    let x = (w * (model.x ?? 50)) / 100 - total / 2;
     line.forEach(word => {
       const focus = word.j === active,
         p =
@@ -717,6 +718,45 @@ export function createCaptionStudio({
   refresh();
   return {
     render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
+    activeGroup: time => {
+      if (!state.enabled) return null;
+      const index=state.words.findIndex(word=>time>=word.start && time<word.end);
+      if(index<0)return null;
+      const begin=Math.floor(index/4)*4;
+      const group=state.words.slice(begin,begin+4);
+      return {
+        begin, length:group.length,
+        text:group.map(w=>w.text).join(' '),
+        start:group[0].start,end:group.at(-1).end,
+        x:state.x??50,y:state.y,size:state.size,style:state.style
+      };
+    },
+    replaceGroup: (begin,length,text) => {
+      const group=state.words.slice(begin,begin+length);
+      if(!group.length || !text.trim())return false;
+      const tokens=wordsOf(text);
+      if(tokens.length===group.length){
+        group.forEach((word,index)=>word.text=tokens[index]);
+      }else{
+        const first=group[0].start,end=group.at(-1).end;
+        state.words.splice(begin,length,...distribute(tokens,first,end));
+      }
+      refresh();repaint();
+      report('Sous-titre modifié directement depuis l’aperçu.');
+      return true;
+    },
+    movePosition: (x,y) => {
+      state.x=Math.max(8,Math.min(92,x));
+      state.y=Math.max(12,Math.min(90,y));
+      byId('capPosition').value=String(state.y);
+      repaint();
+    },
+    setStyle: value => {
+      if(!catalog.some(style=>style.id===value))return;
+      state.style=value;
+      refresh();repaint();
+    },
+    styles: catalog.map(style=>({id:style.id,name:style.name})),
     editAtTime: time => {
       const index = state.words.findIndex(w => time>=w.start && time<w.end);
       if(index < 0) return false;
