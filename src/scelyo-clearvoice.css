@@ -1,0 +1,31 @@
+/* SCELYO ClearVoice – preview only */
+.scelyo-clearvoice-prejoin,.scelyo-clearvoice-panel{
+  color:#ecedff;background:linear-gradient(135deg,#181f36,#111a2d);
+  border:1px solid #8b82c95e;border-radius:18px;padding:17px;
+}
+.scelyo-clearvoice-prejoin{margin:16px 0}
+.scelyo-clearvoice-prejoin-header,.scelyo-clearvoice-panel-header{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px;
+}
+.scelyo-clearvoice-headline{display:flex;align-items:center;gap:10px}
+.scelyo-clearvoice-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;color:#d2bdff;background:#9e86f22a}
+.scelyo-clearvoice-headline strong{font-size:15px;display:block}
+.scelyo-clearvoice-headline small{font-size:11px;color:#a6afd2}
+.scelyo-clearvoice-status{font-size:11px;color:#abcaa9}
+.scelyo-clearvoice-option{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:12px 0;cursor:pointer}
+.scelyo-clearvoice-option>span{display:flex;flex-direction:column;gap:4px}
+.scelyo-clearvoice-option strong{font-size:13px}
+.scelyo-clearvoice-option small{color:#a1accb;font-size:11px;line-height:1.5}
+.scelyo-clearvoice-option input[type=checkbox]{width:18px;height:18px;accent-color:#a58afa;flex:none;cursor:pointer}
+.scelyo-clearvoice-option input:disabled{opacity:.5;cursor:not-allowed}
+.scelyo-clearvoice-level{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#e9e7ff;font-size:12px;margin-top:14px}
+.scelyo-clearvoice-level select{min-width:125px;max-width:55%;background:#28324f;color:#fff;border:1px solid #6d7294;border-radius:9px;padding:9px}
+.scelyo-clearvoice-level select:disabled{opacity:.55}
+.scelyo-clearvoice-note{font-size:11px!important;line-height:1.5!important;color:#a3acc6!important;margin:12px 0 0!important}
+.scelyo-clearvoice-panel{margin:12px 0 14px}
+.scelyo-clearvoice-close{display:grid;place-items:center;width:32px;height:32px;border:1px solid #ffffff20;border-radius:9px;background:#ffffff0c;color:#e9e7ff;cursor:pointer}
+@media(max-width:520px){
+ .scelyo-clearvoice-prejoin,.scelyo-clearvoice-panel{padding:14px}
+ .scelyo-clearvoice-level{align-items:flex-start;flex-direction:column}
+ .scelyo-clearvoice-level select{max-width:100%;width:100%}
+}

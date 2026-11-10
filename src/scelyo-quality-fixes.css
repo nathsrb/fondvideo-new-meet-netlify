@@ -1,0 +1,37 @@
+/* SCELYO Live: accessible full-screen exit, recording soundtrack choice, host controls */
+.scelyo-fullscreen-exit{
+  position:fixed!important;z-index:2147483647!important;top:max(18px,env(safe-area-inset-top));
+  right:max(18px,env(safe-area-inset-right));
+  display:flex;gap:9px;align-items:center;justify-content:center;
+  min-height:49px;padding:12px 16px;border:2px solid #d8cafc;
+  background:#141b32f5;color:#fff;box-shadow:0 12px 50px #000b;
+  border-radius:13px;font-size:13px;font-weight:750;cursor:pointer;
+}
+.scelyo-fullscreen-exit span{font-size:10px;color:#bbb7d9;border:1px solid #817b9f;padding:3px 5px;border-radius:5px}
+.scelyo-fullscreen-exit:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.program-stage.stage-fullscreen .program-screen{position:relative!important}
+.program-stage.stage-fullscreen .stage-exit{top:80px;right:20px;z-index:30}
+.scelyo-record-music-choice{
+  display:inline-flex!important;align-items:center;gap:10px;padding:10px 12px;
+  color:#eef0ff;background:linear-gradient(110deg,#28243c,#1b273f);
+  border:1px solid #8177bb;border-radius:12px;cursor:pointer;
+}
+.scelyo-record-music-choice input{width:19px;height:19px;accent-color:#aa93fa;flex:none;cursor:pointer}
+.scelyo-record-music-choice>svg{color:#b3a0fc;flex:none}
+.scelyo-record-music-choice span{display:flex;flex-direction:column;gap:4px}
+.scelyo-record-music-choice b{font-size:12px}
+.scelyo-record-music-choice small{font-size:10px;line-height:1.45;color:#abb4d2}
+.scelyo-record-music-choice:has(input:disabled){opacity:.65;cursor:default}
+.scelyo-host-security{margin:14px 0;padding:15px;border-radius:13px;background:#1b2943;border:1px solid #7d83b455}
+.scelyo-host-security>strong{display:flex;align-items:center;gap:9px;font-size:14px;color:#d3c8ff;margin-bottom:12px}
+.scelyo-host-security label{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #fff1;cursor:pointer}
+.scelyo-host-security label span{display:flex;flex-direction:column;gap:3px}
+.scelyo-host-security label b{font-size:12px;color:#f0edff}
+.scelyo-host-security label small{font-size:10.5px;color:#abb8d2;line-height:1.4}
+.scelyo-host-security input{width:18px;height:18px;accent-color:#aa93fa;flex:none}
+.scelyo-host-security p{font-size:11px;color:#adb7d0;line-height:1.5;margin:12px 0 0}
+@media(max-width:620px){
+  .scelyo-fullscreen-exit{right:10px;top:max(10px,env(safe-area-inset-top));padding:10px 12px;min-height:44px;font-size:12px}
+  .scelyo-fullscreen-exit span{display:none}
+  .scelyo-record-music-choice{flex:1 1 100%}
+}
