@@ -1363,20 +1363,26 @@ function App() {
     try {
       const hadMusic = Boolean(musicRef.current);
       const selectedWithMusic = hadMusic && recordIncludeMusic;
-      const { stream, alternateStream, cleanup, fallback } = recordCanvasAndAudio(mode, selectedWithMusic);
+      const { stream, alternateStream, cleanup, fallback, directMicRecording } =
+        recordCanvasAndAudio(mode, selectedWithMusic);
+      if (directMicRecording) {
+        toast('Capture audio naturelle : micro enregistré directement, sans traitement vocal supplémentaire.');
+      }
       if(fallback)toast('Capture directe iPhone plus stable : les effets virtuels et changements automatiques d’intervenant ne seront pas inclus dans ce fichier.');
       const types =
         mode === 'video'
           ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm']
-          : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
+          : /iPhone|iPad|iPod|Safari(?!.*Chrome)/i.test(navigator.userAgent)
+            ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+            : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
       const rate=quality==='720'?2600000:5500000;
       let recorder:MediaRecorder|null=null;
       let recorderError:unknown=null;
       for(const candidate of [...types.filter(t=>MediaRecorder.isTypeSupported(t)),'']){
         try{
           recorder=new MediaRecorder(stream,mode==='video'
-            ?{...(candidate?{mimeType:candidate}:{}),videoBitsPerSecond:rate,audioBitsPerSecond:128000}
-            :{...(candidate?{mimeType:candidate}:{}),audioBitsPerSecond:128000});
+            ?{...(candidate?{mimeType:candidate}:{}),videoBitsPerSecond:rate,audioBitsPerSecond:192000}
+            :{...(candidate?{mimeType:candidate}:{}),audioBitsPerSecond:192000});
           break;
         }catch(e){recorderError=e;}
       }
@@ -1390,7 +1396,7 @@ function App() {
         try {
           alternateRecorder = new MediaRecorder(alternateStream, {
             ...(recorder.mimeType ? { mimeType: recorder.mimeType } : {}),
-            audioBitsPerSecond: 128000,
+            audioBitsPerSecond: 192000,
           });
           alternateRecorder.ondataavailable = event => {
             if (event.data.size) alternateChunks.push(event.data);
@@ -1474,9 +1480,9 @@ function App() {
       setUploadedLink('');
       setSeconds(0);
       setRecordMode(mode);
-      recorder.start(1000);
+      recorder.start(); // one continuous segment avoids fragmented output
       if (alternateRecorder) {
-        try { alternateRecorder.start(1000); }
+        try { alternateRecorder.start(); } // continuous audio output
         catch {
           alternateRecorder = null;
           toast('Le navigateur ne permet pas deux versions simultanées. La version choisie avant la capture sera conservée.');
@@ -1679,7 +1685,9 @@ function App() {
             </fieldset>
             <p className="scelyo-rec-setup-footnote">
               {pendingRecordMode==='audio' && musicName
-                ? 'Pour un enregistrement audio, SCELYO essaiera de conserver les deux versions afin de te laisser choisir après la capture.'
+                ? (/iPhone|iPad|iPod/i.test(navigator.userAgent)
+                  ? 'Pour préserver la qualité sur iPhone, seule la version choisie avant la capture sera enregistrée.'
+                  : 'Sur ordinateur, SCELYO peut conserver deux versions audio. Si le navigateur ne le permet pas, ton choix initial est préservé.')
                 : 'Tu pourras télécharger le fichier en un clic après l’arrêt. Pour la vidéo, choisis la musique avant la capture.'}
             </p>
             <div className="scelyo-rec-setup-actions">
