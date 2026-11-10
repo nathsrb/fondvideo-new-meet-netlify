@@ -29,6 +29,10 @@ async function rateLimit(request: Request) {
 }
 
 export default async function handler(request: Request) {
+  // Diagnostic endpoint avoids posting real audio to check configuration.
+  if (request.method === 'GET') {
+    return json({available:Boolean(globalThis.Netlify?.env.get('GROQ_API_KEY')),model:'whisper-large-v3'});
+  }
   if (request.method !== 'POST') return json({ error: 'Méthode non autorisée.' }, 405);
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) {
@@ -80,4 +84,4 @@ export default async function handler(request: Request) {
     return json({ error: 'Transcription momentanément indisponible.' }, 503);
   }
 }
-export const config: Config = { path: '/api/transcribe' };
+export const config: Config = { path: '/scelyo-transcribe' };
