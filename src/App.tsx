@@ -330,6 +330,34 @@ function App() {
     const t = window.setInterval(() => setSeconds(s => s + 1), 1000);
     return () => window.clearInterval(t);
   }, [recording]);
+  useEffect(() => {
+    if (!joined) return;
+    // Keep the display awake while SCELYO is visible where Wake Lock exists.
+    // This does not grant background camera/microphone access on iOS.
+    let cancelled=false;
+    let lock: {release:()=>Promise<void>} | null=null;
+    const request=async()=>{
+      if(document.visibilityState!=='visible')return;
+      const wakeLock=(navigator as Navigator & {wakeLock?:{request:(type:'screen')=>Promise<{release:()=>Promise<void>}>}}).wakeLock;
+      if(!wakeLock)return;
+      try{
+        const acquired=await wakeLock.request('screen');
+        if(cancelled){void acquired.release();return;}
+        lock=acquired;
+      }catch{/* unavailable or denied; meeting can continue in foreground */}
+    };
+    const visibility=()=>{
+      if(document.visibilityState==='visible')void request();
+      else {if(lock){void lock.release().catch(()=>{});lock=null;}}
+    };
+    document.addEventListener('visibilitychange',visibility);
+    void request();
+    return ()=>{
+      cancelled=true;
+      document.removeEventListener('visibilitychange',visibility);
+      if(lock)void lock.release().catch(()=>{});
+    };
+  },[joined]);
 
   useEffect(()=>{
     if(!joined)return;
@@ -1815,6 +1843,14 @@ function App() {
               <button type="button" onClick={()=>setPendingRecordMode(null)} aria-label="Annuler l'enregistrement"><X size={22}/></button>
             </div>
             <p>Choisis ce que le fichier final doit contenir. Le micro naturel est privilégié pour la capture, sans effet vocal supplémentaire. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
+            {/iPhone|iPad|iPod/i.test(navigator.userAgent) && (
+              <p className="scelyo-ios-background-note">
+                Sur iPhone, garde SCELYO au premier plan et l’écran allumé pendant la vidéo :
+                iOS peut suspendre la caméra, le micro et l’enregistrement quand tu verrouilles
+                le téléphone ou quittes le navigateur. Le maintien de l’écran éveillé est
+                demandé automatiquement lorsque le navigateur le permet.
+              </p>
+            )}
             {pendingRecordMode==='video' && (
               <fieldset className="scelyo-rec-music-options">
                 <legend>Qualité de la vidéo enregistrée</legend>
