@@ -279,7 +279,7 @@ function App() {
     api.get('/api/drive/config')
       .then(result => {
         const configured = result.data?.clientId;
-        if(active && typeof configured === 'string' && configured.endsWith('.apps.googleusercontent.com')) {
+        if(active && !configuredGoogleClientId && typeof configured === 'string' && configured.endsWith('.apps.googleusercontent.com')) {
           setClientId(configured);
           localStorage.setItem('nexa_google_client', configured);
         }
@@ -1653,7 +1653,7 @@ function App() {
     return response.json();
   }
 
-  async function uploadToDrive(rec: Recording) {
+  async function uploadToDrive(rec: Pick<Recording, 'blob' | 'name'>) {
     if (!tokenRef.current) {
       setShowSettings(true);
       toast('Connecte ton compte Google Drive avant de sauvegarder.');
