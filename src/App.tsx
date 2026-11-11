@@ -209,6 +209,10 @@ function App() {
   const [musicTime, setMusicTime] = useState(0);
   const [musicDuration, setMusicDuration] = useState(0);
   const [musicBusy, setMusicBusy] = useState(false);
+  const [driveMusicOpen, setDriveMusicOpen] = useState(false);
+  const [driveMusicBusy, setDriveMusicBusy] = useState(false);
+  const [driveMusicFiles, setDriveMusicFiles] = useState<Array<{id:string;name:string;size?:string}>>([]);
+  const driveMusicTokenRef=useRef('');
   const [noiseReduction, setNoiseReduction] = useState(false);
   const [noiseStrength, setNoiseStrength] = useState(2);
   const [noiseAttenuation, setNoiseAttenuation] = useState(0);
@@ -610,6 +614,50 @@ function App() {
       .flatMap(pc => pc.getSenders())
       .filter(sender => sender.track?.kind === 'audio');
     await Promise.allSettled(senders.map(sender => sender.replaceTrack(track)));
+  }
+
+  async function listDriveMusic(token:string){
+    setDriveMusicBusy(true);
+    try{
+      const q=encodeURIComponent("trashed = false and (mimeType = 'audio/mpeg' or mimeType = 'audio/mp4' or mimeType = 'audio/wav' or mimeType = 'audio/x-wav' or mimeType = 'audio/aac' or name contains '.mp3' or name contains '.m4a' or name contains '.wav')");
+      const response=await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=nextPageToken,files(id,name,size,mimeType)&page_size=100&orderBy=modifiedTime%20desc',{headers:{Authorization:'Bearer '+token}});
+      if(!response.ok)throw Error('Accès aux fichiers Drive refusé ('+response.status+').');
+      const data=await response.json();
+      setDriveMusicFiles((data.files||[]).filter((f:{name:string})=>/\.(mp3|wav|m4a|aac)$/i.test(f.name)));
+      setDriveMusicOpen(true);
+    }catch(error){toast('Import Drive impossible : '+readableError(error));}
+    finally{setDriveMusicBusy(false);}
+  }
+
+  function openDriveMusic(){
+    if(!clientId.trim().endsWith('.apps.googleusercontent.com')){toast('Configure d’abord la connexion Google dans les paramètres.');setShowSettings(true);return;}
+    const google=(window as any).google;
+    if(!google?.accounts?.oauth2){toast('Google est indisponible. Recharge SCELYO.');return;}
+    if(driveMusicTokenRef.current){void listDriveMusic(driveMusicTokenRef.current);return;}
+    const oauth=google.accounts.oauth2.initTokenClient({
+      client_id:clientId.trim(),
+      scope:'https://www.googleapis.com/auth/drive.readonly',
+      callback:(response:{access_token?:string;error?:string})=>{
+        if(!response.access_token){toast('Autorisation de lecture Drive nécessaire.');return;}
+        driveMusicTokenRef.current=response.access_token;
+        void listDriveMusic(response.access_token);
+      }
+    });
+    oauth.requestAccessToken({prompt:'consent'});
+  }
+
+  async function importDriveMusic(id:string,name:string){
+    if(!driveMusicTokenRef.current)return;
+    setDriveMusicBusy(true);
+    try{
+      const response=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media',{headers:{Authorization:'Bearer '+driveMusicTokenRef.current}});
+      if(!response.ok)throw Error('Téléchargement Drive impossible ('+response.status+').');
+      const blob=await response.blob();
+      if(blob.size>150*1024*1024)throw Error('Fichier supérieur à 150 Mo.');
+      await loadMusic(new File([blob],name,{type:blob.type||'audio/mpeg'}));
+      setDriveMusicOpen(false);
+    }catch(error){toast('Impossible de charger la musique : '+readableError(error));}
+    finally{setDriveMusicBusy(false);}
   }
 
   async function loadMusic(file: File | null) {
@@ -2368,6 +2416,21 @@ function App() {
                       void loadMusic(file);
                     }}/>
                 </label>
+                <button type="button" className="scelyo-music-upload" disabled={driveMusicBusy||musicBusy} onClick={openDriveMusic}>
+                  <CloudUpload size={19}/><span>{driveMusicBusy?'Chargement de Drive…':'Importer depuis Google Drive'}</span>
+                  <small>MP3 · WAV · M4A · AAC</small>
+                </button>
+                {driveMusicOpen && (
+                  <div className="scelyo-drive-music-list">
+                    <div><strong>Mes fichiers audio Drive</strong><button type="button" onClick={()=>setDriveMusicOpen(false)}>Fermer</button></div>
+                    {driveMusicFiles.length===0 && <p>Aucun fichier audio compatible trouvé dans les 100 fichiers les plus récents.</p>}
+                    {driveMusicFiles.map(file=>(
+                      <button type="button" key={file.id} disabled={driveMusicBusy||musicBusy} onClick={()=>void importDriveMusic(file.id,file.name)}>
+                        <FileAudio size={16}/>{file.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {musicName ? (
                   <div className="scelyo-music-player">
                     <div className="scelyo-music-track"><div><Music2 size={18}/><span title={musicName}>{musicName}</span></div><span className={musicPlaying ? 'scelyo-music-live' : 'scelyo-music-paused'}>{musicPlaying ? '● DIFFUSION' : 'PRÊT / PAUSE'}</span></div>
