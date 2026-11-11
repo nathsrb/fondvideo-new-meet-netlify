@@ -1583,9 +1583,10 @@ function App() {
         const rvfc=(monitor as HTMLVideoElement & {requestVideoFrameCallback?:(cb:(now:number,metadata:unknown)=>void)=>number}).requestVideoFrameCallback;
         if(rvfc){
           const onFrame=()=>{
-            if(recorder?.state!=='recording')return;
-            lastVideoFrameAt=Date.now();seenVideoFrame=true;
-            rvfc.call(monitor,onFrame);
+            if(recorder?.state==='recording'){
+              lastVideoFrameAt=Date.now();seenVideoFrame=true;
+            }
+            if(recorder?.state!=='inactive')rvfc.call(monitor,onFrame);
           };
           void monitor.play().then(()=>rvfc.call(monitor,onFrame)).catch(()=>{});
         }
