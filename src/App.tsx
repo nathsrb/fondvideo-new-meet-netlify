@@ -176,8 +176,9 @@ function App() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const configuredGoogleClientId=String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   const [clientId, setClientId] = useState(
-    localStorage.getItem('nexa_google_client') || ''
+    configuredGoogleClientId || localStorage.getItem('nexa_google_client') || ''
   );
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveEmail, setDriveEmail] = useState('');
@@ -266,7 +267,7 @@ function App() {
     api.get('/api/drive/config')
       .then(result => {
         const configured = result.data?.clientId;
-        if(active && typeof configured === 'string' && configured.endsWith('.apps.googleusercontent.com')) {
+        if(active && !configuredGoogleClientId && typeof configured === 'string' && configured.endsWith('.apps.googleusercontent.com')) {
           setClientId(configured);
           localStorage.setItem('nexa_google_client', configured);
         }
@@ -1453,7 +1454,7 @@ function App() {
     return response.json();
   }
 
-  async function uploadToDrive(rec: Recording) {
+  async function uploadToDrive(rec: Pick<Recording, 'blob' | 'name'>) {
     if (!tokenRef.current) {
       setShowSettings(true);
       toast('Connecte ton compte Google Drive avant de sauvegarder.');
@@ -1463,7 +1464,9 @@ function App() {
     setDriveStatus('uploading');
     setNotice('');
     try {
-      let folderId = localStorage.getItem('nexa_drive_folder') || '';
+      const folderQuery=encodeURIComponent("trashed = false and name = 'FondVidéo Meet - Enregistrements' and mimeType = 'application/vnd.google-apps.folder'");
+      const folders=await driveFetch('https://www.googleapis.com/drive/v3/files?q='+folderQuery+'&fields=files(id,name)&pageSize=20');
+      let folderId=folders.files?.[0]?.id || '';
       if (!folderId) {
         const folder = await driveFetch(
           'https://www.googleapis.com/drive/v3/files?fields=id,name',
@@ -1477,7 +1480,6 @@ function App() {
           }
         );
         folderId = folder.id;
-        localStorage.setItem('nexa_drive_folder', folderId);
       }
       const meta={name:rec.name,mimeType:rec.blob.type,parents:[folderId]};
       const session=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink',{
@@ -2216,6 +2218,7 @@ function App() {
                   </div>
                 </article>)}
               </div>}
+            {uploadedLink && <p className="drive-transfer success">Fichier envoyé · <a href={uploadedLink} target="_blank" rel="noreferrer">Voir dans Drive</a></p>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
               <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire pour cet export manuel.</p>
