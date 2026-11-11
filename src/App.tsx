@@ -187,6 +187,8 @@ function App() {
 
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [exportPhase, setExportPhase] = useState<'idle'|'finalizing'|'sharing'>('idle');
+  const [exportProgress, setExportProgress] = useState<number|null>(null);
   const [micTestRecording, setMicTestRecording] = useState(false);
   const [micTestUrl, setMicTestUrl] = useState('');
   const [recordMode, setRecordMode] = useState<'video' | 'audio'>('video');
@@ -435,13 +437,22 @@ function App() {
   }
 
   async function saveVideoToPhotos(item:Pick<SavedRecording,'name'|'blob'>) {
-    const file=new File([item.blob],item.name,{type:item.blob.type || 'video/mp4'});
-    if(navigator.share && navigator.canShare?.({files:[file]})) {
-      try { await navigator.share({files:[file],title:item.name}); }
-      catch(error){if((error as Error)?.name!=='AbortError')toast('Partage impossible : '+readableError(error));}
-    } else {
-      downloadRecording(item);
-      toast('Le partage vers Photos est indisponible. Ouvre la vidéo et utilise Partager > Enregistrer la vidéo.');
+    // The browser does not expose progress of the native Photos share sheet.
+    // Show truthful preparation progress, then an indeterminate sharing state.
+    setExportPhase('sharing');
+    setExportProgress(null);
+    try {
+      const file=new File([item.blob],item.name,{type:item.blob.type || 'video/mp4'});
+      if(navigator.share && navigator.canShare?.({files:[file]})) {
+        try { await navigator.share({files:[file],title:item.name}); }
+        catch(error){if((error as Error)?.name!=='AbortError')toast('Partage impossible : '+readableError(error));}
+      } else {
+        downloadRecording(item);
+        toast('Le partage vers Photos est indisponible. Ouvre la vidéo et utilise Partager > Enregistrer la vidéo.');
+      }
+    } finally {
+      setExportPhase('idle');
+      setExportProgress(null);
     }
   }
 
@@ -1537,6 +1548,8 @@ function App() {
         if (e.data.size) chunks.push(e.data);
       };
       recorder.onstop = async () => {
+        setExportPhase('finalizing');
+        setExportProgress(null);
         if (alternateRecorder && alternateRecorder.state === 'recording') {
           await new Promise<void>(resolve => {
             alternateRecorder!.addEventListener('stop', () => resolve(), { once: true });
@@ -1551,6 +1564,7 @@ function App() {
         if(!blob.size){
           setRecording(false);
           setRecordReady(null);
+          setExportPhase('idle');
           recorderRef.current=null;
           toast('Enregistrement vide : aucun fichier vidéo exploitable. Essaie 720p ou un autre navigateur.');
           return;
@@ -1586,6 +1600,7 @@ function App() {
           }
         }
         setRecording(false);
+        setExportPhase('idle');
         void keepRecording(blob,filename);
         void emit('recording', { active: false }).catch(() => {});
         // Do not download or upload anything without a user click.
@@ -1606,7 +1621,11 @@ function App() {
       setUploadedLink('');
       setSeconds(0);
       setRecordMode(mode);
-      recorder.start(2000); // periodic chunks reduce Safari memory pressure
+      // Safari's fragmented MP4 chunks may have timestamp/index discontinuities:
+      // those can manifest as a video that freezes until the user seeks.
+      // Request one complete MP4 on iOS; retain periodic chunks elsewhere.
+      if(nativeIOS && mode==='video') recorder.start();
+      else recorder.start(2000);
       if (alternateRecorder) {
         try { alternateRecorder.start(); } // continuous audio output
         catch {
@@ -1619,6 +1638,7 @@ function App() {
     } catch (e) {
       stopCaptureRef.current?.();
       setRecording(false);
+      setExportPhase('idle');
       toast('Enregistrement impossible : ' + readableError(e));
     }
   }
@@ -2456,6 +2476,7 @@ function App() {
                       </p>
                     )}
                     <button type="button" className="scelyo-download-main"
+                      disabled={exportPhase!=='idle'}
                       onClick={()=>recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
                         ? void saveVideoToPhotos(chosenRecording)
                         : downloadRecording(chosenRecording)}>
@@ -2467,6 +2488,13 @@ function App() {
                       </span>
                       <ArrowRight size={22}/>
                     </button>
+                    {exportPhase!=='idle' && (
+                      <div className="scelyo-export-status" role="status" aria-live="polite">
+                        <span>{exportPhase==='finalizing'?'Finalisation de la vidéo…':'Partage iOS ouvert : choisis Enregistrer la vidéo dans Photos'}</span>
+                        <progress max="100" {...(exportProgress!==null?{value:exportProgress}:{})}/>
+                        <small>{exportProgress!==null?`${exportProgress}%`:'iOS ne fournit pas de pourcentage pour la copie vers Photos.'}</small>
+                      </div>
+                    )}
                     <div className="scelyo-download-more">
                       <button type="button" onClick={()=>setLibraryOpen(true)} disabled={savingLocal}>
                         <Library size={15}/>{savingLocal?'Sauvegarde locale…':'Ouvrir SCELYO Vault'}
