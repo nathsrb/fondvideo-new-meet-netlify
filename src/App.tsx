@@ -433,6 +433,17 @@ function App() {
     } finally { setImportingLocal(false); }
   }
 
+  async function saveVideoToPhotos(item:Pick<SavedRecording,'name'|'blob'>) {
+    const file=new File([item.blob],item.name,{type:item.blob.type || 'video/mp4'});
+    if(navigator.share && navigator.canShare?.({files:[file]})) {
+      try { await navigator.share({files:[file],title:item.name}); }
+      catch(error){if((error as Error)?.name!=='AbortError')toast('Partage impossible : '+readableError(error));}
+    } else {
+      downloadRecording(item);
+      toast('Le partage vers Photos est indisponible. Ouvre la vidéo et utilise Partager > Enregistrer la vidéo.');
+    }
+  }
+
   function downloadRecording(item:Pick<SavedRecording,'name'|'blob'>) {
     const url=URL.createObjectURL(item.blob);
     const link=document.createElement('a');link.href=url;link.download=item.name;
@@ -1285,8 +1296,8 @@ function App() {
       format === 'original' ? '16:9' : format,
       quality === '2160' ? '1080' : quality
     );
-    canvas.width = dimensions.width;
-    canvas.height = dimensions.height;
+    canvas.width = nativeIOS ? 16 : dimensions.width;
+    canvas.height = nativeIOS ? 9 : dimensions.height;
     const canvasCtx = canvas.getContext('2d')!;
     const videos = new Map<string, HTMLVideoElement>();
     const draw = () => {
@@ -1323,7 +1334,7 @@ function App() {
         canvasCtx.drawImage(v, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
       }
     };
-    draw();
+    if (mode === 'video' && !nativeIOS) draw();
     const interval = mode === 'video' && !nativeIOS ? window.setInterval(draw, 80) : 0;
     let videoStream: MediaStream | null = null;
     let fallback = false;
@@ -1460,7 +1471,8 @@ function App() {
           : /iPhone|iPad|iPod|Safari(?!.*Chrome)/i.test(navigator.userAgent)
             ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
             : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
-      const rate=quality==='720'?2600000:5500000;
+      const rate=/iPhone|iPad|iPod/i.test(navigator.userAgent)
+        ? 1800000 : quality==='720'?2600000:5500000;
       let recorder:MediaRecorder|null=null;
       let recorderError:unknown=null;
       for(const candidate of [...types.filter(t=>MediaRecorder.isTypeSupported(t)),'']){
@@ -1490,7 +1502,11 @@ function App() {
           alternateRecorder = null;
         }
       }
-      recorder.onerror=()=>toast('La capture vidéo a rencontré une erreur du navigateur. Essaie 720p.');
+      recorder.onerror=event=>{
+        console.warn('SCELYO recorder error',event);
+        toast('La capture a été interrompue par le navigateur. Essaie en 720p sans musique.');
+        if(recorder?.state==='recording'){try{recorder.stop()}catch{/* already stopped */}}
+      };
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = e => {
         if (e.data.size) chunks.push(e.data);
@@ -1565,7 +1581,7 @@ function App() {
       setUploadedLink('');
       setSeconds(0);
       setRecordMode(mode);
-      recorder.start(); // one continuous segment avoids fragmented output
+      recorder.start(2000); // periodic chunks reduce Safari memory pressure
       if (alternateRecorder) {
         try { alternateRecorder.start(); } // continuous audio output
         catch {
