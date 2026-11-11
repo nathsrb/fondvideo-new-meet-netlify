@@ -147,14 +147,24 @@ function StreamAudio({stream,onPlaybackBlocked}:{stream:MediaStream|null;onPlayb
     element.volume=1;
     const play=()=>{
       if(!stream?.getAudioTracks().some(track=>track.readyState==='live'))return;
-      void element.play().catch(()=>{if(!cancelled)onPlaybackBlocked(true);});
+      void element.play().then(()=>{
+        if(!cancelled)onPlaybackBlocked(false);
+      }).catch(()=>{if(!cancelled)onPlaybackBlocked(true);});
     };
+    const resumeWhenVisible=()=>{if(document.visibilityState==='visible')play();};
+    const onUnexpectedPause=()=>{if(!cancelled && stream?.getAudioTracks().length)onPlaybackBlocked(true);};
     const audioTracks=stream?.getAudioTracks()||[];
     for(const track of audioTracks)track.addEventListener('unmute',play);
+    element.addEventListener('pause',onUnexpectedPause);
+    document.addEventListener('visibilitychange',resumeWhenVisible);
+    window.addEventListener('focus',resumeWhenVisible);
     play();
     return()=>{
       cancelled=true;
       for(const track of audioTracks)track.removeEventListener('unmute',play);
+      element.removeEventListener('pause',onUnexpectedPause);
+      document.removeEventListener('visibilitychange',resumeWhenVisible);
+      window.removeEventListener('focus',resumeWhenVisible);
       element.pause();
       element.srcObject=null;
     };
@@ -181,6 +191,7 @@ function App() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [audioNeedsGesture, setAudioNeedsGesture] = useState(false);
+  const [audioDiagnostic, setAudioDiagnostic] = useState('');
   const [camOn, setCamOn] = useState(true);
   const [bg, setBg] = useState('original');
   const [format, setFormat] = useState('original');
@@ -812,9 +823,14 @@ function App() {
       streamsRef.current = { ...streamsRef.current, [id]: stream };
       setStreams({ ...streamsRef.current });
       if (evt.track.kind === 'audio') {
-        evt.track.addEventListener('unmute', () => {
+        evt.track.addEventListener('ended', () => {
           const current=streamsRef.current[id];
-          if(current)setStreams({ ...streamsRef.current, [id]: new MediaStream(current.getTracks()) });
+          if(!current)return;
+          streamsRef.current = {
+            ...streamsRef.current,
+            [id]: new MediaStream(current.getTracks().filter(track=>track.readyState!=='ended')),
+          };
+          setStreams({ ...streamsRef.current });
         }, {once:true});
       }
     };
@@ -1222,6 +1238,37 @@ function App() {
       : 'Lecture audio lancée. Si tu n’entends rien, vérifie le micro et la sortie audio des deux appareils.');
   }
 
+  async function diagnoseRemoteAudio() {
+    const connections=[...pcs.current.entries()];
+    if(!connections.length){
+      setAudioDiagnostic('Aucune connexion participant. Fais rejoindre le téléphone, puis réessaie.');
+      return;
+    }
+    const results=await Promise.all(connections.map(async([id,pc])=>{
+      const name=members.find(member=>member.id===id)?.name || 'Participant';
+      const receiver=pc.getReceivers().find(item=>item.track?.kind==='audio');
+      const track=receiver?.track;
+      const status=pc.connectionState;
+      if(status==='failed'||status==='disconnected'||status==='closed')
+        return name+' : connexion '+status+'. Rejoins à nouveau la réunion ou vérifie le réseau.';
+      if(!track)return name+' : aucune piste audio reçue (micro/connexion à vérifier).';
+      if(track.readyState==='ended')return name+' : piste audio interrompue.';
+      if(track.muted)return name+' : piste audio distante muette (micro ou réseau).';
+      const audio=[...document.querySelectorAll<HTMLAudioElement>('audio[data-scelyo-remote-audio]')]
+        .find(element=>(element.srcObject as MediaStream|null)?.getAudioTracks().some(item=>item.id===track.id));
+      if(!audio||audio.paused)return name+' : lecture audio suspendue. Clique sur Activer le son.';
+      try{
+        const stats=await pc.getStats();
+        const inbound=Array.from(stats.values()).filter((item:any)=>
+          item.type==='inbound-rtp'&&(item.kind==='audio'||item.mediaType==='audio'));
+        if(inbound.length && inbound.every((item:any)=>(item.bytesReceived||0)===0))
+          return name+' : aucun paquet audio reçu. Vérifie le micro et la connexion.';
+      }catch{/* Browser stats unavailable: report track state instead. */}
+      return name+' : flux audio connecté. Vérifie la sortie audio de cet appareil si tu n’entends rien.';
+    }));
+    setAudioDiagnostic(results.join(' · '));
+  }
+
   function toggleMic() {
     (rawRef.current || localRef.current)
       ?.getAudioTracks()
@@ -1346,7 +1393,7 @@ function App() {
     }
   }
 
-  function recordCanvasAndAudio(mode: 'video' | 'audio', includeMusic: boolean) {
+  async function recordCanvasAndAudio(mode: 'video' | 'audio', includeMusic: boolean) {
     // Prefer the unprocessed microphone for recordings. Live ClearVoice,
     // the WebRTC music path and compression have already shaped that track:
     // running those processors through a second recording compressor can
@@ -1360,7 +1407,11 @@ function App() {
     const hasMusic = Boolean(musicAudio && musicAudio.readyState === 'live');
     // Even if music is loaded, an audio-only recording without soundtrack
     // must stay on the ORIGINAL native microphone track.
-    const directMicRecording = Boolean(mic && !remoteAudio.length && !includeMusic);
+    // Desktop recordings always keep a live mixer: a phone may connect or
+    // start sending audio AFTER recording has begun. A direct mic-only track
+    // cannot be expanded later, silently excluding the remote participant.
+    // Preserve the native direct-mic path for solo iOS recording stability.
+    const directMicRecording = Boolean(nativeIOS && mic && !remoteAudio.length && !members.length && !includeMusic);
     // iPhone: reuse the already-running Live music mixer instead of creating
     // a second AudioContext and two more copies of the microphone.
     const reuseLiveMix = nativeIOS && includeMusic && hasMusic && !remoteAudio.length;
@@ -1377,7 +1428,8 @@ function App() {
     if (needsSecondaryMixer) {
       const ctx = new AudioContext({ latencyHint: 'playback' });
       audioContext = ctx;
-      void ctx.resume().catch(() => {});
+      await ctx.resume();
+      if(ctx.state!=='running')throw new Error('Mixage audio non démarré. Réactive le son et relance l’enregistrement.');
       mixedDestination = ctx.createMediaStreamDestination();
       voiceDestination = ctx.createMediaStreamDestination();
       const speech = ctx.createGain();
@@ -1638,7 +1690,7 @@ function App() {
       const hadMusic = Boolean(musicRef.current);
       const selectedWithMusic = hadMusic && recordIncludeMusic;
       const { stream, alternateStream, cleanup, fallback, directMicRecording } =
-        recordCanvasAndAudio(mode, selectedWithMusic);
+        await recordCanvasAndAudio(mode, selectedWithMusic);
       const nativeIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
       if(mode==='video' && nativeIOS && recordVideoQuality==='1080'){
         // Do not applyConstraints to the shared live camera during recording:
@@ -2571,6 +2623,8 @@ function App() {
               <div className="program-actions">
                 <button onClick={()=>setGallery(!gallery)}>{gallery?'Vue intervenant':'Vue mosaïque'}</button>
                 {members.length>0&&<button type="button" onClick={()=>void enableRemoteAudio()} title="Autoriser la lecture des voix des autres participants"><Volume2 size={16}/> {audioNeedsGesture?'Débloquer le son':'Activer le son'}</button>}
+                {members.length>0&&<button type="button" onClick={()=>void diagnoseRemoteAudio()} title="Vérifier la réception du microphone de chaque participant">Diagnostic audio</button>}
+                {audioDiagnostic&&<span role="status" aria-live="polite">{audioDiagnostic}</span>}
                 {pinned&&<button onClick={()=>pinParticipant(pinned)}>Suivi automatique</button>}
                 <button onClick={()=>setParticipantsOpen(!participantsOpen)}>Participants et modération</button>
               </div>
