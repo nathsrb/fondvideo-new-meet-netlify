@@ -164,6 +164,7 @@ function App() {
   const [bg, setBg] = useState('original');
   const [format, setFormat] = useState('original');
   const [quality, setQuality] = useState('1080');
+  const [recordVideoQuality, setRecordVideoQuality] = useState<'1080'|'original'>('1080');
   const [face, setFace] = useState('user');
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [cameraInfo, setCameraInfo] = useState('');
@@ -1356,10 +1357,9 @@ function App() {
           || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
         if (!track) throw new Error('Aucune caméra disponible pour enregistrer la vidéo.');
         const captureTrack = nativeIOS ? track.clone() : track;
-        if(nativeIOS) {
-          void captureTrack.applyConstraints({frameRate:{ideal:24,max:24},width:{ideal:1280},height:{ideal:720}})
-            .catch(()=>{/* iOS may ignore video constraints; keep native source */});
-        }
+        // Apply the requested resolution BEFORE starting MediaRecorder.
+        // "original" must not modify the camera track's dimensions.
+        // The 1080p choice requests Full HD if the camera/browser supports it.
         videoStream = new MediaStream([captureTrack]);
         fallback = true;
       }
@@ -1471,18 +1471,33 @@ function App() {
       const selectedWithMusic = hadMusic && recordIncludeMusic;
       const { stream, alternateStream, cleanup, fallback, directMicRecording } =
         recordCanvasAndAudio(mode, selectedWithMusic);
+      const nativeIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if(mode==='video' && nativeIOS && recordVideoQuality==='1080'){
+        const videoTrack=stream.getVideoTracks()[0];
+        if(videoTrack){
+          try{
+            await videoTrack.applyConstraints({
+              width:{ideal:1920},height:{ideal:1080},
+              frameRate:{ideal:24,max:30}
+            });
+          }catch{
+            toast('La caméra ne permet pas de forcer 1080p. Résolution native conservée.');
+          }
+        }
+      }
       if (directMicRecording) {
         toast('Capture audio naturelle : micro enregistré directement, sans traitement vocal supplémentaire.');
       }
-      if(fallback)toast('Capture directe iPhone plus stable : les effets virtuels et changements automatiques d’intervenant ne seront pas inclus dans ce fichier.');
+      if(fallback)toast('Capture caméra directe sur iPhone : qualité '+(recordVideoQuality==='1080'?'1080p demandée':'d’origine')+'. Les effets virtuels et changements d’intervenant ne seront pas inclus.');
       const types =
         mode === 'video'
           ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm']
           : /iPhone|iPad|iPod|Safari(?!.*Chrome)/i.test(navigator.userAgent)
             ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
             : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
-      const rate=/iPhone|iPad|iPod/i.test(navigator.userAgent)
-        ? 1800000 : quality==='720'?2600000:5500000;
+      const rate=nativeIOS
+        ? recordVideoQuality==='1080'?5500000:7000000
+        : quality==='720'?2600000:5500000;
       let recorder:MediaRecorder|null=null;
       let recorderError:unknown=null;
       for(const candidate of [...types.filter(t=>MediaRecorder.isTypeSupported(t)),'']){
@@ -1780,6 +1795,25 @@ function App() {
               <button type="button" onClick={()=>setPendingRecordMode(null)} aria-label="Annuler l'enregistrement"><X size={22}/></button>
             </div>
             <p>Choisis ce que le fichier final doit contenir. Le micro naturel est privilégié pour la capture, sans effet vocal supplémentaire. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
+            {pendingRecordMode==='video' && (
+              <fieldset className="scelyo-rec-music-options">
+                <legend>Qualité de la vidéo enregistrée</legend>
+                <label className={recordVideoQuality==='1080'?'selected':''}>
+                  <input type="radio" name="scelyo-record-quality"
+                    checked={recordVideoQuality==='1080'}
+                    onChange={()=>setRecordVideoQuality('1080')}/>
+                  <Video size={21}/><span><strong>1080p Full HD</strong>
+                    <small>Demande 1920 × 1080 si la caméra et Safari le permettent</small></span>
+                </label>
+                <label className={recordVideoQuality==='original'?'selected':''}>
+                  <input type="radio" name="scelyo-record-quality"
+                    checked={recordVideoQuality==='original'}
+                    onChange={()=>setRecordVideoQuality('original')}/>
+                  <Video size={21}/><span><strong>Qualité d’origine</strong>
+                    <small>Conserve la résolution réelle du flux caméra, sans la réduire</small></span>
+                </label>
+              </fieldset>
+            )}
             <fieldset className="scelyo-rec-music-options">
               <legend>Musique dans l’enregistrement</legend>
               <label className={!recordIncludeMusic?'selected':''}>
