@@ -14,6 +14,8 @@ import {
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { createCaptionStudio } from './caption-studio';
+import { createStudioAudioProcessor } from './audio-enhancement';
+import { createVisualTextEditor } from './visual-text';
 
 const $ = id => document.getElementById(id);
 const video = $('video');
@@ -52,10 +54,26 @@ const state = {
   exportObjectUrl: '',
   aacFallbackRegistered: false,
   exportProfile: 'balanced',
+  audioNoiseReduction: true,
+  audioVoiceEnhancement: true,
+  audioProfile: 'balanced',
   maskWorkA: null,
   maskWorkB: null,
   maskRefined: null,
 };
+const textEditor = createVisualTextEditor({
+  stage: $('stage'),
+  canvas,
+  getTime: () => state.demo ? 1.5 : video.currentTime,
+  getDuration: () => state.duration,
+  getCaption: () => captions,
+  redraw: () => draw(),
+  pause: () => { video.pause(); $('play').textContent = '▶'; },
+});
+function renderOverlays(ctx, time, width, height) {
+  captions.render(ctx, time, width, height);
+  textEditor.render(ctx, time, width, height);
+}
 const show = (id, yes = true) => $(id).classList.toggle('hidden', !yes);
 const fmtTime = s =>
   Number.isFinite(s)
@@ -265,7 +283,7 @@ function drawOriginal(target = canvas) {
   c.clearRect(0, 0, target.width, target.height);
   if (state.demo) {
     drawDemo(target);
-    captions.render(c, 1.5, target.width, target.height);
+    renderOverlays(c, 1.5, target.width, target.height);
     return;
   }
   if (!state.file || video.readyState < 2) return;
@@ -273,7 +291,7 @@ function drawOriginal(target = canvas) {
   c.fillRect(0, 0, target.width, target.height);
   const r = rect(target.width, target.height);
   c.drawImage(video, r.x, r.y, r.w, r.h);
-  captions.render(c, video.currentTime, target.width, target.height);
+  renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
 async function initSegmenter() {
@@ -402,7 +420,7 @@ function compositeWithMask(target, mask) {
   s.filter = 'none';
   s.globalCompositeOperation = 'source-over';
   c.drawImage(subject, 0, 0);
-  captions.render(c, video.currentTime, target.width, target.height);
+  renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
 async function draw(target = canvas) {
@@ -422,6 +440,7 @@ async function draw(target = canvas) {
     compositeWithMask(target, mask);
   } finally {
     state.rendering = false;
+    if (target === canvas) textEditor.updateSurface();
   }
 }
 function frameLoop() {
@@ -468,6 +487,22 @@ async function loadFile(file) {
       'Le codec de ce fichier n’est pas pris en charge par ce navigateur. Essaie Safari sur iPhone ou un MP4 H.264.';
   }
 }
+// Direct preview editing is handled by the interactive layer mounted on #visualLayer.
+$('quickAddText').addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(button=>button.classList.toggle('active',button.dataset.panel==='text'));
+  document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('activePanel',panel.id==='text'));
+  $('textAdd').click();
+});
+
+$('audioNoiseReduction').addEventListener('change',event => {
+  state.audioNoiseReduction = event.target.checked;
+});
+$('audioVoiceEnhancement').addEventListener('change',event => {
+  state.audioVoiceEnhancement = event.target.checked;
+});
+$('audioProfile').addEventListener('change',event => {
+  state.audioProfile = event.target.value;
+});
 $('videoInput').addEventListener('change', e => {
   const f = e.target.files?.[0];
   if (f) loadFile(f);
@@ -508,6 +543,7 @@ video.addEventListener('timeupdate', () => {
   );
   $('current').textContent = fmtTime(video.currentTime);
   if (video.paused) draw();
+  textEditor.updateSurface();
 });
 video.addEventListener('ended', () => ($('play').textContent = '▶'));
 $('timeline').addEventListener('input', () => {
@@ -829,7 +865,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
     c.fillStyle = '#050608';
     c.fillRect(0, 0, target.width, target.height);
     sample.draw(c, r.x, r.y, r.w, r.h);
-    captions.render(
+    renderOverlays(
       c,
       Number(sample.timestamp) || 0,
       target.width,
@@ -849,7 +885,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
   }
   if (!mask) {
     sample.draw(c, r.x, r.y, r.w, r.h);
-    captions.render(
+    renderOverlays(
       c,
       Number(sample.timestamp) || 0,
       target.width,
@@ -872,7 +908,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
   s.filter = 'none';
   s.globalCompositeOperation = 'source-over';
   c.drawImage(subject, 0, 0);
-  captions.render(
+  renderOverlays(
     c,
     Number(sample.timestamp) || 0,
     target.width,
@@ -965,6 +1001,17 @@ $('exportBtn').addEventListener('click', async () => {
       input,
       output,
       tracks: 'primary',
+      audio: (state.audioVoiceEnhancement || state.audioNoiseReduction)
+        ? {
+          codec: 'aac',
+          quality: new Quality('high'),
+          forceTranscode: true,
+          process: createStudioAudioProcessor({
+            noiseReduction: state.audioNoiseReduction,
+            enhanceVoice: state.audioVoiceEnhancement,
+            profile: state.audioProfile,
+          }),
+        } : undefined,
       video: {
         codec: 'avc',
         quality: new Quality('very-high'),
@@ -1121,7 +1168,7 @@ $('savePhotos').addEventListener('click', async () => {
       !navigator.canShare?.({ files: [state.exportFile] })
     )
       throw new Error('file sharing unavailable');
-    await navigator.share({ files: [state.exportFile], title: 'FondVidéo' });
+    await navigator.share({ files: [state.exportFile], title: 'SCELYO Studio' });
     $('exportInfo').textContent =
       'Dans le menu iPhone, choisis « Enregistrer la vidéo » pour l’ajouter à Photos.';
   } catch (e) {
@@ -1138,6 +1185,7 @@ function reset(landing = true) {
   if (state.url) URL.revokeObjectURL(state.url);
   if (state.customUrl) URL.revokeObjectURL(state.customUrl);
   captions.reset();
+  textEditor.reset();
   state.file = null;
   state.url = '';
   state.width = 0;

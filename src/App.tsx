@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ws } from './netlify-transport';
+import { MeetingMusicMixer } from './meeting-music';
+import { ClearVoiceProcessor, type VoiceProfile } from './clearvoice';
 import {
   processCamera,
   videoDimensions,
@@ -43,9 +45,18 @@ import {
   Maximize2,
   Minimize2,
   PlayCircle,
+  Music2,
+  AudioLines,
+  Volume2,
+  Pause,
+  Play,
+  Repeat2,
+  FileAudio,
 } from 'lucide-react';
 
 type Member = { id: string; name: string };
+type RoomSettings = { locked: boolean; allowScreenShare: boolean; allowRecording: boolean };
+const defaultRoomSettings: RoomSettings = { locked: false, allowScreenShare: true, allowRecording: true };
 type ChatItem = {
   id: string;
   from: string;
@@ -66,6 +77,10 @@ const alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
 function newCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(12));
   return Array.from(bytes, n => alphabet[n % alphabet.length]).join('');
+}
+function musicClock(seconds: number) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
 function currentRoom() {
   const match = location.hash.match(/^#\/room\/([a-z2-9]{12})$/);
@@ -139,6 +154,8 @@ function App() {
   const [shareOwner,setShareOwner]=useState<string|null>(null);
   const [pinned,setPinned]=useState<string|null>(null);
   const [participantsOpen,setParticipantsOpen]=useState(false);
+  const [roomSettings,setRoomSettings]=useState<RoomSettings>(defaultRoomSettings);
+  const [hostBusy,setHostBusy]=useState(false);
   const [gallery,setGallery]=useState(false);
   const [streams, setStreams] = useState<Record<string, MediaStream>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -147,6 +164,7 @@ function App() {
   const [bg, setBg] = useState('original');
   const [format, setFormat] = useState('original');
   const [quality, setQuality] = useState('1080');
+  const [recordVideoQuality, setRecordVideoQuality] = useState<'1080'|'original'>('1080');
   const [face, setFace] = useState('user');
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [cameraInfo, setCameraInfo] = useState('');
@@ -169,9 +187,52 @@ function App() {
 
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [exportPhase, setExportPhase] = useState<'idle'|'finalizing'|'sharing'>('idle');
+  const [exportProgress, setExportProgress] = useState<number|null>(null);
+  const [micTestRecording, setMicTestRecording] = useState(false);
+  const [micTestUrl, setMicTestUrl] = useState('');
   const [recordMode, setRecordMode] = useState<'video' | 'audio'>('video');
+  const [recordIncludeMusic, setRecordIncludeMusic] = useState(false);
+  const [recordedWithMusic, setRecordedWithMusic] = useState(false);
+  const [downloadWithMusic, setDownloadWithMusic] = useState(false);
+  const [alternateRecording, setAlternateRecording] = useState<Recording | null>(null);
+  const [pendingRecordMode, setPendingRecordMode] = useState<'video' | 'audio' | null>(null);
   const [recordReady, setRecordReady] = useState<Recording | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
+  const [musicName, setMusicName] = useState('');
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(45);
+  const [musicLoop, setMusicLoop] = useState(false);
+  const [musicMonitor, setMusicMonitor] = useState(false);
+  const [musicTime, setMusicTime] = useState(0);
+  const [musicDuration, setMusicDuration] = useState(0);
+  const [musicBusy, setMusicBusy] = useState(false);
+  const [driveMusicOpen, setDriveMusicOpen] = useState(false);
+  const [driveMusicBusy, setDriveMusicBusy] = useState(false);
+  const [driveMusicFiles, setDriveMusicFiles] = useState<Array<{id:string;name:string;size?:string}>>([]);
+  const driveMusicTokenRef=useRef('');
+  const [noiseReduction, setNoiseReduction] = useState(false);
+  const [noiseStrength, setNoiseStrength] = useState(2);
+  const [noiseAttenuation, setNoiseAttenuation] = useState(0);
+  const [noiseActive, setNoiseActive] = useState(false);
+  const [voiceEnhancement, setVoiceEnhancement] = useState(false);
+  const [voiceProfile, setVoiceProfile] = useState<VoiceProfile>('balanced');
+  const [clearVoiceOpen, setClearVoiceOpen] = useState(false);
+  const [clearVoiceReady, setClearVoiceReady] = useState(false);
+  const [clearVoiceGateReady, setClearVoiceGateReady] = useState(false);
+
+  // Deep-link Vault from SCELYO Studio without changing meeting routing.
+  useEffect(() => {
+    const openVaultRoute = () => {
+      if (location.hash === '#/vault') setLibraryOpen(true);
+    };
+    openVaultRoute();
+    window.addEventListener('hashchange', openVaultRoute);
+    return () => window.removeEventListener('hashchange', openVaultRoute);
+  }, []);
+
   const [savedItems, setSavedItems] = useState<SavedRecording[]>([]);
   const [activePreview, setActivePreview] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -181,10 +242,13 @@ function App() {
   const [fillStage, setFillStage] = useState(false);
   const [portraitView, setPortraitView] = useState(() => window.innerHeight >= window.innerWidth);
   const isPhone = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  const nativeNoiseSupported = Boolean(navigator.mediaDevices?.getSupportedConstraints?.().noiseSuppression);
   const [uploadedLink, setUploadedLink] = useState('');
   const [remoteRecording, setRemoteRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
+  const musicRef = useRef<MeetingMusicMixer | null>(null);
+  const clearVoiceRef = useRef<ClearVoiceProcessor | null>(null);
   const peerId = useRef(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
@@ -203,9 +267,11 @@ function App() {
   });
   const screenRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const micTestUrlRef = useRef('');
   const stopCaptureRef = useRef<(() => void) | null>(null);
   const tokenRef = useRef('');
   const readyRef = useRef<Recording | null>(null);
+  const alternateRef = useRef<Recording | null>(null);
   const handleRef = useRef<(msg: any) => void>(() => {});
   const roomRef = useRef(room);
   const nameRef = useRef(displayName);
@@ -245,10 +311,57 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullStage(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, []);
+
+  useEffect(() => {
+    if (recordReady && !recording) {
+      requestAnimationFrame(() => {
+        document.getElementById('scelyo-record-download')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      });
+    }
+  }, [recordReady, recording]);
+
+  useEffect(() => {
     if (!recording) return;
     const t = window.setInterval(() => setSeconds(s => s + 1), 1000);
     return () => window.clearInterval(t);
   }, [recording]);
+  useEffect(() => {
+    if (!joined) return;
+    // Keep the display awake while SCELYO is visible where Wake Lock exists.
+    // This does not grant background camera/microphone access on iOS.
+    let cancelled=false;
+    let lock: {release:()=>Promise<void>} | null=null;
+    const request=async()=>{
+      if(document.visibilityState!=='visible')return;
+      const wakeLock=(navigator as Navigator & {wakeLock?:{request:(type:'screen')=>Promise<{release:()=>Promise<void>}>}}).wakeLock;
+      if(!wakeLock)return;
+      try{
+        const acquired=await wakeLock.request('screen');
+        if(cancelled){void acquired.release();return;}
+        lock=acquired;
+      }catch{/* unavailable or denied; meeting can continue in foreground */}
+    };
+    const visibility=()=>{
+      if(document.visibilityState==='visible')void request();
+      else {if(lock){void lock.release().catch(()=>{});lock=null;}}
+    };
+    document.addEventListener('visibilitychange',visibility);
+    void request();
+    return ()=>{
+      cancelled=true;
+      document.removeEventListener('visibilitychange',visibility);
+      if(lock)void lock.release().catch(()=>{});
+    };
+  },[joined]);
 
   useEffect(()=>{
     if(!joined)return;
@@ -289,6 +402,17 @@ function App() {
     const next=pinRef.current===id?null:id;
     pinRef.current=next;setPinned(next);
   }
+  async function updateHostSettings(changes: Partial<RoomSettings>) {
+    if (hostId !== peerId.current || hostBusy) return;
+    setHostBusy(true);
+    try {
+      const response = await api.post('/api/rooms/'+roomRef.current+'/settings', { from: peerId.current, ...changes });
+      setRoomSettings(response.data.settings as RoomSettings);
+      toast('Paramètres de la réunion actualisés.');
+    } catch(err) {
+      toast('Modification impossible : ' + readableError(err));
+    } finally { setHostBusy(false); }
+  }
   async function muteParticipant(id:string){
     try{await api.post('/api/rooms/'+roomRef.current+'/mute',{from:peerId.current,to:id});toast('Micro coupé.');}
     catch(err){toast('Modération impossible : '+readableError(err));}
@@ -319,7 +443,7 @@ function App() {
     try {
       const item=await saveRecording(blob,name);
       setSavedItems(previous=>[item,...previous.filter(x=>x.id!==item.id)]);
-      toast('Enregistrement sauvegardé dans Mes enregistrements sur cet appareil.');
+      toast('Capture enregistrée dans SCELYO Vault sur cet appareil.');
     } catch(err) {
       toast('Stockage insuffisant ou inaccessible : '+readableError(err)+'. Télécharge la vidéo avant de quitter.');
     } finally {
@@ -344,7 +468,27 @@ function App() {
     } finally { setImportingLocal(false); }
   }
 
-  function downloadRecording(item:SavedRecording) {
+  async function saveVideoToPhotos(item:Pick<SavedRecording,'name'|'blob'>) {
+    // The browser does not expose progress of the native Photos share sheet.
+    // Show truthful preparation progress, then an indeterminate sharing state.
+    setExportPhase('sharing');
+    setExportProgress(null);
+    try {
+      const file=new File([item.blob],item.name,{type:item.blob.type || 'video/mp4'});
+      if(navigator.share && navigator.canShare?.({files:[file]})) {
+        try { await navigator.share({files:[file],title:item.name}); }
+        catch(error){if((error as Error)?.name!=='AbortError')toast('Partage impossible : '+readableError(error));}
+      } else {
+        downloadRecording(item);
+        toast('Le partage vers Photos est indisponible. Ouvre la vidéo et utilise Partager > Enregistrer la vidéo.');
+      }
+    } finally {
+      setExportPhase('idle');
+      setExportProgress(null);
+    }
+  }
+
+  function downloadRecording(item:Pick<SavedRecording,'name'|'blob'>) {
     const url=URL.createObjectURL(item.blob);
     const link=document.createElement('a');link.href=url;link.download=item.name;
     document.body.appendChild(link);link.click();link.remove();
@@ -390,7 +534,7 @@ function App() {
     setNotice('');
     setChat([]);
     setMembers([]);
-    setHostId(null);setShareOwner(null);shareRef.current=null;
+    setHostId(null);setRoomSettings(defaultRoomSettings);setShareOwner(null);shareRef.current=null;
     setPinned(null);pinRef.current=null;focusRef.current=peerId.current;setActiveSpeaker(peerId.current);
     setRecordReady(null);
     setUploadedLink('');
@@ -423,6 +567,182 @@ function App() {
     }
   }
 
+  // One stable processed microphone track is shared by Live, music and the
+  // recording mixer. Music is added AFTER ClearVoice, never noise-suppressed.
+  function processedMicrophoneTrack() {
+    // The neutral/default mode must never route the voice through WebAudio.
+    // ClearVoice becomes opt-in; the native mic goes straight to WebRTC.
+    const native = rawRef.current?.getAudioTracks()[0] || null;
+    if (!voiceEnhancement && !noiseReduction) return native;
+    return clearVoiceRef.current?.track || native;
+  }
+  async function ensureClearVoice(enhancement = voiceEnhancement, suppression = noiseReduction) {
+    const track = rawRef.current?.getAudioTracks()[0];
+    if (!track || track.readyState !== 'live') return null;
+    if (clearVoiceRef.current) {
+      clearVoiceRef.current.setEnabled(enhancement);
+      clearVoiceRef.current.setNoiseReduction(suppression);
+      return clearVoiceRef.current;
+    }
+    let processor: ClearVoiceProcessor | null = null;
+    try {
+      processor = new ClearVoiceProcessor(track, enhancement, voiceProfile, suppression);
+      processor.setNoiseStrength(noiseStrength);
+      processor.subscribeNoiseStats(stats => {
+        setNoiseAttenuation(stats.attenuationDb);
+        setNoiseActive(stats.isReducing);
+      });
+      if (!await processor.resume()) throw new Error('Traitement non disponible');
+      clearVoiceRef.current = processor;
+      setClearVoiceReady(true);
+      setClearVoiceGateReady(processor.noiseGateReady);
+      return processor;
+    } catch {
+      if (processor) await processor.destroy().catch(()=>{});
+      setClearVoiceReady(false);
+      setClearVoiceGateReady(false);
+      toast('ClearVoice indisponible : le microphone naturel reste utilisé.');
+      return null;
+    }
+  }
+  function outboundAudioTrack() {
+    return musicRef.current?.track || processedMicrophoneTrack();
+  }
+
+  async function restoreOutboundAudio(track: MediaStreamTrack | null) {
+    const senders = [...pcs.current.values()]
+      .flatMap(pc => pc.getSenders())
+      .filter(sender => sender.track?.kind === 'audio');
+    await Promise.allSettled(senders.map(sender => sender.replaceTrack(track)));
+  }
+
+  async function listDriveMusic(token:string){
+    setDriveMusicBusy(true);
+    try{
+      const q=encodeURIComponent("trashed = false and (mimeType = 'audio/mpeg' or mimeType = 'audio/mp4' or mimeType = 'audio/wav' or mimeType = 'audio/x-wav' or mimeType = 'audio/aac' or name contains '.mp3' or name contains '.m4a' or name contains '.wav')");
+      const response=await fetch('https://www.googleapis.com/drive/v3/files?q='+q+'&fields=nextPageToken,files(id,name,size,mimeType)&page_size=100&orderBy=modifiedTime%20desc',{headers:{Authorization:'Bearer '+token}});
+      if(!response.ok)throw Error('Accès aux fichiers Drive refusé ('+response.status+').');
+      const data=await response.json();
+      setDriveMusicFiles((data.files||[]).filter((f:{name:string})=>/\.(mp3|wav|m4a|aac)$/i.test(f.name)));
+      setDriveMusicOpen(true);
+    }catch(error){toast('Import Drive impossible : '+readableError(error));}
+    finally{setDriveMusicBusy(false);}
+  }
+
+  function openDriveMusic(){
+    if(!clientId.trim().endsWith('.apps.googleusercontent.com')){toast('Configure d’abord la connexion Google dans les paramètres.');setShowSettings(true);return;}
+    const google=(window as any).google;
+    if(!google?.accounts?.oauth2){toast('Google est indisponible. Recharge SCELYO.');return;}
+    if(driveMusicTokenRef.current){void listDriveMusic(driveMusicTokenRef.current);return;}
+    const oauth=google.accounts.oauth2.initTokenClient({
+      client_id:clientId.trim(),
+      scope:'https://www.googleapis.com/auth/drive.readonly',
+      callback:(response:{access_token?:string;error?:string})=>{
+        if(!response.access_token){toast('Autorisation de lecture Drive nécessaire.');return;}
+        driveMusicTokenRef.current=response.access_token;
+        void listDriveMusic(response.access_token);
+      }
+    });
+    oauth.requestAccessToken({prompt:'consent'});
+  }
+
+  async function importDriveMusic(id:string,name:string){
+    if(!driveMusicTokenRef.current)return;
+    setDriveMusicBusy(true);
+    try{
+      const response=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(id)+'?alt=media',{headers:{Authorization:'Bearer '+driveMusicTokenRef.current}});
+      if(!response.ok)throw Error('Téléchargement Drive impossible ('+response.status+').');
+      const blob=await response.blob();
+      if(blob.size>150*1024*1024)throw Error('Fichier supérieur à 150 Mo.');
+      await loadMusic(new File([blob],name,{type:blob.type||'audio/mpeg'}));
+      setDriveMusicOpen(false);
+    }catch(error){toast('Impossible de charger la musique : '+readableError(error));}
+    finally{setDriveMusicBusy(false);}
+  }
+
+  async function loadMusic(file: File | null) {
+    if (!file) return;
+    if (hostId !== peerId.current) {
+      toast('Seul l’organisateur peut diffuser une musique dans SCELYO Live.');
+      return;
+    }
+    if (!/\.(mp3|wav|m4a|aac)$/i.test(file.name)) {
+      toast('Choisis un fichier MP3, WAV ou M4A.');
+      return;
+    }
+    if (file.size > 150 * 1024 * 1024) {
+      toast('Le fichier dépasse 150 Mo. Sélectionne une piste plus légère.');
+      return;
+    }
+    const microphone = processedMicrophoneTrack();
+    if (!microphone || microphone.readyState !== 'live') {
+      toast('Autorise le microphone avant de diffuser de la musique.');
+      return;
+    }
+    setMusicBusy(true);
+    let next: MeetingMusicMixer | null = null;
+    const previous = musicRef.current;
+    try {
+      next = new MeetingMusicMixer(file, new MediaStream([microphone]), progress => {
+        setMusicPlaying(progress.playing);
+        setMusicTime(progress.currentTime);
+        setMusicDuration(progress.duration);
+      });
+      next.setVolume(musicVolume);
+      next.setLoop(musicLoop);
+      next.setMonitor(musicMonitor);
+      const senders = [...pcs.current.values()].flatMap(pc => pc.getSenders())
+        .filter(sender => sender.track?.kind === 'audio');
+      const switched = await Promise.allSettled(senders.map(sender => sender.replaceTrack(next!.track)));
+      if (switched.some(result => result.status === 'rejected')) {
+        await Promise.allSettled(senders.map(sender => sender.replaceTrack(previous?.track || microphone)));
+        throw new Error('La diffusion de musique est indisponible sur cette connexion.');
+      }
+      musicRef.current = next;
+      setMusicName(file.name);
+      setMusicTime(0);
+      setMusicDuration(0);
+      setMusicPlaying(false);
+      if (previous) await previous.destroy();
+      toast('Musique prête : appuie sur Lecture pour la diffuser aux participants.');
+    } catch (error) {
+      if (next && musicRef.current !== next) await next.destroy();
+      toast('Impossible de charger la musique : ' + readableError(error));
+    } finally {
+      setMusicBusy(false);
+    }
+  }
+
+  async function clearMusic() {
+    const previous = musicRef.current;
+    if (!previous) return;
+    setMusicBusy(true);
+    try {
+      const microphone = processedMicrophoneTrack();
+      await restoreOutboundAudio(microphone);
+      musicRef.current = null;
+      await previous.destroy();
+      setMusicPlaying(false);
+      setMusicName('');
+      setMusicTime(0);
+      setMusicDuration(0);
+      setMusicMonitor(false);
+    } finally {
+      setMusicBusy(false);
+    }
+  }
+
+  async function toggleMusicPlayback() {
+    const current = musicRef.current;
+    if (!current) return;
+    try {
+      if (!current.audio.paused) current.pause();
+      else await current.play();
+    } catch (error) {
+      toast('Lecture impossible : ' + readableError(error) + '. Réessaie en touchant Lecture.');
+    }
+  }
+
   function getPeer(id: string) {
     const existing = pcs.current.get(id);
     if (existing) return existing;
@@ -437,7 +757,8 @@ function App() {
     if (source && source.getTracks().length) {
       source.getTracks().forEach(track => {
         const selected =
-          track.kind === 'video' && screenRef.current
+          track.kind === 'audio' ? (outboundAudioTrack() || track)
+          : track.kind === 'video' && screenRef.current
             ? screenRef.current.getVideoTracks()[0]
             : track;
         if (selected) pc.addTrack(selected, source);
@@ -548,6 +869,7 @@ function App() {
       return;
     const data = msg.data;
     if(data?.hostId)setHostId(data.hostId);
+    if(data?.kind==='settings'&&data.settings)setRoomSettings(data.settings as RoomSettings);
     if (data?.kind === 'join' && data.member?.id !== peerId.current) {
       setMembers(prev => [
         ...prev.filter(m => m.id !== data.member.id),
@@ -662,7 +984,11 @@ function App() {
     try {
       try {
         media = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: noiseReduction,
+            autoGainControl: false,
+          },
           video: {
             facingMode: face,
             width: { ideal: quality === '2160' ? 3840 : quality === '720' ? 1280 : 1920 },
@@ -676,6 +1002,10 @@ function App() {
         toast('Caméra ou micro indisponible. Connexion en mode écoute seule.');
       }
       rawRef.current = media;
+      const microphoneTrack = media?.getAudioTracks()[0];
+      // In the natural default mode, do not launch worklets or resample the mic.
+      if (microphoneTrack && (voiceEnhancement || noiseReduction))
+        await ensureClearVoice(voiceEnhancement, noiseReduction);
       localRef.current = media;
       setLocalStream(media);
       const settings = media?.getVideoTracks()[0]?.getSettings();
@@ -711,6 +1041,7 @@ function App() {
       // Initial load, subscription, then join: prevents missed events.
       const state = await api.get('/api/rooms/' + id);
       setMembers(state.data.members || []);setHostId(state.data.hostId||peerId.current);
+      setRoomSettings(state.data.settings || defaultRoomSettings);
       await api.post('/api/subscriptions', {
         entity_type: 'room',
         entity_id: id,
@@ -722,6 +1053,7 @@ function App() {
         name,
       });
       setMembers(joinedRoom.data.members || []);setHostId(joinedRoom.data.hostId||peerId.current);
+      setRoomSettings(joinedRoom.data.settings || defaultRoomSettings);
       isJoinedRef.current = true;focusRef.current=peerId.current;setActiveSpeaker(peerId.current);
       setJoined(true);
       for (const member of joinedRoom.data.members || [])
@@ -730,6 +1062,11 @@ function App() {
       toast('Impossible de rejoindre : ' + readableError(e));
       connRef.current?.disconnect();
       connRef.current = null;
+      const clearVoice = clearVoiceRef.current;
+      clearVoiceRef.current = null;
+      if (clearVoice) await clearVoice.destroy();
+      setClearVoiceReady(false);
+      setClearVoiceGateReady(false);
       media?.getTracks().forEach(t => t.stop());
       effectRef.current?.stop();
       effectRef.current = null;
@@ -743,6 +1080,23 @@ function App() {
 
   async function leaveMeeting() {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+    const currentMusic = musicRef.current;
+    musicRef.current = null;
+    if (currentMusic) await currentMusic.destroy();
+    const clearVoice = clearVoiceRef.current;
+    clearVoiceRef.current = null;
+    if (clearVoice) await clearVoice.destroy();
+    setClearVoiceReady(false);
+    setClearVoiceGateReady(false);
+    setNoiseAttenuation(0);
+    setNoiseActive(false);
+    setClearVoiceOpen(false);
+    setMusicName('');
+    setMusicPlaying(false);
+    setMusicTime(0);
+    setMusicDuration(0);
+    setMusicMonitor(false);
+    setMusicPanelOpen(false);
     try {
       if (isJoinedRef.current) {
         await api.post('/api/rooms/' + roomRef.current + '/leave', {
@@ -779,6 +1133,8 @@ function App() {
     setMembers([]);setHostId(null);setShareOwner(null);shareRef.current=null;
     setPinned(null);pinRef.current=null;
     setJoined(false);
+    setFullStage(false);
+    setRoomSettings(defaultRoomSettings);
     isJoinedRef.current = false;
     setSharing(false);
     setRemoteRecording(false);
@@ -794,6 +1150,44 @@ function App() {
       .forEach(t => (t.enabled = !micOn));
     setMicOn(!micOn);
   }
+  async function changeNoiseReduction(enabled: boolean) {
+    const track = rawRef.current?.getAudioTracks()[0];
+    if (enabled && track && !await ensureClearVoice(voiceEnhancement, true) && !nativeNoiseSupported) {
+      toast('La réduction du bruit est indisponible sur ce navigateur.');
+      return;
+    }
+    clearVoiceRef.current?.setNoiseReduction(enabled);
+    setNoiseReduction(enabled);
+    if (!enabled) {
+      setNoiseAttenuation(0);
+      setNoiseActive(false);
+    }
+    if (track && nativeNoiseSupported) {
+      try { await track.applyConstraints({ noiseSuppression: enabled }); }
+      catch { toast('Le navigateur n’a pas accepté le filtre anti-bruit natif.'); }
+    }
+    if (!musicRef.current) {
+      const native=rawRef.current?.getAudioTracks()[0] || null;
+      void restoreOutboundAudio((enabled || voiceEnhancement) ? clearVoiceRef.current?.track || native : native);
+    }
+  }
+  function changeNoiseStrength(level: number) {
+    setNoiseStrength(level);
+    clearVoiceRef.current?.setNoiseStrength(level);
+  }
+  async function changeVoiceEnhancement(enabled: boolean) {
+    if (enabled && rawRef.current && !await ensureClearVoice(true, noiseReduction)) return;
+    clearVoiceRef.current?.setEnabled(enabled);
+    setVoiceEnhancement(enabled);
+    if (!musicRef.current) {
+      const native = rawRef.current?.getAudioTracks()[0] || null;
+      void restoreOutboundAudio((enabled || noiseReduction) ? clearVoiceRef.current?.track || native : native);
+    }
+  }
+  function changeVoiceProfile(profile: VoiceProfile) {
+    clearVoiceRef.current?.setProfile(profile);
+    setVoiceProfile(profile);
+  }
   function toggleCam() {
     (rawRef.current || localRef.current)
       ?.getVideoTracks()
@@ -801,6 +1195,10 @@ function App() {
     setCamOn(!camOn);
   }
   async function toggleScreen() {
+    if (!screenRef.current && hostId !== peerId.current && !roomSettings.allowScreenShare) {
+      toast('L’organisateur a désactivé le partage d’écran.');
+      return;
+    }
     if (screenRef.current) {
       const videoTrack = localRef.current?.getVideoTracks()[0];
       for (const pc of pcs.current.values()) {
@@ -870,154 +1268,423 @@ function App() {
     }
   }
 
-  function recordCanvasAndAudio(mode: 'video' | 'audio') {
-    const ctx = new AudioContext();
-    void ctx.resume().catch(() => {});
-    const dest = ctx.createMediaStreamDestination();
-    const nodes: MediaStreamAudioSourceNode[] = [];
-    const allStreams = () => {
-      const candidates = [
-        { key: 'local', stream: localRef.current },
-        ...Object.entries(streamsRef.current).map(([key, stream]) => ({
-          key,
-          stream,
-        })),
-      ];
-      return candidates.filter(x => x.stream) as Array<{
-        key: string;
-        stream: MediaStream;
-      }>;
-    };
-    const linked = new Set<string>();
-    const linkAudio = () => {
-      for (const s of allStreams()) {
-        if (linked.has(s.key) || !s.stream.getAudioTracks().length) continue;
+  function recordCanvasAndAudio(mode: 'video' | 'audio', includeMusic: boolean) {
+    // Prefer the unprocessed microphone for recordings. Live ClearVoice,
+    // the WebRTC music path and compression have already shaped that track:
+    // running those processors through a second recording compressor can
+    // make speech metallic, pump or stutter.
+    const mic = rawRef.current?.getAudioTracks().find(track => track.readyState === 'live')
+      || processedMicrophoneTrack();
+    const nativeIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const remoteAudio = Object.entries(streamsRef.current)
+      .filter(([, stream]) => stream.getAudioTracks().some(track => track.readyState === 'live'));
+    const musicAudio = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+    const hasMusic = Boolean(musicAudio && musicAudio.readyState === 'live');
+    // Even if music is loaded, an audio-only recording without soundtrack
+    // must stay on the ORIGINAL native microphone track.
+    const directMicRecording = Boolean(mic && !remoteAudio.length && !includeMusic);
+    // iPhone: reuse the already-running Live music mixer instead of creating
+    // a second AudioContext and two more copies of the microphone.
+    const reuseLiveMix = nativeIOS && includeMusic && hasMusic && !remoteAudio.length;
+    const needsSecondaryMixer = !directMicRecording && !reuseLiveMix;
+
+    let audioContext: AudioContext | null = null;
+    let mixedDestination: MediaStreamAudioDestinationNode | null = null;
+    let voiceDestination: MediaStreamAudioDestinationNode | null = null;
+    let audioTimer = 0;
+    const nodes = new Map<string,{track:MediaStreamTrack;source:MediaStreamAudioSourceNode;voice:boolean}>();
+
+    // For a solo capture WITHOUT music, the browser records the microphone
+    // directly. No Web Audio, resampling, worklet or second encoder involved.
+    if (needsSecondaryMixer) {
+      const ctx = new AudioContext({ latencyHint: 'playback' });
+      audioContext = ctx;
+      void ctx.resume().catch(() => {});
+      mixedDestination = ctx.createMediaStreamDestination();
+      voiceDestination = ctx.createMediaStreamDestination();
+      const speech = ctx.createGain();
+      speech.gain.value = 1; // all speech tracks enter the recorder at unity gain
+      const soundtrack = ctx.createGain();
+      soundtrack.gain.value = 0.82; // background music already follows the Live volume slider
+
+      // No compressor, EQ or resampler after the microphone's native input.
+      // The clean voice-only track is an unchanged unity-gain copy.
+      speech.connect(voiceDestination);
+
+      const mixedBus = ctx.createGain();
+      mixedBus.gain.value = 1;
+      // Peak-only protection: speech is NOT continuously compressed to
+      // make room for the soundtrack; gain reduction only near digital clipping.
+      const mixProtection = ctx.createDynamicsCompressor();
+      mixProtection.threshold.value = -0.8;
+      mixProtection.knee.value = 0;
+      mixProtection.ratio.value = 16;
+      mixProtection.attack.value = 0.001;
+      mixProtection.release.value = 0.09;
+      speech.connect(mixedBus);
+      soundtrack.connect(mixedBus);
+      mixedBus.connect(mixProtection);
+      mixProtection.connect(mixedDestination);
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      const analysisMute = ctx.createGain();
+      analysisMute.gain.value = 0;
+      speech.connect(analyser);
+      analyser.connect(analysisMute);
+      analysisMute.connect(mixedBus);
+      const samples = new Float32Array(512);
+      let lastSpeech = 0;
+
+      const link = (track: MediaStreamTrack, bus: GainNode, voice: boolean, active: Set<string>) => {
+        if (track.readyState !== 'live') return;
+        active.add(track.id);
+        if (nodes.has(track.id)) return;
         try {
-          const node = ctx.createMediaStreamSource(s.stream);
-          node.connect(dest);
-          nodes.push(node);
-          linked.add(s.key);
-        } catch {
-          /* no audio track */
+          const source = ctx.createMediaStreamSource(new MediaStream([track]));
+          source.connect(bus);
+          nodes.set(track.id,{track,source,voice});
+        } catch { /* Ignore an unsupported individual source track. */ }
+      };
+      const sync = () => {
+        const active = new Set<string>();
+        if (mic) link(mic, speech, true, active);
+        for (const stream of Object.values(streamsRef.current))
+          for (const track of stream.getAudioTracks()) link(track, speech, true, active);
+        const currentMusic = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+        if (currentMusic && hasMusic) link(currentMusic, soundtrack, false, active);
+        for (const [id,node] of nodes) {
+          if (active.has(id) && node.track.readyState === 'live') continue;
+          node.source.disconnect();
+          nodes.delete(id);
         }
-      }
-    };
-    const oscillator = ctx.createOscillator();
-    const silence = ctx.createGain();
-    silence.gain.value = 0;
-    oscillator.connect(silence);
-    silence.connect(dest);
-    oscillator.start();
-    linkAudio();
+        // Never turn voices down in response to music or participant count.
+        // The final peak-only limiter protects simultaneous speech peaks.
+        speech.gain.setTargetAtTime(1, ctx.currentTime, 0.05);
+
+        analyser.getFloatTimeDomainData(samples);
+        let energy = 0;
+        for (const sample of samples) energy += sample * sample;
+        const rms = Math.sqrt(energy / samples.length);
+        const now = performance.now();
+        if (rms > 0.02) lastSpeech = now;
+        const speaking = rms > 0.013 || now - lastSpeech < 550;
+        // Music follows the user's slider upstream. Only music is ducked:
+        // voice always stays at unity gain and remains the focus.
+        soundtrack.gain.setTargetAtTime(speaking ? 0.70 : 1, ctx.currentTime, speaking ? 0.06 : 0.28);
+      };
+      sync();
+      audioTimer = window.setInterval(sync, 130);
+    }
+
+    const local = localRef.current;
+    const localVideo = local ? new MediaStream(local.getVideoTracks()) : null;
+    const videoStreams = () => [
+      { key: 'local', stream: localVideo },
+      ...Object.entries(streamsRef.current).map(([key, stream]) => ({ key, stream })),
+    ].filter(item => item.stream) as Array<{key:string;stream:MediaStream}>;
     const canvas = document.createElement('canvas');
     const dimensions = videoDimensions(
       format === 'original' ? '16:9' : format,
       quality === '2160' ? '1080' : quality
     );
-    canvas.width = dimensions.width;
-    canvas.height = dimensions.height;
+    canvas.width = nativeIOS ? 16 : dimensions.width;
+    canvas.height = nativeIOS ? 9 : dimensions.height;
     const canvasCtx = canvas.getContext('2d')!;
     const videos = new Map<string, HTMLVideoElement>();
     const draw = () => {
-      linkAudio();
-      if(mode==='audio')return;
-      const items=allStreams();
-      const key=shareRef.current||pinRef.current||focusRef.current;
-      const item=items.find(v=>v.key===key)||items.find(v=>v.key==='local')||items[0];
-      canvasCtx.fillStyle='#090d19';canvasCtx.fillRect(0,0,canvas.width,canvas.height);
-      if(!item)return;
-      const source=item.key==='local'&&screenRef.current?screenRef.current:item.stream;
-      let v=videos.get(item.key);
-      if(!v||v.srcObject!==source){
-        if(v){v.pause();v.srcObject=null;}
-        v=document.createElement('video');
-        v.srcObject=source;v.muted=true;v.playsInline=true;void v.play().catch(()=>{});
-        videos.set(item.key,v);
+      if (mode === 'audio') return;
+      const items = videoStreams();
+      const key = shareRef.current || pinRef.current || focusRef.current;
+      const item = items.find(v => v.key === key) || items.find(v => v.key === 'local') || items[0];
+      canvasCtx.fillStyle = '#090d19';
+      canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+      if (!item) return;
+      const source = item.key === 'local' && screenRef.current ? screenRef.current : item.stream;
+      let v = videos.get(item.key);
+      if (!v || v.srcObject !== source) {
+        if (v) { v.pause(); v.srcObject = null; }
+        v = document.createElement('video');
+        v.srcObject = source;
+        v.muted = true;
+        v.playsInline = true;
+        void v.play().catch(() => {});
+        videos.set(item.key, v);
       }
-      if(v.readyState>=2&&v.videoWidth){
-        // Frame fills visually with a dim blurred background, but the full
-        // camera/screen remains visible in the center: no face cropping.
-        const sourceRatio=v.videoWidth/v.videoHeight;
-        if(Math.abs(sourceRatio-canvas.width/canvas.height)>0.02){
-          const cover=Math.max(canvas.width/v.videoWidth,canvas.height/v.videoHeight);
-          const bw=v.videoWidth*cover,bh=v.videoHeight*cover;
+      if (v.readyState >= 2 && v.videoWidth) {
+        const sourceRatio = v.videoWidth / v.videoHeight;
+        if (Math.abs(sourceRatio - canvas.width / canvas.height) > 0.02) {
+          const cover = Math.max(canvas.width / v.videoWidth, canvas.height / v.videoHeight);
+          const bw = v.videoWidth * cover, bh = v.videoHeight * cover;
           canvasCtx.save();
-          canvasCtx.filter='blur(20px) brightness(0.4)';
-          canvasCtx.drawImage(v,(canvas.width-bw)/2,(canvas.height-bh)/2,bw,bh);
+          canvasCtx.filter = 'blur(20px) brightness(0.4)';
+          canvasCtx.drawImage(v, (canvas.width - bw) / 2, (canvas.height - bh) / 2, bw, bh);
           canvasCtx.restore();
         }
-        const scale=Math.min(canvas.width/v.videoWidth,canvas.height/v.videoHeight);
-        const width=v.videoWidth*scale,height=v.videoHeight*scale;
-        canvasCtx.drawImage(v,(canvas.width-width)/2,(canvas.height-height)/2,width,height);
+        const scale = Math.min(canvas.width / v.videoWidth, canvas.height / v.videoHeight);
+        const width = v.videoWidth * scale, height = v.videoHeight * scale;
+        canvasCtx.drawImage(v, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
       }
     };
-    draw();
-    const nativeIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const interval = nativeIOS ? 0 : window.setInterval(draw, 80);
+    if (mode === 'video' && !nativeIOS) draw();
+    const interval = mode === 'video' && !nativeIOS ? window.setInterval(draw, 80) : 0;
     let videoStream: MediaStream | null = null;
     let fallback = false;
-    if(mode==='video'){
-      try { if(!nativeIOS && typeof canvas.captureStream==='function') videoStream=canvas.captureStream(24); }
-      catch { /* provide source-track recording fallback */ }
-      if(!videoStream?.getVideoTracks().length){
-        const items=allStreams();
-        const focus=shareRef.current||pinRef.current||focusRef.current;
-        const chosen=items.find(x=>x.key===focus)||items.find(x=>x.key==='local')||items[0];
-        const source=(chosen?.key==='local' ? screenRef.current?.getVideoTracks()[0] || (nativeIOS ? rawRef.current?.getVideoTracks()[0] : null) : null) || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
-        if(!source)throw new Error('La caméra ne fournit pas de piste vidéo enregistrable.');
-        videoStream=new MediaStream([source]);
-        fallback=true;
+    if (mode === 'video') {
+      try {
+        if (!nativeIOS && typeof canvas.captureStream === 'function') videoStream = canvas.captureStream(24);
+      } catch { /* Fallback to the camera's own track. */ }
+      if (!videoStream?.getVideoTracks().length) {
+        const items = videoStreams();
+        const focus = shareRef.current || pinRef.current || focusRef.current;
+        const chosen = items.find(x => x.key === focus) || items.find(x => x.key === 'local') || items[0];
+        const track = (chosen?.key === 'local'
+          ? screenRef.current?.getVideoTracks()[0] || (nativeIOS ? rawRef.current?.getVideoTracks()[0] : null)
+          : null)
+          || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
+        if (!track) throw new Error('Aucune caméra disponible pour enregistrer la vidéo.');
+        // On iOS a cloned camera track may stop producing frames while the
+        // live preview keeps running. Record the live track directly.
+        const captureTrack = track;
+        // Apply the requested resolution BEFORE starting MediaRecorder.
+        // "original" must not modify the camera track's dimensions.
+        // The 1080p choice requests Full HD if the camera/browser supports it.
+        videoStream = new MediaStream([captureTrack]);
+        fallback = true;
       }
     }
-    const combined=new MediaStream([
-      ...(videoStream?.getVideoTracks()||[]),
-      ...dest.stream.getAudioTracks(),
+
+    const dryAudio = directMicRecording ? mic : voiceDestination?.stream.getAudioTracks()[0];
+    const mixedAudio = hasMusic ? mixedDestination?.stream.getAudioTracks()[0] : dryAudio;
+    const chosenAudio = reuseLiveMix ? musicRef.current?.track : (includeMusic ? mixedAudio : dryAudio);
+    if (mode === 'audio' && !chosenAudio) throw new Error('Aucun son du micro à enregistrer.');
+    const combined = new MediaStream([
+      ...(videoStream?.getVideoTracks() || []),
+      ...(chosenAudio ? [chosenAudio] : []),
     ]);
+    // Dual capture is limited to desktop audio, only when music exists. On
+    // phones we preserve one high-quality recording to avoid encoder overload.
+    // Prioritize the fidelity of the main recording over a simultaneous
+    // second encoder, which can overload Safari and lower-powered devices.
+    // The soundtrack is chosen before recording; no automatic second capture.
+    const alternateStream: MediaStream | null = null;
     const cleanup = () => {
       window.clearInterval(interval);
-      if(!fallback)videoStream?.getTracks().forEach(t => t.stop());
-      nodes.forEach(n => n.disconnect());
-      oscillator.stop();
-      void ctx.close();
-      videos.forEach(v => {
-        v.pause();
-        v.srcObject = null;
-      });
+      window.clearInterval(audioTimer);
+      // Only stop tracks owned by the recorder. Never stop the live camera.
+      // Never stop a borrowed live camera track on iOS.
+      if (!fallback) videoStream?.getTracks().forEach(track => track.stop());
+      nodes.forEach(node => node.source.disconnect());
+      nodes.clear();
+      mixedDestination?.stream.getTracks().forEach(track => track.stop());
+      voiceDestination?.stream.getTracks().forEach(track => track.stop());
+      if (audioContext) void audioContext.close().catch(() => {});
+      videos.forEach(v => { v.pause(); v.srcObject = null; });
     };
-    return { stream: combined, cleanup, fallback };
+    return { stream: combined, alternateStream, cleanup, fallback, directMicRecording };
+  }
+
+  function testMicrophone() {
+    if (micTestRecording) return;
+    const microphone=rawRef.current?.getAudioTracks()[0];
+    if (!microphone || microphone.readyState!=='live') {
+      toast('Le microphone est indisponible. Active-le avant ce test.');
+      return;
+    }
+    if (typeof MediaRecorder==='undefined') {
+      toast('Le test de capture audio n’est pas compatible avec ce navigateur.');
+      return;
+    }
+    if (micTestUrlRef.current) URL.revokeObjectURL(micTestUrlRef.current);
+    micTestUrlRef.current='';
+    setMicTestUrl('');
+    let clone: MediaStreamTrack | null=null;
+    try {
+      clone=microphone.clone();
+      const ua=navigator.userAgent;
+      const preferMp4=/iPhone|iPad|iPod|Safari(?!.*Chrome|.*CriOS)/i.test(ua);
+      const candidates=preferMp4
+        ? ['audio/mp4','audio/webm;codecs=opus','audio/webm']
+        : ['audio/webm;codecs=opus','audio/webm','audio/mp4'];
+      let recorder:MediaRecorder|null=null;
+      for(const mimeType of candidates) {
+        if(!MediaRecorder.isTypeSupported(mimeType))continue;
+        try {
+          recorder=new MediaRecorder(new MediaStream([clone]),{
+            mimeType,audioBitsPerSecond:192000
+          });
+          break;
+        } catch {/* another codec may work */}
+      }
+      if(!recorder)recorder=new MediaRecorder(new MediaStream([clone]),{audioBitsPerSecond:192000});
+      const activeRecorder=recorder;
+      const captured:BlobPart[]=[];
+      setMicTestRecording(true);
+      activeRecorder.ondataavailable=event=>{if(event.data.size)captured.push(event.data)};
+      activeRecorder.onerror=()=>toast('Échec du test audio natif sur ce navigateur.');
+      activeRecorder.onstop=()=>{
+        clone?.stop();
+        setMicTestRecording(false);
+        const file=new Blob(captured,{type:activeRecorder.mimeType || 'audio/webm'});
+        if(!file.size) {
+          toast('Le test audio est vide. Vérifie l’autorisation du microphone.');
+          return;
+        }
+        const url=URL.createObjectURL(file);
+        micTestUrlRef.current=url;
+        setMicTestUrl(url);
+        toast('Test prêt : écoute ta voix, puis compare avec l’enregistrement SCELYO.');
+      };
+      activeRecorder.start();
+      window.setTimeout(()=>{
+        if(activeRecorder.state==='recording')activeRecorder.stop();
+      },4000);
+    } catch (error) {
+      clone?.stop();
+      setMicTestRecording(false);
+      toast('Test micro impossible : '+readableError(error));
+    }
   }
 
   async function startRecording(mode: 'video' | 'audio') {
     if (!joined || recording) return;
+    if (hostId !== peerId.current && !roomSettings.allowRecording) {
+      toast('L’organisateur a désactivé les enregistrements.');
+      return;
+    }
     if (typeof MediaRecorder === 'undefined') {
       toast('Enregistrement non pris en charge sur ce navigateur.');
       return;
     }
     try {
-      const { stream, cleanup, fallback } = recordCanvasAndAudio(mode);
-      if(fallback)toast('Capture directe iPhone plus stable : les effets virtuels et changements automatiques d’intervenant ne seront pas inclus dans ce fichier.');
+      const hadMusic = Boolean(musicRef.current);
+      const selectedWithMusic = hadMusic && recordIncludeMusic;
+      const { stream, alternateStream, cleanup, fallback, directMicRecording } =
+        recordCanvasAndAudio(mode, selectedWithMusic);
+      const nativeIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if(mode==='video' && nativeIOS && recordVideoQuality==='1080'){
+        // Do not applyConstraints to the shared live camera during recording:
+        // Safari can stop emitting video frames without stopping the track.
+        const settings=stream.getVideoTracks()[0]?.getSettings();
+        if(settings?.width && settings.width<1920)toast('La caméra fournit '+settings.width+'×'+(settings.height||'?')+' sur cet iPhone. Qualité native conservée pour éviter les interruptions.');
+      }
+      if (directMicRecording) {
+        toast('Capture audio naturelle : micro enregistré directement, sans traitement vocal supplémentaire.');
+      }
+      if(fallback)toast('Capture caméra directe sur iPhone : qualité '+(recordVideoQuality==='1080'?'1080p demandée':'d’origine')+'. Les effets virtuels et changements d’intervenant ne seront pas inclus.');
       const types =
         mode === 'video'
           ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm']
-          : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
-      const rate=quality==='720'?2600000:5500000;
+          : /iPhone|iPad|iPod|Safari(?!.*Chrome)/i.test(navigator.userAgent)
+            ? ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+            : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      const rate=nativeIOS
+        ? recordVideoQuality==='1080'?5500000:7000000
+        : quality==='720'?2600000:5500000;
       let recorder:MediaRecorder|null=null;
       let recorderError:unknown=null;
       for(const candidate of [...types.filter(t=>MediaRecorder.isTypeSupported(t)),'']){
         try{
           recorder=new MediaRecorder(stream,mode==='video'
-            ?{...(candidate?{mimeType:candidate}:{}),videoBitsPerSecond:rate,audioBitsPerSecond:128000}
-            :{...(candidate?{mimeType:candidate}:{}),audioBitsPerSecond:128000});
+            ?{...(candidate?{mimeType:candidate}:{}),videoBitsPerSecond:rate,audioBitsPerSecond:192000}
+            :{...(candidate?{mimeType:candidate}:{}),audioBitsPerSecond:192000});
           break;
         }catch(e){recorderError=e;}
       }
       if(!recorder)throw new Error('Format vidéo non pris en charge : '+readableError(recorderError));
-      recorder.onerror=()=>toast('La capture vidéo a rencontré une erreur du navigateur. Essaie 720p.');
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = e => {
-        if (e.data.size) chunks.push(e.data);
+      let alternateRecorder: MediaRecorder | null = null;
+      const alternateChunks: BlobPart[] = [];
+      // An audio-only session can be saved in both variants without any
+      // postprocessing or extra video encoder. If the browser rejects the
+      // second recorder, the original selected mix remains available.
+      if (alternateStream) {
+        try {
+          alternateRecorder = new MediaRecorder(alternateStream, {
+            ...(recorder.mimeType ? { mimeType: recorder.mimeType } : {}),
+            audioBitsPerSecond: 192000,
+          });
+          alternateRecorder.ondataavailable = event => {
+            if (event.data.size) alternateChunks.push(event.data);
+          };
+        } catch {
+          alternateRecorder = null;
+        }
+      }
+      recorder.onerror=event=>{
+        console.warn('SCELYO recorder error',event);
+        toast('La capture a été interrompue par le navigateur. Essaie en 720p sans musique.');
+        if(recorder?.state==='recording'){try{recorder.stop()}catch{/* already stopped */}}
       };
-      recorder.onstop = () => {
+      const chunks: BlobPart[] = [];
+      // Monitor decoded camera frames, not just MediaRecorder data: Safari may
+      // keep writing audio after video has silently frozen.
+      let lastVideoFrameAt=Date.now();
+      let seenVideoFrame=false;
+      let stalledVideo=false;
+      let frameMonitor:HTMLVideoElement|null=null;
+      let frameMonitorTimer=0;
+      if(nativeIOS && mode==='video'){
+        const monitor=document.createElement('video');
+        monitor.muted=true;monitor.playsInline=true;monitor.autoplay=true;
+        monitor.srcObject=new MediaStream(stream.getVideoTracks());
+        frameMonitor=monitor;
+        const rvfc=(monitor as HTMLVideoElement & {requestVideoFrameCallback?:(cb:(now:number,metadata:unknown)=>void)=>number}).requestVideoFrameCallback;
+        if(rvfc){
+          const onFrame=()=>{
+            if(recorder?.state==='recording'){
+              lastVideoFrameAt=Date.now();seenVideoFrame=true;
+            }
+            if(recorder?.state!=='inactive')rvfc.call(monitor,onFrame);
+          };
+          void monitor.play().then(()=>rvfc.call(monitor,onFrame)).catch(()=>{});
+        }
+        frameMonitorTimer=window.setInterval(()=>{
+          if(recorder?.state!=='recording' || !seenVideoFrame || stalledVideo)return;
+          if(Date.now()-lastVideoFrameAt>5000){
+            stalledVideo=true;
+            toast('Caméra figée depuis 5 secondes : iOS a interrompu les images. Arrête et recommence la capture, écran allumé.');
+          }
+        },1000);
+      }
+      let lastChunkAt=Date.now();
+      let receivedBytes=0;
+      let captureWarning=false;
+      const captureStartedAt=Date.now();
+      const captureWatch=window.setInterval(()=>{
+        if(recorder?.state!=='recording')return;
+        const elapsed=Date.now()-captureStartedAt;
+        if(elapsed>20000 && Date.now()-lastChunkAt>18000 && !captureWarning){
+          captureWarning=true;
+          toast('Attention : le navigateur ne fournit plus de données vidéo. Garde SCELYO au premier plan et l’écran allumé.');
+        }
+      },5000);
+      recorder.ondataavailable = e => {
+        if (e.data.size){
+          chunks.push(e.data);
+          receivedBytes+=e.data.size;
+          lastChunkAt=Date.now();
+          captureWarning=false;
+        }
+      };
+      recorder.addEventListener('pause',()=>toast('L’enregistrement a été mis en pause par le navigateur. Reste sur SCELYO pour conserver la vidéo.'));
+      recorder.addEventListener('resume',()=>toast('Enregistrement repris.'));
+      stream.getTracks().forEach(track=>{
+        track.addEventListener('ended',()=>{
+          if(recorder?.state==='recording')toast('La caméra ou le micro a été interrompu par iOS. Arrête la capture pour conserver les données disponibles.');
+        });
+      });
+      recorder.onstop = async () => {
+        window.clearInterval(captureWatch);
+        window.clearInterval(frameMonitorTimer);
+        if(frameMonitor){frameMonitor.pause();frameMonitor.srcObject=null;frameMonitor=null;}
+        setExportPhase('finalizing');
+        setExportProgress(null);
+        if (alternateRecorder && alternateRecorder.state === 'recording') {
+          await new Promise<void>(resolve => {
+            alternateRecorder!.addEventListener('stop', () => resolve(), { once: true });
+            try { alternateRecorder!.stop(); } catch { resolve(); }
+          });
+        }
         cleanup();
         stopCaptureRef.current = null;
         const type =
@@ -1026,6 +1693,7 @@ function App() {
         if(!blob.size){
           setRecording(false);
           setRecordReady(null);
+          setExportPhase('idle');
           recorderRef.current=null;
           toast('Enregistrement vide : aucun fichier vidéo exploitable. Essaie 720p ou un autre navigateur.');
           return;
@@ -1035,42 +1703,72 @@ function App() {
             ? 'mp4'
             : 'm4a'
           : 'webm';
-        const filename =
-          'FondVideo-New-Meet-' +
-          roomRef.current +
-          '-' +
-          new Date().toISOString().replace(/[:.]/g, '-') +
-          '.' +
-          ext;
+        const baseName =
+          'SCELYO-Live-' + roomRef.current + '-' +
+          new Date().toISOString().replace(/[:.]/g, '-');
+        const filename = baseName + (selectedWithMusic ? '-avec-musique' : '-sans-musique') + '.' + ext;
         const item = { blob, name: filename, url: URL.createObjectURL(blob) };
         if (readyRef.current) URL.revokeObjectURL(readyRef.current.url);
         readyRef.current = item;
         setRecordReady(item);
+        if (alternateChunks.length && alternateRecorder) {
+          const alternateType = alternateRecorder.mimeType || type;
+          const alternateBlob = new Blob(alternateChunks, { type: alternateType });
+          if (alternateBlob.size) {
+            const otherExt = alternateType.includes('mp4') ? 'm4a' : 'webm';
+            const otherFilename = baseName + (selectedWithMusic ? '-sans-musique' : '-avec-musique') + '.' + otherExt;
+            const otherItem = {
+              blob: alternateBlob, name: otherFilename, url: URL.createObjectURL(alternateBlob),
+            };
+            if (alternateRef.current) URL.revokeObjectURL(alternateRef.current.url);
+            alternateRef.current = otherItem;
+            setAlternateRecording(otherItem);
+            void saveRecording(alternateBlob, otherFilename)
+              .then(saved => setSavedItems(previous => [saved, ...previous]))
+              .catch(() => toast('La seconde version est disponible au téléchargement, mais pas enregistrée dans Vault.'));
+          }
+        }
         setRecording(false);
+        setExportPhase('idle');
         void keepRecording(blob,filename);
         void emit('recording', { active: false }).catch(() => {});
-        // Audio and video are uploaded immediately after stopping, whenever
-        // Drive is connected. No second click is needed.
-        if (tokenRef.current) {
-          void uploadToDrive(item);
-        } else {
-          setDriveStatus('idle');
-          toast('Enregistrement disponible dans Mes enregistrements : télécharge-le ou partage-le.');
-        }
+        // Do not download or upload anything without a user click.
+        // Local IndexedDB persistence is separate from file downloading.
+        setDriveStatus('idle');
+        toast(stalledVideo
+          ? 'Attention : caméra figée pendant la capture. Le fichier peut contenir une image fixe. Recommence avant de l’utiliser.'
+          : 'Enregistrement prêt : choisis la version, puis clique sur Télécharger.');
       };
       recorderRef.current = recorder;
       stopCaptureRef.current = cleanup;
       setRecordReady(null);
+      setAlternateRecording(null);
+      if (readyRef.current) URL.revokeObjectURL(readyRef.current.url);
+      if (alternateRef.current) URL.revokeObjectURL(alternateRef.current.url);
       readyRef.current = null;
+      alternateRef.current = null;
+      setRecordedWithMusic(selectedWithMusic);
+      setDownloadWithMusic(selectedWithMusic);
       setUploadedLink('');
       setSeconds(0);
       setRecordMode(mode);
-      recorder.start();
+      // A single multi-minute iOS MP4 can silently truncate under memory
+      // pressure. Request regular chunks and warn if the browser stops
+      // delivering data. MediaRecorder is still responsible for MP4 indexing.
+      recorder.start(nativeIOS ? 4000 : 2000);
+      if (alternateRecorder) {
+        try { alternateRecorder.start(); } // continuous audio output
+        catch {
+          alternateRecorder = null;
+          toast('Le navigateur ne permet pas deux versions simultanées. La version choisie avant la capture sera conservée.');
+        }
+      }
       setRecording(true);
       void emit('recording', { active: true }).catch(() => {});
     } catch (e) {
       stopCaptureRef.current?.();
       setRecording(false);
+      setExportPhase('idle');
       toast('Enregistrement impossible : ' + readableError(e));
     }
   }
@@ -1109,8 +1807,7 @@ function App() {
           } catch {
             // An unreadable account profile does not block the Drive upload.
           }
-          toast('Google Drive connecté. Les enregistrements audio et vidéo seront envoyés automatiquement après leur arrêt.');
-          if(readyRef.current)void uploadToDrive(readyRef.current);
+          toast('Google Drive connecté. Pour envoyer une capture, clique sur « Envoyer sur Drive » après l’enregistrement.');
         }
       });
       oauthClient.requestAccessToken({prompt:'consent'});
@@ -1195,7 +1892,7 @@ function App() {
           'https://drive.google.com/file/d/' + file.id + '/view'
       );
       setDriveStatus('saved');
-      toast((rec.blob.type.startsWith('audio/') ? 'Audio' : 'Vidéo') + ' sauvegardé automatiquement dans ton Google Drive.');
+      toast((rec.blob.type.startsWith('audio/') ? 'Audio' : 'Vidéo') + ' sauvegardé dans ton Google Drive.');
     } catch (e) {
       setDriveStatus('failed');
       toast('Envoi Drive échoué : ' + readableError(e) + ' — le fichier reste téléchargeable, réessaie depuis la réunion.');
@@ -1224,42 +1921,122 @@ function App() {
     String(Math.floor(seconds / 60)).padStart(2, '0') +
     ':' +
     String(seconds % 60).padStart(2, '0');
+  const chosenRecording = recordReady && (
+    recordedWithMusic === downloadWithMusic
+      ? recordReady
+      : alternateRecording || recordReady
+  );
 
   return (
     <div className="app-shell">
-      <header className="header">
-        <div
-          className="brand"
-          onClick={() => {
-            if (!joined) {
-              location.hash = '';
-              setRoom('');
-            }
-          }}
-        >
-          <div className="brand-mark">
-            <Video size={23} strokeWidth={2.7} />
-          </div>
-          <strong>
-            Fond<span>Vidéo New Meet</span>
-          </strong>
+      {fullStage && joined && !gallery && (
+        <button type="button" className="scelyo-fullscreen-exit"
+          onClick={() => setFullStage(false)} aria-label="Quitter le plein écran" title="Échap pour quitter">
+          <Minimize2 size={19}/> Quitter le plein écran <span>Échap</span>
+        </button>
+      )}
+      {pendingRecordMode && joined && (
+        <div className="modal-backdrop scelyo-rec-setup-backdrop"
+          onMouseDown={event=>{if(event.target===event.currentTarget)setPendingRecordMode(null);}}>
+          <section className="scelyo-rec-setup" role="dialog" aria-modal="true" aria-labelledby="scelyo-rec-title">
+            <div className="scelyo-rec-setup-head">
+              <span className="scelyo-rec-setup-icon">{pendingRecordMode==='audio'?<Headphones size={26}/>:<Video size={26}/>}</span>
+              <div><span>SCELYO LIVE / CAPTURE</span><h2 id="scelyo-rec-title">Avant d’enregistrer</h2></div>
+              <button type="button" onClick={()=>setPendingRecordMode(null)} aria-label="Annuler l'enregistrement"><X size={22}/></button>
+            </div>
+            <p>Choisis ce que le fichier final doit contenir. Le micro naturel est privilégié pour la capture, sans effet vocal supplémentaire. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
+            {/iPhone|iPad|iPod/i.test(navigator.userAgent) && (
+              <p className="scelyo-ios-background-note">
+                Sur iPhone, garde SCELYO au premier plan et l’écran allumé pendant la vidéo :
+                iOS peut suspendre la caméra, le micro et l’enregistrement quand tu verrouilles
+                le téléphone ou quittes le navigateur. Le maintien de l’écran éveillé est
+                demandé automatiquement lorsque le navigateur le permet.
+              </p>
+            )}
+            {pendingRecordMode==='video' && (
+              <fieldset className="scelyo-rec-music-options">
+                <legend>Qualité de la vidéo enregistrée</legend>
+                <label className={recordVideoQuality==='1080'?'selected':''}>
+                  <input type="radio" name="scelyo-record-quality"
+                    checked={recordVideoQuality==='1080'}
+                    onChange={()=>setRecordVideoQuality('1080')}/>
+                  <Video size={21}/><span><strong>1080p Full HD</strong>
+                    <small>Demande 1920 × 1080 si la caméra et Safari le permettent</small></span>
+                </label>
+                <label className={recordVideoQuality==='original'?'selected':''}>
+                  <input type="radio" name="scelyo-record-quality"
+                    checked={recordVideoQuality==='original'}
+                    onChange={()=>setRecordVideoQuality('original')}/>
+                  <Video size={21}/><span><strong>Qualité d’origine</strong>
+                    <small>Conserve la résolution réelle du flux caméra, sans la réduire</small></span>
+                </label>
+              </fieldset>
+            )}
+            <fieldset className="scelyo-rec-music-options">
+              <legend>Musique dans l’enregistrement</legend>
+              <label className={!recordIncludeMusic?'selected':''}>
+                <input type="radio" name="scelyo-record-music" checked={!recordIncludeMusic}
+                  onChange={()=>setRecordIncludeMusic(false)}/>
+                <Mic size={21}/><span><strong>Sans musique</strong><small>Voix des participants uniquement</small></span>
+              </label>
+              <label className={recordIncludeMusic?'selected':''}>
+                <input type="radio" name="scelyo-record-music" checked={recordIncludeMusic}
+                  disabled={!musicName} onChange={()=>setRecordIncludeMusic(true)}/>
+                <Music2 size={21}/><span><strong>Avec la musique de fond</strong>
+                  <small>{musicName?'Le niveau musical suit la jauge ; la voix ne baisse pas.':'Importe d’abord une musique dans Live'}</small></span>
+              </label>
+            </fieldset>
+            <p className="scelyo-rec-setup-footnote">
+              {pendingRecordMode==='audio' && musicName
+                ? 'Pour préserver le son des voix, SCELYO enregistre une seule version de haute qualité : choisis avec ou sans musique avant de démarrer.'
+                : 'Tu pourras télécharger le fichier en un clic après l’arrêt. Pour la vidéo, choisis la musique avant la capture.'}
+            </p>
+            <div className="scelyo-mic-test-box">
+              <div><strong>Vérifier la qualité du microphone</strong><small>Test local de 4 secondes, sans musique, sans filtre ni envoi sur Internet. Utilise un casque pour éviter les échos.</small></div>
+              <button type="button" disabled={micTestRecording}
+                onClick={testMicrophone}>{micTestRecording?'Enregistrement du test…':'Tester mon micro (4 s)'}</button>
+              {micTestUrl && <audio controls src={micTestUrl} preload="metadata" aria-label="Écouter le test du microphone naturel"/>}
+            </div>
+            <div className="scelyo-rec-setup-actions">
+              <button type="button" className="scelyo-rec-cancel" onClick={()=>setPendingRecordMode(null)}>Annuler</button>
+              <button type="button" className="scelyo-rec-start" onClick={()=>{
+                const mode = pendingRecordMode;
+                setPendingRecordMode(null);
+                if(mode) void startRecording(mode);
+              }}><Circle size={17} fill="currentColor"/> Démarrer l’enregistrement {pendingRecordMode==='audio'?'audio':'vidéo'}</button>
+            </div>
+          </section>
         </div>
-        <span className="header-caption">Vos réunions, sans compromis</span>
-        <div className="header-right">
-          <a className="studio-nav" href="./fondvideo.html">Studio vidéo</a>
-          <button className="library-nav" onClick={()=>setLibraryOpen(true)}><Library size={18}/> <span>Mes enregistrements</span></button>
-          <span className="private-pill">
-            <ShieldCheck size={15} /> Lien privé
-          </span>
-          <button
-            className={'drive-header-action ' + (driveConnected ? 'connected' : '')}
-            title="Connexion Google Drive"
-            onClick={() => setShowSettings(true)}
-          >
-            <CloudUpload size={17} />
-            <span>{driveConnected ? 'Drive connecté' : 'Drive : en attente'}</span>
+      )}
+      <header className="header scelyo-header">
+        <button type="button" className="scelyo-brand" aria-label="SCELYO · Accueil"
+          onClick={() => { if (!joined) { location.hash = ''; setRoom(''); setMenuOpen(false); } }}>
+          <img src="./scelyo-mark.svg" alt="" width="40" height="40" />
+          <span className="scelyo-brand-name">SCELYO</span>
+          <span className="scelyo-brand-divider" />
+          <span className="scelyo-brand-descriptor">Le live devient création</span>
+        </button>
+        <nav className="scelyo-header-nav" aria-label="Espaces SCELYO">
+          <button type="button" className="scelyo-nav-item selected" onClick={() => { if (!joined) { location.hash = ''; setRoom(''); } }}><Video size={17}/> Live</button>
+          <a className="scelyo-nav-item" href="./fondvideo.html"><Camera size={17}/> Studio</a>
+          <button type="button" className="scelyo-nav-item" onClick={() => setLibraryOpen(true)}><Library size={17}/> Vault</button>
+        </nav>
+        <div className="scelyo-header-actions">
+          <button type="button" className={'scelyo-drive-btn ' + (driveConnected ? 'connected' : '')} onClick={() => setShowSettings(true)} title="Sauvegarde Google Drive">
+            <CloudUpload size={18}/><span>{driveConnected ? 'Drive connecté' : 'Connecter Drive'}</span>
+          </button>
+          <button type="button" className="scelyo-menu-toggle" aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'} aria-expanded={menuOpen} onClick={() => setMenuOpen(v => !v)}>
+            {menuOpen ? <X size={22}/> : <Menu size={22}/>}
           </button>
         </div>
+        {menuOpen && (
+          <nav className="scelyo-mobile-menu" aria-label="Navigation mobile">
+            <button type="button" onClick={() => {setMenuOpen(false);if(!joined){location.hash='';setRoom('');}}}><Video size={18}/> SCELYO Live <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={18}/> SCELYO Studio <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => {setMenuOpen(false);setLibraryOpen(true);}}><Library size={18}/> SCELYO Vault <ArrowRight size={16}/></button>
+            <button type="button" onClick={() => {setMenuOpen(false);setShowSettings(true);}}><CloudUpload size={18}/> Google Drive <ArrowRight size={16}/></button>
+          </nav>
+        )}
       </header>
 
       {notice && (
@@ -1273,128 +2050,75 @@ function App() {
       )}
 
       {!room && !joined && (
-        <main className="landing">
-          <div className="hero-glow" />
-          <div className="hero-copy">
-            <div className="eyebrow">
-              <span className="live-dot" /> LA VISIO, SIMPLEMENT
+        <main className="fv-dashboard">
+          <aside className="fv-sidebar" aria-label="Navigation principale">
+            <div className="fv-sidebar-label">SCELYO / ESPACES</div>
+            <div className="fv-sidebar-active"><Video size={19}/> Tableau de bord <span>01</span></div>
+            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> Nouvelle session <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={19}/> SCELYO Studio <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => setLibraryOpen(true)}><Library size={19}/> SCELYO Vault <ArrowRight size={16}/></button>
+            <div className="fv-sidebar-bottom">
+              <div className="fv-sidebar-orb"><Video size={20}/></div>
+              <strong>Le live devient création.</strong>
+              <p>Crée, échange et enregistre tes idées au même endroit.</p>
+              <span><ShieldCheck size={14}/> Ton espace, tes contenus</span>
             </div>
-            <h1>
-              Vos meilleures idées
-              <br />
-              <em>méritent de se rencontrer.</em>
-            </h1>
-            <p>
-              Ton studio FondVidéo et ta visioconférence réunis. Fonds en
-              direct, formats sociaux, enregistrements et partage d’écran.
-            </p>
-            <div className="launch-actions">
-              <button
-                className="btn primary large"
-                onClick={() => openRoom(newCode())}
-              >
-                <Plus size={20} /> Nouvelle réunion
+          </aside>
+
+          <div className="fv-dashboard-content">
+            <div className="fv-dashboard-topline"><span><span className="fv-online-dot"/> TON UNIVERS SCELYO</span><span>LIVE · STUDIO · VAULT</span></div>
+            <section className="fv-feature-hero">
+              <div className="fv-feature-content">
+                <div className="fv-kicker"><span className="fv-kicker-dash"/> CRÉER. RÉUNIR. CAPTURER.</div>
+                <h1>Le live devient<br/><em>création.</em></h1>
+                <p>Lance tes sessions, transforme tes vidéos et retrouve tes captures dans un seul espace créatif.</p>
+                <div className="fv-hero-buttons">
+                  <button className="fv-hero-primary" onClick={() => openRoom(newCode())}><Plus size={21}/> Créer une session <ArrowRight size={18}/></button>
+                  <a className="fv-hero-secondary" href="./fondvideo.html"><PlayCircle size={21}/> Ouvrir le Studio</a>
+                </div>
+                <div className="fv-feature-metrics"><span><span className="fv-metric-dot"/> ÉCHANGES EN DIRECT</span><span><ShieldCheck size={15}/> ACCÈS PRIVÉ</span></div>
+              </div>
+              <div className="fv-hero-showcase" aria-hidden="true">
+                <div className="fv-showcase-orbit fv-orbit-one"/>
+                <div className="fv-showcase-orbit fv-orbit-two"/>
+                <div className="fv-showcase-glow"/>
+                <div className="fv-glass-frame">
+                  <div className="fv-glass-head"><span><i/> <i/> <i/></span><b>SCELYO / LIVE</b><span>● LIVE</span></div>
+                  <div className="fv-glass-stage">
+                    <div className="fv-glass-guest guest-one"><div className="fv-guest-avatar"><Users size={38}/></div><small>Caméra principale</small></div>
+                    <div className="fv-glass-guest guest-two"><div className="fv-guest-avatar"><Video size={22}/></div><small>Invité connecté</small></div>
+                  </div>
+                  <div className="fv-glass-controls"><span><Mic size={16}/></span><span><Video size={16}/></span><span><MonitorUp size={16}/></span><span className="fv-glass-hangup"><PhoneOff size={16}/></span></div>
+                </div>
+                <div className="fv-floating-label"><span><Circle size={9} fill="currentColor"/></span><div><strong>À toi de créer</strong><small>Le studio est prêt.</small></div></div>
+              </div>
+            </section>
+
+            <div className="fv-section-heading"><div><span>TON WORKSPACE</span><h2>Quelle sera ta prochaine création ?</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
+            <section className="fv-action-grid">
+              <button className="fv-action-card fv-action-meet" onClick={() => openRoom(newCode())}>
+                <span className="fv-action-top"><span className="fv-action-icon"><Video size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>01 / SE CONNECTER</small><strong>Nouvelle session</strong><span>Lance une session vidéo en un instant.</span></span>
               </button>
-              <a className="btn subtle large" href="./fondvideo.html"><Camera size={18}/> Ouvrir FondVidéo</a>
-              <button className="btn subtle large" onClick={()=>setLibraryOpen(true)}><Library size={18}/> Mes enregistrements</button>
-              <div className="join-form">
-                <Link2 size={18} />
-                <input
-                  value={newRoom}
-                  onChange={e => setNewRoom(e.target.value.toLowerCase())}
-                  placeholder="Code de la réunion"
-                  aria-label="Code de la réunion"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      if (/^[a-z2-9]{12}$/.test(newRoom.trim()))
-                        openRoom(newRoom.trim());
-                      else
-                        toast(
-                          'Saisis un code de réunion valide (12 caractères).'
-                        );
-                    }
-                  }}
-                />
-                <button
-                  title="Rejoindre"
-                  onClick={() =>
-                    /^[a-z2-9]{12}$/.test(newRoom.trim())
-                      ? openRoom(newRoom.trim())
-                      : toast(
-                          'Saisis un code de réunion valide (12 caractères).'
-                        )
-                  }
-                >
-                  <ArrowRight size={19} />
-                </button>
+              <a className="fv-action-card fv-action-studio" href="./fondvideo.html">
+                <span className="fv-action-top"><span className="fv-action-icon"><Camera size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>SCELYO Studio</strong><span>Mets tes vidéos en scène et exporte-les.</span></span>
+              </a>
+              <button className="fv-action-card fv-action-library" onClick={() => setLibraryOpen(true)}>
+                <span className="fv-action-top"><span className="fv-action-icon"><Library size={26}/></span><ArrowRight size={21}/></span>
+                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>SCELYO Vault</strong><span>Retrouve tes captures sur cet appareil.</span></span>
+              </button>
+            </section>
+
+            <section className="fv-join-strip">
+              <div className="fv-join-copy"><span className="fv-join-icon"><Link2 size={23}/></span><div><strong>Une invitation à rejoindre ?</strong><p>Entre un code pour accéder à une session.</p></div></div>
+              <div className="fv-join-form">
+                <input value={newRoom} onChange={e => setNewRoom(e.target.value.toLowerCase())}
+                  placeholder="Code de session (12 caractères)" aria-label="Code de session"
+                  onKeyDown={e => {if(e.key==='Enter'){if(/^[a-z2-9]{12}$/.test(newRoom.trim()))openRoom(newRoom.trim());else toast('Saisis un code valide de 12 caractères.');}}}/>
+                <button title="Rejoindre la session" onClick={() => /^[a-z2-9]{12}$/.test(newRoom.trim()) ? openRoom(newRoom.trim()) : toast('Saisis un code valide de 12 caractères.')}><ArrowRight size={21}/></button>
               </div>
-            </div>
-            <div className="hero-badges">
-              <span>
-                <Check size={16} /> Audio & vidéo
-              </span>
-              <span>
-                <Check size={16} /> Partage d’écran
-              </span>
-              <span>
-                <Check size={16} /> Enregistrement & Drive
-              </span>
-            </div>
-          </div>
-          <div className="preview-art">
-            <div className="art-top">
-              <div className="art-dots">
-                <i />
-                <i />
-                <i />
-              </div>
-              <span>Réunion en cours</span>
-              <span className="art-lock">
-                <ShieldCheck size={14} />
-              </span>
-            </div>
-            <div className="art-grid">
-              <div className="art-person person-1">
-                <div className="avatar-shape a1" />
-                <span>Vous</span>
-              </div>
-              <div className="art-person person-2">
-                <div className="avatar-shape a2" />
-                <span>Invité</span>
-              </div>
-              <div className="art-person person-3">
-                <div className="avatar-shape a3" />
-                <span>Collègue</span>
-              </div>
-              <div className="art-person person-4">
-                <div className="avatar-shape a4" />
-                <span>Partenaire</span>
-              </div>
-            </div>
-            <div className="art-controls">
-              <span>
-                <Mic size={16} />
-              </span>
-              <span>
-                <Video size={16} />
-              </span>
-              <span>
-                <MonitorUp size={16} />
-              </span>
-              <span className="art-end">
-                <PhoneOff size={16} />
-              </span>
-            </div>
-            <div className="art-float">
-              <span className="small-purple">
-                <Circle size={13} fill="currentColor" />
-              </span>
-              <div>
-                <strong>Enregistrement prêt</strong>
-                <small>Sauvegarde Google Drive</small>
-              </div>
-              <Check size={16} />
-            </div>
+            </section>
           </div>
         </main>
       )}
@@ -1423,9 +2147,9 @@ function App() {
               </div>
             </div>
             <div className="prejoin-card">
-              <div className="eyebrow">PRÊT À REJOINDRE ?</div>
-              <h2>Rejoindre la réunion</h2>
-              <p>Choisis ton nom d’affichage avant d’entrer dans le salon.</p>
+              <div className="eyebrow">SCELYO LIVE / AVANT LA SESSION</div>
+              <h2>Rejoindre la session</h2>
+              <p>Prépare ta présence avant d'entrer en direct.</p>
               <label className="field-label" htmlFor="name">
                 Ton prénom
               </label>
@@ -1456,6 +2180,35 @@ function App() {
                   {camOn ? 'activée' : 'coupée'}
                 </button>
               </div>
+              <section className="scelyo-clearvoice-prejoin" aria-label="SCELYO ClearVoice avant la réunion">
+                <div className="scelyo-clearvoice-prejoin-header">
+                  <div className="scelyo-clearvoice-headline">
+                    <span className="scelyo-clearvoice-icon"><AudioLines size={20}/></span>
+                    <span><strong>SCELYO ClearVoice</strong><small>Ta voix, plus claire pendant la session</small></span>
+                  </div>
+                </div>
+                <label className="scelyo-clearvoice-option">
+                  <span><strong>Réduire les bruits de fond</strong><small>Traitement local, avec réduction native si disponible</small></span>
+                  <input type="checkbox" checked={noiseReduction}
+                    onChange={event => void changeNoiseReduction(event.target.checked)}
+                    aria-label="Réduire les bruits de fond"/>
+                </label>
+                <label className="scelyo-clearvoice-option">
+                  <span><strong>Améliorer la voix</strong><small>Clarté, fréquences et volume</small></span>
+                  <input type="checkbox" checked={voiceEnhancement}
+                    onChange={event => void changeVoiceEnhancement(event.target.checked)}
+                    aria-label="Améliorer la voix"/>
+                </label>
+                <label className="scelyo-clearvoice-level">Profil de voix
+                  <select value={voiceProfile} disabled={!voiceEnhancement}
+                    onChange={event => changeVoiceProfile(event.target.value as VoiceProfile)}>
+                    <option value="natural">Naturel</option>
+                    <option value="balanced">Équilibré</option>
+                    <option value="strong">Renforcé</option>
+                  </select>
+                </label>
+                <p className="scelyo-clearvoice-note">Par défaut, le son est naturel sans traitement supplémentaire. Active ces filtres seulement si tu le souhaites ; les bruits faibles sont surtout atténués pendant les pauses.</p>
+              </section>
               <div className="camera-options">
                 <label>Caméra</label>
                 <select value={face} onChange={e => setFace(e.target.value)}>
@@ -1481,7 +2234,7 @@ function App() {
                 disabled={busy}
                 onClick={joinMeeting}
               >
-                {busy ? 'Connexion…' : 'Rejoindre maintenant'}{' '}
+                {busy ? 'Connexion…' : 'Entrer dans la session'}{' '}
                 <ArrowRight size={18} />
               </button>
               <div className="room-code">
@@ -1501,9 +2254,9 @@ function App() {
         <main className="meeting">
           <div className="meeting-header">
             <div>
-              <div className="eyebrow">RÉUNION EN DIRECT</div>
+              <div className="eyebrow">SCELYO LIVE / EN DIRECT</div>
               <h2>
-                FondVidéo Meet <span className="meeting-id">#{room}</span>
+                SCELYO Live <span className="meeting-id">#{room}</span>
               </h2>
             </div>
             <div className="meeting-meta">
@@ -1528,7 +2281,7 @@ function App() {
           </div>
           <div className="live-tools">
             <strong>
-              <Camera size={17} /> Studio caméra
+              <Camera size={17} /> Mise en scène
             </strong>
             <label>
               Fond
@@ -1584,6 +2337,142 @@ function App() {
               </div>
             )}
           </div>
+          {clearVoiceOpen && (
+            <section className="scelyo-clearvoice-panel" aria-label="Réglages SCELYO ClearVoice">
+              <div className="scelyo-clearvoice-panel-header">
+                <div className="scelyo-clearvoice-headline">
+                  <span className="scelyo-clearvoice-icon"><AudioLines size={21}/></span>
+                  <span><strong>SCELYO ClearVoice</strong><small>Réglages audio de cette session</small></span>
+                </div>
+                <button type="button" className="scelyo-clearvoice-close" title="Fermer ClearVoice"
+                  onClick={() => setClearVoiceOpen(false)}><X size={18}/></button>
+              </div>
+              <label className="scelyo-clearvoice-option">
+                <span><strong>Réduction des bruits de fond</strong><small>Atténue les sons parasites pendant les échanges</small></span>
+                <input type="checkbox" checked={noiseReduction}
+                  disabled={!rawRef.current?.getAudioTracks().length}
+                  onChange={event => void changeNoiseReduction(event.target.checked)}/>
+              </label>
+              <div className="scelyo-noise-status" role="status" aria-live="off">
+                <span className={'scelyo-noise-indicator '+(noiseReduction && (clearVoiceGateReady || nativeNoiseSupported) ? (noiseActive ? 'reducing' : 'enabled') : 'inactive')}/>
+                <div>
+                  <strong>{!noiseReduction ? 'Filtre désactivé'
+                    : !clearVoiceGateReady && !nativeNoiseSupported ? 'Filtre non disponible'
+                    : noiseActive ? 'Bruits atténués en ce moment'
+                    : 'Filtre actif · micro surveillé'}</strong>
+                  <small>{noiseReduction && clearVoiceGateReady
+                    ? (noiseAttenuation > 0 ? 'Atténuation locale : '+noiseAttenuation+' dB' : 'En attente d’un bruit à atténuer')
+                    : nativeNoiseSupported && noiseReduction ? 'Réduction du bruit gérée par le navigateur'
+                    : 'Active le filtre ou autorise le micro'}</small>
+                </div>
+              </div>
+              {clearVoiceGateReady && (
+                <label className="scelyo-clearvoice-level">Force du filtre anti-bruit
+                  <select value={noiseStrength} disabled={!noiseReduction}
+                    onChange={event=>changeNoiseStrength(Number(event.target.value))}>
+                    <option value={1}>Légère</option>
+                    <option value={2}>Normale</option>
+                    <option value={3}>Forte</option>
+                  </select>
+                </label>
+              )}
+              <label className="scelyo-clearvoice-option">
+                <span><strong>Amélioration de la voix</strong><small>Filtre et équilibre la voix en temps réel</small></span>
+                <input type="checkbox" checked={voiceEnhancement}
+                  disabled={!rawRef.current?.getAudioTracks().length}
+                  onChange={event => void changeVoiceEnhancement(event.target.checked)}/>
+              </label>
+              <label className="scelyo-clearvoice-level">Intensité de l’amélioration
+                <select value={voiceProfile} disabled={!voiceEnhancement || !clearVoiceReady}
+                  onChange={event => changeVoiceProfile(event.target.value as VoiceProfile)}>
+                  <option value="natural">Naturel</option>
+                  <option value="balanced">Équilibré</option>
+                  <option value="strong">Renforcé</option>
+                </select>
+              </label>
+              <p className="scelyo-clearvoice-note">
+                {clearVoiceReady && (voiceEnhancement || noiseReduction)
+                  ? 'ClearVoice est activé volontairement pour le Live. La piste native reste prioritaire pour les enregistrements.'
+                  : 'Qualité naturelle : le microphone natif reste prioritaire, sans égalisation ou compression supplémentaire.'}
+                {' '}Les bruits de fond sont surtout réduits pendant les silences, sans promettre de supprimer une autre voix qui parle en même temps. La musique partagée n’est pas filtrée.
+              </p>
+            </section>
+          )}
+          {isHost && musicPanelOpen && (
+            <section className="scelyo-music-panel" aria-label="Musique d’ambiance SCELYO Live">
+              <div className="scelyo-music-panel-head">
+                <div className="scelyo-music-title"><span className="scelyo-music-title-icon"><Music2 size={22}/></span><div><strong>Musique d’ambiance</strong><small>SCELYO Live · diffusion dans la session</small></div></div>
+                <button type="button" className="scelyo-music-close" title="Fermer" onClick={() => setMusicPanelOpen(false)}><X size={20}/></button>
+              </div>
+              <div className="scelyo-music-panel-body">
+                <label className="scelyo-music-upload">
+                  <FileAudio size={19}/>
+                  <span>{musicName ? 'Changer de morceau' : 'Importer un fichier audio'}</span>
+                  <small>MP3 · WAV · M4A</small>
+                  <input type="file" accept=".mp3,.wav,.m4a,.aac,audio/mpeg,audio/wav,audio/mp4"
+                    disabled={musicBusy} hidden onChange={event => {
+                      const file = event.currentTarget.files?.[0] || null;
+                      event.currentTarget.value = '';
+                      void loadMusic(file);
+                    }}/>
+                </label>
+                <button type="button" className="scelyo-music-upload" disabled={driveMusicBusy||musicBusy} onClick={openDriveMusic}>
+                  <CloudUpload size={19}/><span>{driveMusicBusy?'Chargement de Drive…':'Importer depuis Google Drive'}</span>
+                  <small>MP3 · WAV · M4A · AAC</small>
+                </button>
+                {driveMusicOpen && (
+                  <div className="scelyo-drive-music-list">
+                    <div><strong>Mes fichiers audio Drive</strong><button type="button" onClick={()=>setDriveMusicOpen(false)}>Fermer</button></div>
+                    {driveMusicFiles.length===0 && <p>Aucun fichier audio compatible trouvé dans les 100 fichiers les plus récents.</p>}
+                    {driveMusicFiles.map(file=>(
+                      <button type="button" key={file.id} disabled={driveMusicBusy||musicBusy} onClick={()=>void importDriveMusic(file.id,file.name)}>
+                        <FileAudio size={16}/>{file.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {musicName ? (
+                  <div className="scelyo-music-player">
+                    <div className="scelyo-music-track"><div><Music2 size={18}/><span title={musicName}>{musicName}</span></div><span className={musicPlaying ? 'scelyo-music-live' : 'scelyo-music-paused'}>{musicPlaying ? '● DIFFUSION' : 'PRÊT / PAUSE'}</span></div>
+                    <div className="scelyo-music-transport">
+                      <button type="button" disabled={musicBusy} onClick={() => void toggleMusicPlayback()}
+                        title={musicPlaying ? 'Mettre en pause' : 'Diffuser la musique'}>
+                        {musicPlaying ? <Pause size={20} fill="currentColor"/> : <Play size={20} fill="currentColor"/>}
+                        <span>{musicPlaying ? 'Pause' : 'Lecture'}</span>
+                      </button>
+                      <input type="range" min="0" max={Math.max(1, musicDuration || 1)} step="0.1"
+                        value={Math.min(musicTime, Math.max(1, musicDuration || 1))}
+                        disabled={!musicDuration || musicBusy}
+                        aria-label="Position dans la musique"
+                        onChange={event => musicRef.current?.seek(Number(event.target.value))}/>
+                      <span>{musicClock(musicTime)} / {musicClock(musicDuration)}</span>
+                      <button type="button" title="Retirer la musique" disabled={musicBusy}
+                        className="scelyo-music-delete" onClick={() => void clearMusic()}><X size={18}/></button>
+                    </div>
+                    <div className="scelyo-music-settings">
+                      <label className="scelyo-music-volume">
+                        <Volume2 size={18}/> <span>Musique en arrière-plan : {musicVolume}%</span>
+                        <input type="range" min="0" max="100" value={musicVolume}
+                          aria-label="Volume de la musique d’ambiance" onChange={event => {
+                            const next = Number(event.target.value);
+                            setMusicVolume(next);
+                            musicRef.current?.setVolume(next);
+                          }}/>
+                      </label>
+                      <p className="scelyo-music-volume-note">Réglage indépendant du micro : plus tu montes la jauge, plus la musique s’entend. Elle baisse automatiquement pendant les prises de parole.</p>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
+                        onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
+                        <Repeat2 size={17}/> En boucle</label>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicMonitor}
+                        onChange={event => {setMusicMonitor(event.target.checked);musicRef.current?.setMonitor(event.target.checked);}}/>
+                        <Headphones size={17}/> Écoute locale</label>
+                    </div>
+                  </div>
+                ) : <p className="scelyo-music-empty">Choisis une musique depuis ton appareil, puis appuie sur Lecture pour la diffuser à tous les participants.</p>}
+              </div>
+              <p className="scelyo-music-note"><ShieldCheck size={15}/> Le fichier reste sur ton appareil : seul le son est partagé pendant la session. Pour l’écoute locale, utilise un casque afin d’éviter les échos.</p>
+            </section>
+          )}
           <div className="meeting-main">
             <section className="meeting-videos">
               <div className="program-heading"><strong>INTERVENANT : {stageName}</strong><span>{sharedStage?'Écran partagé':'Caméra'} · seule cette image est enregistrée</span><button onClick={()=>setFullStage(value=>!value)}>{fullStage?<Minimize2 size={16}/>:<Maximize2 size={16}/>} {fullStage?'Réduire':'Plein écran'}</button><button onClick={()=>setFillStage(v=>!v)} title="Agrandir peut rogner les bords">{fillStage?'Tout voir':'Remplir l’écran'}</button></div>
@@ -1605,6 +2494,13 @@ function App() {
               </div>
               {participantsOpen&&<div className="moderation-panel">
                 <div className="moderation-head"><strong>Participants ({count})</strong>{isHost&&<button onClick={muteAllParticipants}>Couper tous les micros</button>}</div>
+                {isHost && <div className="scelyo-host-security">
+                  <strong><ShieldCheck size={17}/> Sécurité de la réunion</strong>
+                  <label><span><b>Verrouiller la réunion</b><small>Empêche de nouveaux participants de rejoindre.</small></span><input type="checkbox" disabled={hostBusy} checked={roomSettings.locked} onChange={e => void updateHostSettings({locked:e.target.checked})}/></label>
+                  <label><span><b>Autoriser le partage d’écran</b><small>Pour les participants (l’hôte conserve ce droit).</small></span><input type="checkbox" disabled={hostBusy} checked={roomSettings.allowScreenShare} onChange={e => void updateHostSettings({allowScreenShare:e.target.checked})}/></label>
+                  <label><span><b>Autoriser les enregistrements</b><small>Pour les participants (l’hôte conserve ce droit).</small></span><input type="checkbox" disabled={hostBusy} checked={roomSettings.allowRecording} onChange={e => void updateHostSettings({allowRecording:e.target.checked})}/></label>
+                  <p>Tu peux également couper les micros ou retirer une personne ci-dessous. La salle reste accessible aux invités déjà présents.</p>
+                </div>}
                 <div className="moderation-row"><strong>{displayName} (vous){isHost?' — Hôte':''}</strong><span>{micOn?'Micro activé':'Micro coupé'}</span></div>
                 {members.map(m=><div className="moderation-row" key={m.id}><strong>{m.name}{hostId===m.id?' — Hôte':''}</strong><div>
                   <button onClick={()=>pinParticipant(m.id)}>Épingler</button>
@@ -1619,6 +2515,17 @@ function App() {
                 >
                   {micOn ? <Mic /> : <MicOff />}
                 </button>
+                <button type="button"
+                  className={clearVoiceOpen ? 'tool-btn active-tool' : 'tool-btn'}
+                  onClick={() => setClearVoiceOpen(open => !open)}
+                  title={noiseReduction ? (noiseActive ? 'ClearVoice atténue les bruits ('+noiseAttenuation+' dB)' : 'ClearVoice anti-bruit actif') : 'ClearVoice désactivé'}
+                  aria-label="Réglages SCELYO ClearVoice" aria-expanded={clearVoiceOpen}>
+                  <AudioLines />
+                  {noiseReduction && (clearVoiceGateReady || nativeNoiseSupported) && (
+                    <span className={'scelyo-toolbar-noise-dot '+(noiseActive?'reducing':'enabled')}
+                      aria-hidden="true"/>
+                  )}
+                </button>
                 <button
                   className={camOn ? 'tool-btn' : 'tool-btn disabled-tool'}
                   onClick={toggleCam}
@@ -1626,11 +2533,20 @@ function App() {
                 >
                   {camOn ? <Video /> : <VideoOff />}
                 </button>
+                {isHost && (
+                  <button type="button" className={musicPanelOpen || musicPlaying ? 'tool-btn active-tool scelyo-music-button' : 'tool-btn scelyo-music-button'}
+                    onClick={() => setMusicPanelOpen(open => !open)}
+                    title="Diffuser une musique d’ambiance" aria-label="Musique d’ambiance" aria-expanded={musicPanelOpen}>
+                    <Music2/>
+                    {musicPlaying && <span className="scelyo-music-indicator"/>}
+                  </button>
+                )}
                 <span className="tool-separator" />
                 <button
                   className={sharing ? 'tool-btn active-tool' : 'tool-btn'}
                   onClick={toggleScreen}
-                  title="Partager l’écran"
+                  title={!isHost&&!roomSettings.allowScreenShare?'Partage d’écran désactivé par l’hôte':'Partager l’écran'}
+                  disabled={!sharing&&!isHost&&!roomSettings.allowScreenShare}
                 >
                   {sharing ? <MonitorOff /> : <MonitorUp />}
                 </button>
@@ -1644,11 +2560,12 @@ function App() {
                 <button
                   className={recording ? 'tool-btn recording-tool' : 'tool-btn'}
                   onClick={
-                    recording ? stopRecording : () => startRecording('video')
+                    recording ? stopRecording : () => setPendingRecordMode('video')
                   }
                   title={
                     recording ? 'Arrêter l’enregistrement' : 'Enregistrer vidéo'
                   }
+                  disabled={!recording&&!isHost&&!roomSettings.allowRecording}
                 >
                   {recording ? <Square fill="currentColor" /> : <Circle />}
                 </button>
@@ -1661,8 +2578,14 @@ function App() {
                 </button>
               </div>
               <div className="secondary-actions">
+                <div className="scelyo-record-music-choice">
+                  <Music2 size={17}/>
+                  <span><b>{recording ? 'Enregistrement en cours' : 'Musique : à choisir avant de démarrer'}</b>
+                    <small>Au démarrage, choisis avec ou sans musique ; le téléchargement se fera seulement après la capture.</small>
+                  </span>
+                </div>
                 {!recording && (
-                  <button onClick={() => startRecording('audio')}>
+                  <button onClick={() => setPendingRecordMode('audio')} disabled={!isHost&&!roomSettings.allowRecording}>
                     <Headphones size={16} /> Enregistrer l’audio
                   </button>
                 )}
@@ -1673,35 +2596,86 @@ function App() {
                   </span>
                 )}
                 {uploading && (
-                  <span className="drive-transfer"><CloudUpload size={16} /> Envoi automatique de l’enregistrement sur Drive…</span>
+                  <span className="drive-transfer"><CloudUpload size={16} /> Envoi de l’enregistrement vers Drive…</span>
                 )}
                 {driveStatus === 'saved' && uploadedLink && (
                   <span className="drive-transfer success"><Check size={16} /> Enregistrement sauvegardé sur Drive</span>
                 )}
-                {recordReady && !recording && (
-                  <div className="record-links">
-                    <button onClick={()=>setLibraryOpen(true)} disabled={savingLocal}><Library size={15}/>{savingLocal?'Enregistrement local…':'Mes enregistrements'}</button>
-                    <a href={recordReady.url} download={recordReady.name}>
-                      <Download size={15} /> Télécharger dans Fichiers
-                    </a>
-                    <button onClick={()=>void shareRecording({
-                      id:'current',name:recordReady.name,blob:recordReady.blob,
-                      mime:recordReady.blob.type,size:recordReady.blob.size,createdAt:Date.now()
-                    })}><Share2 size={15}/> Photos / Drive / Partager</button>
-                    {uploadedLink ? (
-                      <a href={uploadedLink} target="_blank" rel="noreferrer">
-                        <ExternalLink size={15} /> Ouvrir dans Drive
-                      </a>
-                    ) : (
-                      <button
-                        disabled={uploading}
-                        onClick={() => driveConnected ? uploadToDrive(recordReady) : setShowSettings(true)}
-                      >
-                        <CloudUpload size={15} />{' '}
-                        {uploading ? 'Envoi automatique…' : driveConnected ? (driveStatus === 'failed' ? 'Réessayer l’envoi Drive' : 'Envoyer sur Drive') : 'Connecter Drive'}
-                      </button>
-                    )}
+                {exportPhase==='finalizing' && (
+                  <div className="scelyo-export-status" role="status" aria-live="polite">
+                    <strong>Préparation du fichier vidéo…</strong>
+                    <progress max="100"/>
+                    <small>Finalisation du MP4 par le navigateur. La durée dépend de l’enregistrement.</small>
                   </div>
+                )}
+                {recordReady && chosenRecording && !recording && (
+                  <section id="scelyo-record-download" className="scelyo-download-card" aria-label="Télécharger mon enregistrement">
+                    <div className="scelyo-download-card-head">
+                      <span className="scelyo-download-status"><Check size={21}/></span>
+                      <div><strong>Enregistrement terminé !</strong>
+                        <p>Ton fichier est prêt. Sur iPhone, choisis « Enregistrer la vidéo » dans la feuille de partage pour l’ajouter à Photos. Aucun transfert n’est automatique.</p>
+                      </div>
+                    </div>
+                    {alternateRecording && recordMode === 'audio' ? (
+                      <fieldset className="scelyo-download-variants">
+                        <legend>Choisis la version à télécharger</legend>
+                        <label className={!downloadWithMusic?'selected':''}>
+                          <input type="radio" name="scelyo-finished-recording-music" checked={!downloadWithMusic} onChange={()=>{setDownloadWithMusic(false);setUploadedLink('');}} />
+                          <Mic size={18}/><span><b>Voix uniquement</b><small>Sans musique</small></span>
+                        </label>
+                        <label className={downloadWithMusic?'selected':''}>
+                          <input type="radio" name="scelyo-finished-recording-music" checked={downloadWithMusic} onChange={()=>{setDownloadWithMusic(true);setUploadedLink('');}} />
+                          <Music2 size={18}/><span><b>Voix + musique de fond</b><small>Musique atténuée sous la voix</small></span>
+                        </label>
+                      </fieldset>
+                    ) : (
+                      <p className="scelyo-download-format-note">
+                        {recordedWithMusic ? 'Version avec musique' : 'Version sans musique'}
+                        {' · '}
+                        {recordMode === 'audio' ? 'Ton navigateur a conservé la version choisie avant la capture.' : 'Pour la vidéo, ce choix s’effectue avant de démarrer l’enregistrement.'}
+                      </p>
+                    )}
+                    <button type="button" className="scelyo-download-main"
+                      disabled={exportPhase!=='idle'}
+                      onClick={()=>recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+                        ? void saveVideoToPhotos(chosenRecording)
+                        : downloadRecording(chosenRecording)}>
+                      <Download size={29}/>
+                      <span><strong>{recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+                        ? 'Enregistrer dans Photos'
+                        : 'Télécharger '+(recordMode==='audio'?'l’audio':'la vidéo')}</strong>
+                        <small>{downloadWithMusic && alternateRecording ? 'Avec musique de fond' : !downloadWithMusic && alternateRecording ? 'Sans musique' : (recordedWithMusic ? 'Avec musique' : 'Sans musique')} · {(chosenRecording.blob.size/1048576).toFixed(1)} Mo</small>
+                      </span>
+                      <ArrowRight size={22}/>
+                    </button>
+                    {exportPhase!=='idle' && (
+                      <div className="scelyo-export-status" role="status" aria-live="polite">
+                        <span>{exportPhase==='finalizing'?'Finalisation de la vidéo…':'Partage iOS ouvert : choisis Enregistrer la vidéo dans Photos'}</span>
+                        <progress max="100" {...(exportProgress!==null?{value:exportProgress}:{})}/>
+                        <small>{exportProgress!==null?`${exportProgress}%`:'iOS ne fournit pas de pourcentage pour la copie vers Photos.'}</small>
+                      </div>
+                    )}
+                    <div className="scelyo-download-more">
+                      <button type="button" onClick={()=>setLibraryOpen(true)} disabled={savingLocal}>
+                        <Library size={15}/>{savingLocal?'Sauvegarde locale…':'Ouvrir SCELYO Vault'}
+                      </button>
+                      <button type="button" onClick={()=>void shareRecording({
+                        id:'current',name:chosenRecording.name,blob:chosenRecording.blob,
+                        mime:chosenRecording.blob.type,size:chosenRecording.blob.size,createdAt:Date.now()
+                      })}><Share2 size={15}/> Photos / Partager</button>
+                      {recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent) && (
+                        <button type="button" onClick={()=>downloadRecording(chosenRecording)}>
+                          <Download size={15}/> Enregistrer dans Fichiers
+                        </button>
+                      )}
+                      <button type="button" disabled={uploading}
+                        onClick={() => driveConnected ? void uploadToDrive(chosenRecording) : setShowSettings(true)}>
+                        <CloudUpload size={15}/>
+                        {uploading?'Envoi en cours…':driveConnected?'Envoyer cette version sur Drive':'Connecter Google Drive'}
+                      </button>
+                    </div>
+                    {uploadedLink && <a href={uploadedLink} target="_blank" rel="noreferrer" className="scelyo-download-drive-link"><ExternalLink size={16}/> Voir dans Drive</a>}
+                  </section>
                 )}
               </div>
             </section>
@@ -1774,7 +2748,7 @@ function App() {
         <div className="modal-backdrop local-recordings-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setLibraryOpen(false);}}>
           <section className="local-recordings-panel" role="dialog" aria-modal="true" aria-label="Mes enregistrements">
             <div className="modal-header">
-              <div><div className="eyebrow">BIBLIOTHÈQUE DE CET APPAREIL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
+              <div><div className="eyebrow">SCELYO / VAULT LOCAL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
               <button className="icon-btn" onClick={()=>setLibraryOpen(false)} aria-label="Fermer"><X size={21}/></button>
             </div>
             <p className="local-recordings-hint">Tes enregistrements restent dans ce navigateur, même après fermeture de l’onglet. Ils ne sont pas synchronisés entre appareils et peuvent disparaître si tu effaces les données du navigateur. Pour les conserver durablement, télécharge-les ou partage-les.</p>
@@ -1804,15 +2778,15 @@ function App() {
               </div>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
-              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire dans FondVidéo.</p>
+              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire pour cet export manuel.</p>
               <div><a href="https://drive.google.com/drive/u/0/my-drive" target="_blank" rel="noreferrer">Ouvrir Drive <ExternalLink size={13}/></a><a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Ouvrir YouTube Studio <ExternalLink size={13}/></a></div>
             </div>
           </section>
         </div>
       )}
       <footer className="footer">
-        <span>© FondVidéo New Meet · Prévisualisation AppDeploy</span>
-        <span>Appels WebRTC · Vos enregistrements vous appartiennent</span>
+        <span>© SCELYO · Version de prévisualisation</span>
+        <span>Live · Studio · Vault — Tes captures restent sous ton contrôle</span>
       </footer>
 
       {showSettings && (
@@ -1830,8 +2804,8 @@ function App() {
           >
             <div className="modal-header">
               <div>
-                <div className="eyebrow">ENREGISTREMENTS</div>
-                <h2>Connecter Google Drive</h2>
+                <div className="eyebrow">SCELYO / DRIVE</div>
+                <h2>SCELYO & Google Drive</h2>
               </div>
               <button
                 className="icon-btn"
@@ -1843,8 +2817,8 @@ function App() {
             <div className="drive-connect-intro">
               <div className="drive-icon"><CloudUpload size={30}/></div>
               <div>
-                <strong>Enregistrements automatiquement sauvegardés</strong>
-                <p>Après connexion, chaque audio et chaque vidéo rejoint ton dossier <b>FondVidéo Meet - Enregistrements</b> sur Google Drive à la fin de l'enregistrement.</p>
+                <strong>Conserver tes enregistrements</strong>
+                <p>Après connexion, tes nouveaux enregistrements rejoignent le dossier dédié sur ton Google Drive après la fin de l’enregistrement.</p>
               </div>
             </div>
             {driveConnected ? (
@@ -1864,7 +2838,7 @@ function App() {
                   </svg>
                   Se connecter avec Google
                 </button>
-                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans FondVidéo. Aucun mot de passe n'est demandé par notre application.</p>
+                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCELYO. Aucun mot de passe n’est demandé par SCELYO.</p>
                 {!clientId.trim().endsWith('.apps.googleusercontent.com') && (
                   <p className="drive-needs-setup">La connexion Google doit être configurée une seule fois pour cette prévisualisation. Le bouton sera fonctionnel dès que cette configuration aura été ajoutée.</p>
                 )}
@@ -1872,7 +2846,7 @@ function App() {
             )}
             <div className="drive-automation">
               <Check size={17}/>
-              <span><strong>{driveConnected ? 'Envoi automatique activé' : 'Google Drive non connecté'}</strong><small>{driveConnected ? 'Envoi automatique en fin d’enregistrement.' : 'Sans OAuth, utilise Photos / Drive / Partager pour envoyer le fichier manuellement.'}</small></span>
+              <span><strong>{driveConnected ? 'Envoi vers Drive disponible' : 'Google Drive non connecté'}</strong><small>{driveConnected ? 'Envoi manuel après ton choix de fichier.' : 'Sans OAuth, utilise Photos / Drive / Partager pour envoyer le fichier manuellement.'}</small></span>
             </div>
             <details className="drive-advanced" open={driveAdvanced} onToggle={e=>setDriveAdvanced((e.currentTarget as HTMLDetailsElement).open)}>
               <summary>Configuration avancée (administrateur uniquement)</summary>
