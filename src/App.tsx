@@ -1395,7 +1395,9 @@ function App() {
           : null)
           || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
         if (!track) throw new Error('Aucune caméra disponible pour enregistrer la vidéo.');
-        const captureTrack = nativeIOS ? track.clone() : track;
+        // On iOS a cloned camera track may stop producing frames while the
+        // live preview keeps running. Record the live track directly.
+        const captureTrack = track;
         // Apply the requested resolution BEFORE starting MediaRecorder.
         // "original" must not modify the camera track's dimensions.
         // The 1080p choice requests Full HD if the camera/browser supports it.
@@ -1422,7 +1424,8 @@ function App() {
       window.clearInterval(interval);
       window.clearInterval(audioTimer);
       // Only stop tracks owned by the recorder. Never stop the live camera.
-      if (nativeIOS || !fallback) videoStream?.getTracks().forEach(track => track.stop());
+      // Never stop a borrowed live camera track on iOS.
+      if (!fallback) videoStream?.getTracks().forEach(track => track.stop());
       nodes.forEach(node => node.source.disconnect());
       nodes.clear();
       mixedDestination?.stream.getTracks().forEach(track => track.stop());
@@ -1512,17 +1515,10 @@ function App() {
         recordCanvasAndAudio(mode, selectedWithMusic);
       const nativeIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
       if(mode==='video' && nativeIOS && recordVideoQuality==='1080'){
-        const videoTrack=stream.getVideoTracks()[0];
-        if(videoTrack){
-          try{
-            await videoTrack.applyConstraints({
-              width:{ideal:1920},height:{ideal:1080},
-              frameRate:{ideal:24,max:30}
-            });
-          }catch{
-            toast('La caméra ne permet pas de forcer 1080p. Résolution native conservée.');
-          }
-        }
+        // Do not applyConstraints to the shared live camera during recording:
+        // Safari can stop emitting video frames without stopping the track.
+        const settings=stream.getVideoTracks()[0]?.getSettings();
+        if(settings?.width && settings.width<1920)toast('La caméra fournit '+settings.width+'×'+(settings.height||'?')+' sur cet iPhone. Qualité native conservée pour éviter les interruptions.');
       }
       if (directMicRecording) {
         toast('Capture audio naturelle : micro enregistré directement, sans traitement vocal supplémentaire.');
@@ -1572,6 +1568,35 @@ function App() {
         if(recorder?.state==='recording'){try{recorder.stop()}catch{/* already stopped */}}
       };
       const chunks: BlobPart[] = [];
+      // Monitor decoded camera frames, not just MediaRecorder data: Safari may
+      // keep writing audio after video has silently frozen.
+      let lastVideoFrameAt=Date.now();
+      let seenVideoFrame=false;
+      let stalledVideo=false;
+      let frameMonitor:HTMLVideoElement|null=null;
+      let frameMonitorTimer=0;
+      if(nativeIOS && mode==='video'){
+        const monitor=document.createElement('video');
+        monitor.muted=true;monitor.playsInline=true;monitor.autoplay=true;
+        monitor.srcObject=new MediaStream(stream.getVideoTracks());
+        frameMonitor=monitor;
+        const rvfc=(monitor as HTMLVideoElement & {requestVideoFrameCallback?:(cb:(now:number,metadata:unknown)=>void)=>number}).requestVideoFrameCallback;
+        if(rvfc){
+          const onFrame=()=>{
+            if(recorder?.state!=='recording')return;
+            lastVideoFrameAt=Date.now();seenVideoFrame=true;
+            rvfc.call(monitor,onFrame);
+          };
+          void monitor.play().then(()=>rvfc.call(monitor,onFrame)).catch(()=>{});
+        }
+        frameMonitorTimer=window.setInterval(()=>{
+          if(recorder?.state!=='recording' || !seenVideoFrame || stalledVideo)return;
+          if(Date.now()-lastVideoFrameAt>5000){
+            stalledVideo=true;
+            toast('Caméra figée depuis 5 secondes : iOS a interrompu les images. Arrête et recommence la capture, écran allumé.');
+          }
+        },1000);
+      }
       let lastChunkAt=Date.now();
       let receivedBytes=0;
       let captureWarning=false;
@@ -1601,6 +1626,8 @@ function App() {
       });
       recorder.onstop = async () => {
         window.clearInterval(captureWatch);
+        window.clearInterval(frameMonitorTimer);
+        if(frameMonitor){frameMonitor.pause();frameMonitor.srcObject=null;frameMonitor=null;}
         setExportPhase('finalizing');
         setExportProgress(null);
         if (alternateRecorder && alternateRecorder.state === 'recording') {
@@ -1659,7 +1686,9 @@ function App() {
         // Do not download or upload anything without a user click.
         // Local IndexedDB persistence is separate from file downloading.
         setDriveStatus('idle');
-        toast('Enregistrement prêt : choisis la version, puis clique sur Télécharger.');
+        toast(stalledVideo
+          ? 'Attention : caméra figée pendant la capture. Le fichier peut contenir une image fixe. Recommence avant de l’utiliser.'
+          : 'Enregistrement prêt : choisis la version, puis clique sur Télécharger.');
       };
       recorderRef.current = recorder;
       stopCaptureRef.current = cleanup;
