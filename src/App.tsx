@@ -1195,6 +1195,10 @@ function App() {
     // Even if music is loaded, an audio-only recording without soundtrack
     // must stay on the ORIGINAL native microphone track.
     const directMicRecording = Boolean(mic && !remoteAudio.length && !includeMusic);
+    // iPhone: reuse the already-running Live music mixer instead of creating
+    // a second AudioContext and two more copies of the microphone.
+    const reuseLiveMix = nativeIOS && includeMusic && hasMusic && !remoteAudio.length;
+    const needsSecondaryMixer = !directMicRecording && !reuseLiveMix;
 
     let audioContext: AudioContext | null = null;
     let mixedDestination: MediaStreamAudioDestinationNode | null = null;
@@ -1204,7 +1208,7 @@ function App() {
 
     // For a solo capture WITHOUT music, the browser records the microphone
     // directly. No Web Audio, resampling, worklet or second encoder involved.
-    if (!directMicRecording) {
+    if (needsSecondaryMixer) {
       const ctx = new AudioContext({ latencyHint: 'playback' });
       audioContext = ctx;
       void ctx.resume().catch(() => {});
@@ -1351,14 +1355,19 @@ function App() {
           : null)
           || chosen?.stream.getVideoTracks()[0] || rawRef.current?.getVideoTracks()[0];
         if (!track) throw new Error('Aucune caméra disponible pour enregistrer la vidéo.');
-        videoStream = new MediaStream([track]);
+        const captureTrack = nativeIOS ? track.clone() : track;
+        if(nativeIOS) {
+          void captureTrack.applyConstraints({frameRate:{ideal:24,max:24},width:{ideal:1280},height:{ideal:720}})
+            .catch(()=>{/* iOS may ignore video constraints; keep native source */});
+        }
+        videoStream = new MediaStream([captureTrack]);
         fallback = true;
       }
     }
 
     const dryAudio = directMicRecording ? mic : voiceDestination?.stream.getAudioTracks()[0];
     const mixedAudio = hasMusic ? mixedDestination?.stream.getAudioTracks()[0] : dryAudio;
-    const chosenAudio = includeMusic ? mixedAudio : dryAudio;
+    const chosenAudio = reuseLiveMix ? musicRef.current?.track : (includeMusic ? mixedAudio : dryAudio);
     if (mode === 'audio' && !chosenAudio) throw new Error('Aucun son du micro à enregistrer.');
     const combined = new MediaStream([
       ...(videoStream?.getVideoTracks() || []),
@@ -1373,7 +1382,8 @@ function App() {
     const cleanup = () => {
       window.clearInterval(interval);
       window.clearInterval(audioTimer);
-      if (!fallback) videoStream?.getTracks().forEach(track => track.stop());
+      // Only stop tracks owned by the recorder. Never stop the live camera.
+      if (nativeIOS || !fallback) videoStream?.getTracks().forEach(track => track.stop());
       nodes.forEach(node => node.source.disconnect());
       nodes.clear();
       mixedDestination?.stream.getTracks().forEach(track => track.stop());
@@ -2389,7 +2399,7 @@ function App() {
                     <div className="scelyo-download-card-head">
                       <span className="scelyo-download-status"><Check size={21}/></span>
                       <div><strong>Enregistrement terminé !</strong>
-                        <p>Ton fichier est prêt. Aucun téléchargement ni envoi Drive n'est lancé automatiquement.</p>
+                        <p>Ton fichier est prêt. Sur iPhone, choisis « Enregistrer la vidéo » dans la feuille de partage pour l’ajouter à Photos. Aucun transfert n’est automatique.</p>
                       </div>
                     </div>
                     {alternateRecording && recordMode === 'audio' ? (
@@ -2412,9 +2422,13 @@ function App() {
                       </p>
                     )}
                     <button type="button" className="scelyo-download-main"
-                      onClick={()=>downloadRecording(chosenRecording)}>
+                      onClick={()=>recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+                        ? void saveVideoToPhotos(chosenRecording)
+                        : downloadRecording(chosenRecording)}>
                       <Download size={29}/>
-                      <span><strong>Télécharger {recordMode==='audio'?'l’audio':'la vidéo'}</strong>
+                      <span><strong>{recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+                        ? 'Enregistrer dans Photos'
+                        : 'Télécharger '+(recordMode==='audio'?'l’audio':'la vidéo')}</strong>
                         <small>{downloadWithMusic && alternateRecording ? 'Avec musique de fond' : !downloadWithMusic && alternateRecording ? 'Sans musique' : (recordedWithMusic ? 'Avec musique' : 'Sans musique')} · {(chosenRecording.blob.size/1048576).toFixed(1)} Mo</small>
                       </span>
                       <ArrowRight size={22}/>
@@ -2427,6 +2441,11 @@ function App() {
                         id:'current',name:chosenRecording.name,blob:chosenRecording.blob,
                         mime:chosenRecording.blob.type,size:chosenRecording.blob.size,createdAt:Date.now()
                       })}><Share2 size={15}/> Photos / Partager</button>
+                      {recordMode==='video' && /iPhone|iPad|iPod/i.test(navigator.userAgent) && (
+                        <button type="button" onClick={()=>downloadRecording(chosenRecording)}>
+                          <Download size={15}/> Enregistrer dans Fichiers
+                        </button>
+                      )}
                       <button type="button" disabled={uploading}
                         onClick={() => driveConnected ? void uploadToDrive(chosenRecording) : setShowSettings(true)}>
                         <CloudUpload size={15}/>
