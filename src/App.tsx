@@ -176,8 +176,10 @@ function App() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  // Public OAuth ID supplied by Netlify; previously saved IDs are a local fallback.
+  const configuredGoogleClientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   const [clientId, setClientId] = useState(
-    localStorage.getItem('nexa_google_client') || ''
+    configuredGoogleClientId || localStorage.getItem('nexa_google_client') || ''
   );
   const [driveConnected, setDriveConnected] = useState(false);
   const [driveEmail, setDriveEmail] = useState('');
@@ -1661,7 +1663,11 @@ function App() {
     setDriveStatus('uploading');
     setNotice('');
     try {
-      let folderId = localStorage.getItem('nexa_drive_folder') || '';
+      // Look up the folder through the currently authenticated Google account.
+      // A cached folder ID may belong to a different account.
+      const folderQuery = encodeURIComponent("trashed = false and name = 'FondVidéo Meet - Enregistrements' and mimeType = 'application/vnd.google-apps.folder'");
+      const folders = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + folderQuery + '&fields=files(id,name)&pageSize=20');
+      let folderId = folders.files?.[0]?.id || '';
       if (!folderId) {
         const folder = await driveFetch(
           'https://www.googleapis.com/drive/v3/files?fields=id,name',
@@ -1675,7 +1681,6 @@ function App() {
           }
         );
         folderId = folder.id;
-        localStorage.setItem('nexa_drive_folder', folderId);
       }
       const meta={name:rec.name,mimeType:rec.blob.type,parents:[folderId]};
       const session=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink',{
@@ -2515,6 +2520,7 @@ function App() {
                     <button onClick={()=>previewRecording(item)}><PlayCircle size={15}/> {activePreview===item.id?'Fermer':'Lire'}</button>
                     <button onClick={()=>downloadRecording(item)}><Download size={15}/> Télécharger</button>
                     <button onClick={()=>void shareRecording(item)}><Share2 size={15}/> Photos / Drive / Partager</button>
+                    <button disabled={uploading} onClick={()=>driveConnected ? void uploadToDrive(item) : (setLibraryOpen(false),setShowSettings(true))}><CloudUpload size={15}/>{uploading?'Envoi en cours…':driveConnected?'Envoyer sur Drive':'Connecter Drive'}</button>
                     <button className="danger" onClick={()=>void removeRecording(item)}><Trash2 size={15}/> Supprimer</button>
                   </div>
                 </article>)}
