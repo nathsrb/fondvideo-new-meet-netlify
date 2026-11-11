@@ -171,6 +171,22 @@ function StreamAudio({stream,onPlaybackBlocked}:{stream:MediaStream|null;onPlayb
   },[stream,onPlaybackBlocked]);
   return <audio ref={ref} data-scelyo-remote-audio autoPlay playsInline style={{display:'none'}}/>;
 }
+function StreamMusic({stream,muted}:{stream:MediaStream|null;muted:boolean}) {
+  const ref=useRef<HTMLAudioElement>(null);
+  useEffect(()=>{
+    const el=ref.current;if(!el)return;
+    el.srcObject=stream;
+    const play=()=>{if(stream?.getAudioTracks().some(t=>t.readyState==='live'))void el.play().catch(()=>{});};
+    const tracks=stream?.getAudioTracks()||[];
+    tracks.forEach(t=>t.addEventListener('unmute',play));
+    const visible=()=>{if(document.visibilityState==='visible')play()};
+    document.addEventListener('visibilitychange',visible);window.addEventListener('focus',visible);
+    play();
+    return()=>{tracks.forEach(t=>t.removeEventListener('unmute',play));document.removeEventListener('visibilitychange',visible);window.removeEventListener('focus',visible);el.pause();el.srcObject=null;};
+  },[stream]);
+  useEffect(()=>{if(ref.current)ref.current.muted=muted},[muted]);
+  return <audio ref={ref} data-scelyo-remote-music autoPlay playsInline muted={muted} style={{display:'none'}}/>;
+}
 function App() {
   const [room, setRoom] = useState(currentRoom);
   const [newRoom, setNewRoom] = useState('');
@@ -191,6 +207,8 @@ function App() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [audioNeedsGesture, setAudioNeedsGesture] = useState(false);
+  const [muteReceivedMusic,setMuteReceivedMusic]=useState(false);
+  const muteReceivedMusicRef=useRef(false);
   const [audioDiagnostic, setAudioDiagnostic] = useState('');
   const [camOn, setCamOn] = useState(true);
   const [bg, setBg] = useState('original');
@@ -286,6 +304,9 @@ function App() {
   const peerId = useRef(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
+  const musicTransceiversRef=useRef(new Map<string,RTCRtpTransceiver>());
+  const remoteMusicRef=useRef<Record<string,MediaStream>>({});
+  const [remoteMusicStreams,setRemoteMusicStreams]=useState<Record<string,MediaStream>>({});
   const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const streamsRef = useRef<Record<string, MediaStream>>({});
   const localRef = useRef<MediaStream | null>(null);
@@ -640,14 +661,12 @@ function App() {
     }
   }
   function outboundAudioTrack() {
-    return musicRef.current?.track || processedMicrophoneTrack();
+    return processedMicrophoneTrack();
   }
-
-  async function restoreOutboundAudio(track: MediaStreamTrack | null) {
-    const senders = [...pcs.current.values()]
-      .flatMap(pc => pc.getSenders())
-      .filter(sender => sender.track?.kind === 'audio');
-    await Promise.allSettled(senders.map(sender => sender.replaceTrack(track)));
+  async function restoreOutboundAudio(track:MediaStreamTrack|null) {
+    const senders=[...pcs.current.entries()].flatMap(([id,pc])=>pc.getSenders()
+      .filter(s=>s.track?.kind==='audio'&&s!==musicTransceiversRef.current.get(id)?.sender));
+    await Promise.allSettled(senders.map(s=>s.replaceTrack(track)));
   }
 
   async function listDriveMusic(token:string){
@@ -725,11 +744,11 @@ function App() {
       next.setVolume(musicVolume);
       next.setLoop(musicLoop);
       next.setMonitor(musicMonitor);
-      const senders = [...pcs.current.values()].flatMap(pc => pc.getSenders())
-        .filter(sender => sender.track?.kind === 'audio');
-      const switched = await Promise.allSettled(senders.map(sender => sender.replaceTrack(next!.track)));
-      if (switched.some(result => result.status === 'rejected')) {
-        await Promise.allSettled(senders.map(sender => sender.replaceTrack(previous?.track || microphone)));
+      const senders=[...musicTransceiversRef.current.values()].map(t=>t.sender);
+      const currentMusic=next.musicOnlyStream.getAudioTracks()[0];
+      const switched=await Promise.allSettled(senders.map(s=>s.replaceTrack(currentMusic)));
+      if(switched.some(r=>r.status==='rejected')){
+        await Promise.allSettled(senders.map(s=>s.replaceTrack(previous?.musicOnlyStream.getAudioTracks()[0]||null)));
         throw new Error('La diffusion de musique est indisponible sur cette connexion.');
       }
       musicRef.current = next;
@@ -752,8 +771,7 @@ function App() {
     if (!previous) return;
     setMusicBusy(true);
     try {
-      const microphone = processedMicrophoneTrack();
-      await restoreOutboundAudio(microphone);
+      await Promise.allSettled([...musicTransceiversRef.current.values()].map(t=>t.sender.replaceTrack(null)));
       musicRef.current = null;
       await previous.destroy();
       setMusicPlaying(false);
@@ -802,6 +820,10 @@ function App() {
       pc.addTransceiver('audio', { direction: 'recvonly' });
       pc.addTransceiver('video', { direction: 'recvonly' });
     }
+    const musicTransceiver=pc.addTransceiver('audio',{direction:'sendrecv'});
+    musicTransceiversRef.current.set(id,musicTransceiver);
+    const musicTrack=musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+    if(musicTrack)void musicTransceiver.sender.replaceTrack(musicTrack).catch(()=>{});
     pc.onicecandidate = evt => {
       if (evt.candidate)
         sendSignal(id, {
@@ -810,29 +832,19 @@ function App() {
         });
     };
     pc.ontrack = evt => {
-      // Safari/iPhone can deliver audio and video in separate stream events.
-      // Preserve both tracks instead of replacing the remote stream with the last event.
-      const existing = streamsRef.current[id]?.getTracks() || [];
-      const incoming = evt.streams[0]?.getTracks() || [];
-      const combinedTracks = [...existing];
-      for (const track of [...incoming,evt.track]) {
-        if(track.readyState!=='ended'&&!combinedTracks.some(previous=>previous.id===track.id))
-          combinedTracks.push(track);
-      }
-      const stream = new MediaStream(combinedTracks.filter(track=>track.readyState!=='ended'));
-      streamsRef.current = { ...streamsRef.current, [id]: stream };
-      setStreams({ ...streamsRef.current });
-      if (evt.track.kind === 'audio') {
-        evt.track.addEventListener('ended', () => {
-          const current=streamsRef.current[id];
-          if(!current)return;
-          streamsRef.current = {
-            ...streamsRef.current,
-            [id]: new MediaStream(current.getTracks().filter(track=>track.readyState!=='ended')),
-          };
-          setStreams({ ...streamsRef.current });
-        }, {once:true});
-      }
+      const isMusic=evt.track.kind==='audio'&&evt.transceiver===musicTransceiversRef.current.get(id);
+      const ref=isMusic?remoteMusicRef:streamsRef;
+      const tracks=[...(ref.current[id]?.getTracks()||[])];
+      if(!tracks.some(t=>t.id===evt.track.id))tracks.push(evt.track);
+      ref.current={...ref.current,[id]:new MediaStream(tracks.filter(t=>t.readyState!=='ended'))};
+      if(isMusic)setRemoteMusicStreams({...remoteMusicRef.current});
+      else setStreams({...streamsRef.current});
+      evt.track.addEventListener('ended',()=>{
+        const current=ref.current[id];if(!current)return;
+        ref.current={...ref.current,[id]:new MediaStream(current.getTracks().filter(t=>t.readyState!=='ended'))};
+        if(isMusic)setRemoteMusicStreams({...remoteMusicRef.current});
+        else setStreams({...streamsRef.current});
+      },{once:true});
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed')
@@ -892,6 +904,9 @@ function App() {
   function closePeer(id: string) {
     pcs.current.get(id)?.close();
     pcs.current.delete(id);
+    musicTransceiversRef.current.delete(id);
+    const { [id]: _musicRemoved, ...musicRest }=remoteMusicRef.current;
+    remoteMusicRef.current=musicRest;setRemoteMusicStreams(musicRest);
     const { [id]: _removed, ...rest } = streamsRef.current;
     streamsRef.current = rest;
     setStreams(rest);
@@ -1190,6 +1205,9 @@ function App() {
     connRef.current = null;
     pcs.current.forEach(pc => pc.close());
     pcs.current.clear();
+    musicTransceiversRef.current.clear();
+    remoteMusicRef.current={};setRemoteMusicStreams({});
+    setMuteReceivedMusic(false);muteReceivedMusicRef.current=false;
     pendingIce.current.clear();
     effectRef.current?.stop();
     effectRef.current = null;
@@ -1220,14 +1238,14 @@ function App() {
   async function enableRemoteAudio() {
     // The click is a direct user gesture: Safari and some desktop browsers need
     // this to start audible media even when WebRTC tracks have arrived.
-    const elements=Array.from(document.querySelectorAll<HTMLAudioElement>('audio[data-scelyo-remote-audio]'))
+    const elements=Array.from(document.querySelectorAll<HTMLAudioElement>('audio[data-scelyo-remote-audio],audio[data-scelyo-remote-music]'))
       .filter(element=>(element.srcObject as MediaStream|null)?.getAudioTracks().some(track=>track.readyState==='live'));
     if(!elements.length){
       toast('Aucune piste audio distante reçue. Vérifie le micro de l’autre appareil et sa connexion.');
       return;
     }
     const results=await Promise.allSettled(elements.map(element=>{
-      element.muted=false;
+      element.muted=element.hasAttribute('data-scelyo-remote-music')&&muteReceivedMusicRef.current;
       element.volume=1;
       return element.play();
     }));
@@ -1401,10 +1419,11 @@ function App() {
     const mic = rawRef.current?.getAudioTracks().find(track => track.readyState === 'live')
       || processedMicrophoneTrack();
     const nativeIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const remoteAudio = Object.entries(streamsRef.current)
-      .filter(([, stream]) => stream.getAudioTracks().some(track => track.readyState === 'live'));
-    const musicAudio = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
-    const hasMusic = Boolean(musicAudio && musicAudio.readyState === 'live');
+    const remoteAudio=Object.entries(streamsRef.current)
+      .filter(([,stream])=>stream.getAudioTracks().some(t=>t.readyState==='live'));
+    const musicAudio=musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+    const remoteMusicAudio=Object.values(remoteMusicRef.current).flatMap(s=>s.getAudioTracks()).filter(t=>t.readyState==='live');
+    const hasMusic=Boolean(musicAudio?.readyState==='live'||remoteMusicAudio.length);
     // Even if music is loaded, an audio-only recording without soundtrack
     // must stay on the ORIGINAL native microphone track.
     // Desktop recordings always keep a live mixer: a phone may connect or
@@ -1414,7 +1433,7 @@ function App() {
     const directMicRecording = Boolean(nativeIOS && mic && !remoteAudio.length && !members.length && !includeMusic);
     // iPhone: reuse the already-running Live music mixer instead of creating
     // a second AudioContext and two more copies of the microphone.
-    const reuseLiveMix = nativeIOS && includeMusic && hasMusic && !remoteAudio.length;
+    const reuseLiveMix=Boolean(nativeIOS&&includeMusic&&musicAudio?.readyState==='live'&&!remoteAudio.length&&!remoteMusicAudio.length);
     const needsSecondaryMixer = !directMicRecording && !reuseLiveMix;
 
     let audioContext: AudioContext | null = null;
@@ -1481,8 +1500,10 @@ function App() {
         if (mic) link(mic, speech, true, active);
         for (const stream of Object.values(streamsRef.current))
           for (const track of stream.getAudioTracks()) link(track, speech, true, active);
-        const currentMusic = musicRef.current?.musicOnlyStream.getAudioTracks()[0];
-        if (currentMusic && hasMusic) link(currentMusic, soundtrack, false, active);
+        const currentMusic=musicRef.current?.musicOnlyStream.getAudioTracks()[0];
+        if(includeMusic&&currentMusic)link(currentMusic,soundtrack,false,active);
+        if(includeMusic&&!muteReceivedMusicRef.current)for(const s of Object.values(remoteMusicRef.current))
+          for(const t of s.getAudioTracks())link(t,soundtrack,false,active);
         for (const [id,node] of nodes) {
           if (active.has(id) && node.track.readyState === 'live') continue;
           node.source.disconnect();
@@ -1585,8 +1606,8 @@ function App() {
     }
 
     const dryAudio = directMicRecording ? mic : voiceDestination?.stream.getAudioTracks()[0];
-    const mixedAudio = hasMusic ? mixedDestination?.stream.getAudioTracks()[0] : dryAudio;
-    const chosenAudio = reuseLiveMix ? musicRef.current?.track : (includeMusic ? mixedAudio : dryAudio);
+    const mixedAudio=mixedDestination?.stream.getAudioTracks()[0]||dryAudio;
+    const chosenAudio=reuseLiveMix?musicRef.current?.track:(includeMusic?mixedAudio:dryAudio);
     if (mode === 'audio' && !chosenAudio) throw new Error('Aucun son du micro à enregistrer.');
     const combined = new MediaStream([
       ...(videoStream?.getVideoTracks() || []),
@@ -1687,8 +1708,7 @@ function App() {
       return;
     }
     try {
-      const hadMusic = Boolean(musicRef.current);
-      const selectedWithMusic = hadMusic && recordIncludeMusic;
+      const selectedWithMusic=recordIncludeMusic;
       const { stream, alternateStream, cleanup, fallback, directMicRecording } =
         await recordCanvasAndAudio(mode, selectedWithMusic);
       const nativeIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -2114,9 +2134,9 @@ function App() {
               </label>
               <label className={recordIncludeMusic?'selected':''}>
                 <input type="radio" name="scelyo-record-music" checked={recordIncludeMusic}
-                  disabled={!musicName} onChange={()=>setRecordIncludeMusic(true)}/>
+                  onChange={()=>setRecordIncludeMusic(true)}/>
                 <Music2 size={21}/><span><strong>Avec la musique de fond</strong>
-                  <small>{musicName?'Le niveau musical suit la jauge ; la voix ne baisse pas.':'Importe d’abord une musique dans Live'}</small></span>
+                  <small>{'La musique de la réunion sera incluse si tu ne l’as pas coupée.'}</small></span>
               </label>
             </fieldset>
             <p className="scelyo-rec-setup-footnote">
@@ -2620,9 +2640,19 @@ function App() {
                 </div>
               </div>}
               {members.map(m=><StreamAudio key={'audio-'+m.id} stream={streams[m.id]||null} onPlaybackBlocked={setAudioNeedsGesture}/>)}
+              {members.map(m=><StreamMusic key={'music-'+m.id} stream={remoteMusicStreams[m.id]||null} muted={muteReceivedMusic}/>)}
               <div className="program-actions">
                 <button onClick={()=>setGallery(!gallery)}>{gallery?'Vue intervenant':'Vue mosaïque'}</button>
                 {members.length>0&&<button type="button" onClick={()=>void enableRemoteAudio()} title="Autoriser la lecture des voix des autres participants"><Volume2 size={16}/> {audioNeedsGesture?'Débloquer le son':'Activer le son'}</button>}
+                {members.length>0&&<button type="button" aria-pressed={muteReceivedMusic}
+                  onClick={()=>{
+                    const next=!muteReceivedMusicRef.current;muteReceivedMusicRef.current=next;setMuteReceivedMusic(next);
+                    if(next)setRecordIncludeMusic(false);
+                    else document.querySelectorAll<HTMLAudioElement>('audio[data-scelyo-remote-music]')
+                      .forEach(el=>void el.play().catch(()=>{}));
+                  }} title="Couper uniquement la musique reçue ici, sans couper les voix">
+                  <Music2 size={16}/>{muteReceivedMusic?'Réactiver la musique':'Couper la musique reçue'}
+                </button>
                 {members.length>0&&<button type="button" onClick={()=>void diagnoseRemoteAudio()} title="Vérifier la réception du microphone de chaque participant">Diagnostic audio</button>}
                 {audioDiagnostic&&<span role="status" aria-live="polite">{audioDiagnostic}</span>}
                 {pinned&&<button onClick={()=>pinParticipant(pinned)}>Suivi automatique</button>}
