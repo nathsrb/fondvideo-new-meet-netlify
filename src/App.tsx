@@ -2448,6 +2448,13 @@ function App() {
                 {driveStatus === 'saved' && uploadedLink && (
                   <span className="drive-transfer success"><Check size={16} /> Enregistrement sauvegardé sur Drive</span>
                 )}
+                {exportPhase==='finalizing' && (
+                  <div className="scelyo-export-status" role="status" aria-live="polite">
+                    <strong>Préparation du fichier vidéo…</strong>
+                    <progress max="100"/>
+                    <small>Finalisation du MP4 par le navigateur. La durée dépend de l’enregistrement.</small>
+                  </div>
+                )}
                 {recordReady && chosenRecording && !recording && (
                   <section id="scelyo-record-download" className="scelyo-download-card" aria-label="Télécharger mon enregistrement">
                     <div className="scelyo-download-card-head">
