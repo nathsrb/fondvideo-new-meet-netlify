@@ -1571,7 +1571,10 @@ function App() {
     setDriveStatus('uploading');
     setNotice('');
     try {
-      let folderId = localStorage.getItem('nexa_drive_folder') || '';
+      // Find the folder belonging to the currently connected Google account.
+      const folderQuery = encodeURIComponent("trashed = false and name = 'FondVidéo Meet - Enregistrements' and mimeType = 'application/vnd.google-apps.folder'");
+      const folders = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + folderQuery + '&fields=files(id,name)&pageSize=20');
+      let folderId = folders.files?.[0]?.id || '';
       if (!folderId) {
         const folder = await driveFetch(
           'https://www.googleapis.com/drive/v3/files?fields=id,name',
@@ -1585,7 +1588,6 @@ function App() {
           }
         );
         folderId = folder.id;
-        localStorage.setItem('nexa_drive_folder', folderId);
       }
       const meta={name:rec.name,mimeType:rec.blob.type,parents:[folderId]};
       const session=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink',{
