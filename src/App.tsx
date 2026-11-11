@@ -136,10 +136,30 @@ function StreamVideo({
   );
 }
 
-function StreamAudio({stream}:{stream:MediaStream|null}) {
+function StreamAudio({stream,onPlaybackBlocked}:{stream:MediaStream|null;onPlaybackBlocked:(blocked:boolean)=>void}) {
   const ref=useRef<HTMLAudioElement>(null);
-  useEffect(()=>{if(ref.current){ref.current.srcObject=stream;void ref.current.play().catch(()=>{});}},[stream]);
-  return <audio ref={ref} autoPlay playsInline style={{display:'none'}}/>;
+  useEffect(()=>{
+    const element=ref.current;
+    if(!element)return;
+    let cancelled=false;
+    element.srcObject=stream;
+    element.muted=false;
+    element.volume=1;
+    const play=()=>{
+      if(!stream?.getAudioTracks().some(track=>track.readyState==='live'))return;
+      void element.play().catch(()=>{if(!cancelled)onPlaybackBlocked(true);});
+    };
+    const audioTracks=stream?.getAudioTracks()||[];
+    for(const track of audioTracks)track.addEventListener('unmute',play);
+    play();
+    return()=>{
+      cancelled=true;
+      for(const track of audioTracks)track.removeEventListener('unmute',play);
+      element.pause();
+      element.srcObject=null;
+    };
+  },[stream,onPlaybackBlocked]);
+  return <audio ref={ref} data-scelyo-remote-audio autoPlay playsInline style={{display:'none'}}/>;
 }
 function App() {
   const [room, setRoom] = useState(currentRoom);
@@ -160,6 +180,7 @@ function App() {
   const [streams, setStreams] = useState<Record<string, MediaStream>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
+  const [audioNeedsGesture, setAudioNeedsGesture] = useState(false);
   const [camOn, setCamOn] = useState(true);
   const [bg, setBg] = useState('original');
   const [format, setFormat] = useState('original');
@@ -778,9 +799,24 @@ function App() {
         });
     };
     pc.ontrack = evt => {
-      const stream = evt.streams[0] || new MediaStream([evt.track]);
+      // Safari/iPhone can deliver audio and video in separate stream events.
+      // Preserve both tracks instead of replacing the remote stream with the last event.
+      const existing = streamsRef.current[id]?.getTracks() || [];
+      const incoming = evt.streams[0]?.getTracks() || [];
+      const combinedTracks = [...existing];
+      for (const track of [...incoming,evt.track]) {
+        if(track.readyState!=='ended'&&!combinedTracks.some(previous=>previous.id===track.id))
+          combinedTracks.push(track);
+      }
+      const stream = new MediaStream(combinedTracks.filter(track=>track.readyState!=='ended'));
       streamsRef.current = { ...streamsRef.current, [id]: stream };
       setStreams({ ...streamsRef.current });
+      if (evt.track.kind === 'audio') {
+        evt.track.addEventListener('unmute', () => {
+          const current=streamsRef.current[id];
+          if(current)setStreams({ ...streamsRef.current, [id]: new MediaStream(current.getTracks()) });
+        }, {once:true});
+      }
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed')
@@ -1003,7 +1039,21 @@ function App() {
         media.getAudioTracks().forEach(t => (t.enabled = micOn));
         media.getVideoTracks().forEach(t => (t.enabled = camOn));
       } catch {
-        toast('Caméra ou micro indisponible. Connexion en mode écoute seule.');
+        // A denied/busy camera must not silently disable the microphone too.
+        try {
+          media = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: noiseReduction || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+              autoGainControl: false,
+            },
+          });
+          media.getAudioTracks().forEach(t => (t.enabled = micOn));
+          setCamOn(false);
+          toast('Caméra indisponible, mais micro connecté. Autorise la caméra et rejoins à nouveau pour activer la vidéo.');
+        } catch {
+          toast('Micro non autorisé ou indisponible : autorise-le dans le navigateur puis rejoins à nouveau.');
+        }
       }
       rawRef.current = media;
       if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
@@ -1149,6 +1199,27 @@ function App() {
     roomRef.current = '';
     setRoom('');
     peerId.current = crypto.randomUUID();
+  }
+
+  async function enableRemoteAudio() {
+    // The click is a direct user gesture: Safari and some desktop browsers need
+    // this to start audible media even when WebRTC tracks have arrived.
+    const elements=Array.from(document.querySelectorAll<HTMLAudioElement>('audio[data-scelyo-remote-audio]'))
+      .filter(element=>(element.srcObject as MediaStream|null)?.getAudioTracks().some(track=>track.readyState==='live'));
+    if(!elements.length){
+      toast('Aucune piste audio distante reçue. Vérifie le micro de l’autre appareil et sa connexion.');
+      return;
+    }
+    const results=await Promise.allSettled(elements.map(element=>{
+      element.muted=false;
+      element.volume=1;
+      return element.play();
+    }));
+    const blocked=results.some(result=>result.status==='rejected');
+    setAudioNeedsGesture(blocked);
+    toast(blocked
+      ? 'Le navigateur bloque le son : autorise la lecture audio puis appuie à nouveau sur Activer le son.'
+      : 'Lecture audio lancée. Si tu n’entends rien, vérifie le micro et la sortie audio des deux appareils.');
   }
 
   function toggleMic() {
@@ -2496,9 +2567,10 @@ function App() {
                   {members.map(m=><button className={'program-thumb '+(pinned===m.id?'pinned':'')} key={m.id} onClick={()=>pinParticipant(m.id)}><StreamVideo stream={streams[m.id]||null} muted/><span>{m.name}</span></button>)}
                 </div>
               </div>}
-              {members.map(m=><StreamAudio key={'audio-'+m.id} stream={streams[m.id]||null}/>)}
+              {members.map(m=><StreamAudio key={'audio-'+m.id} stream={streams[m.id]||null} onPlaybackBlocked={setAudioNeedsGesture}/>)}
               <div className="program-actions">
                 <button onClick={()=>setGallery(!gallery)}>{gallery?'Vue intervenant':'Vue mosaïque'}</button>
+                {members.length>0&&<button type="button" onClick={()=>void enableRemoteAudio()} title="Autoriser la lecture des voix des autres participants"><Volume2 size={16}/> {audioNeedsGesture?'Débloquer le son':'Activer le son'}</button>}
                 {pinned&&<button onClick={()=>pinParticipant(pinned)}>Suivi automatique</button>}
                 <button onClick={()=>setParticipantsOpen(!participantsOpen)}>Participants et modération</button>
               </div>
