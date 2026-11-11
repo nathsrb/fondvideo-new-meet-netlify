@@ -688,7 +688,7 @@ function App() {
     const current = musicRef.current;
     if (!current) return;
     try {
-      if (musicPlaying) current.pause();
+      if (!current.audio.paused) current.pause();
       else await current.play();
     } catch (error) {
       toast('Lecture impossible : ' + readableError(error) + '. Réessaie en touchant Lecture.');
@@ -1572,10 +1572,35 @@ function App() {
         if(recorder?.state==='recording'){try{recorder.stop()}catch{/* already stopped */}}
       };
       const chunks: BlobPart[] = [];
+      let lastChunkAt=Date.now();
+      let receivedBytes=0;
+      let captureWarning=false;
+      const captureStartedAt=Date.now();
+      const captureWatch=window.setInterval(()=>{
+        if(recorder?.state!=='recording')return;
+        const elapsed=Date.now()-captureStartedAt;
+        if(elapsed>20000 && Date.now()-lastChunkAt>18000 && !captureWarning){
+          captureWarning=true;
+          toast('Attention : le navigateur ne fournit plus de données vidéo. Garde SCELYO au premier plan et l’écran allumé.');
+        }
+      },5000);
       recorder.ondataavailable = e => {
-        if (e.data.size) chunks.push(e.data);
+        if (e.data.size){
+          chunks.push(e.data);
+          receivedBytes+=e.data.size;
+          lastChunkAt=Date.now();
+          captureWarning=false;
+        }
       };
+      recorder.addEventListener('pause',()=>toast('L’enregistrement a été mis en pause par le navigateur. Reste sur SCELYO pour conserver la vidéo.'));
+      recorder.addEventListener('resume',()=>toast('Enregistrement repris.'));
+      stream.getTracks().forEach(track=>{
+        track.addEventListener('ended',()=>{
+          if(recorder?.state==='recording')toast('La caméra ou le micro a été interrompu par iOS. Arrête la capture pour conserver les données disponibles.');
+        });
+      });
       recorder.onstop = async () => {
+        window.clearInterval(captureWatch);
         setExportPhase('finalizing');
         setExportProgress(null);
         if (alternateRecorder && alternateRecorder.state === 'recording') {
@@ -1649,11 +1674,10 @@ function App() {
       setUploadedLink('');
       setSeconds(0);
       setRecordMode(mode);
-      // Safari's fragmented MP4 chunks may have timestamp/index discontinuities:
-      // those can manifest as a video that freezes until the user seeks.
-      // Request one complete MP4 on iOS; retain periodic chunks elsewhere.
-      if(nativeIOS && mode==='video') recorder.start();
-      else recorder.start(2000);
+      // A single multi-minute iOS MP4 can silently truncate under memory
+      // pressure. Request regular chunks and warn if the browser stops
+      // delivering data. MediaRecorder is still responsible for MP4 indexing.
+      recorder.start(nativeIOS ? 4000 : 2000);
       if (alternateRecorder) {
         try { alternateRecorder.start(); } // continuous audio output
         catch {
