@@ -111,3 +111,8 @@
 }
 .scelyo-mic-test-box button:disabled{opacity:.6;cursor:progress}
 .scelyo-mic-test-box audio{display:block;width:100%;max-width:100%;height:46px}
+
+.scelyo-export-status{display:flex;flex-direction:column;gap:8px;padding:12px 14px;margin:12px 0;border:1px solid rgba(157,143,232,.45);border-radius:12px;background:rgba(40,42,75,.65);color:#f5f3ff}
+.scelyo-export-status span,.scelyo-export-status strong{font-size:13px}
+.scelyo-export-status small{font-size:11px;color:#c4c4df;line-height:1.5}
+.scelyo-export-status progress{width:100%;height:9px;accent-color:#b09cff}
