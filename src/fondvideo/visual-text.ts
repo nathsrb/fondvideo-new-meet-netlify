@@ -56,6 +56,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
   const layers=[];
   let selected=null, selectedCaption=null, signature='';
   let manipulating=false;
+  let mobileCaptionEditor=null;
   const surface=document.getElementById('visualLayer');
   const btn=document.getElementById('textAdd');
   const list=document.getElementById('textList');
@@ -109,7 +110,11 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     selected=layer.id;selectedCaption=null;
     pause();showControls(layer);listRefresh();updateSurface(true);redraw();
   };
-  const closeCaption=()=>{selectedCaption=null;updateSurface(true);};
+  const closeCaption=()=>{
+    selectedCaption=null;
+    if(mobileCaptionEditor){mobileCaptionEditor.remove();mobileCaptionEditor=null;}
+    updateSurface(true);
+  };
   function createCaptionOverlay(group) {
     const anchor=document.createElement('div');
     const active=Boolean(selectedCaption);
@@ -134,6 +139,8 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     } else {
       const editor=document.createElement('div');
       editor.className='scelyo-caption-inline';
+      editor.setAttribute('role','dialog');
+      editor.setAttribute('aria-label','Modifier le sous-titre');
       editor.setAttribute('aria-label','Modifier les sous-titres directement sur la vidéo');
       const headline=document.createElement('div');
       headline.className='scelyo-caption-editor-head';
@@ -239,8 +246,16 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       connectPointerDrag(resizeButton,'size');
       actions.append(saveButton,dragButton,resizeButton,cancelButton);
       editor.append(headline,input,sizeRow,actions);
-      anchor.append(editor);
-      requestAnimationFrame(()=>{if(input.isConnected&&!manipulating)input.focus()});
+      if(window.matchMedia('(max-width: 700px)').matches){
+        // A transformed video stage clips fixed-position editing controls on iPhone.
+        if(mobileCaptionEditor)mobileCaptionEditor.remove();
+        mobileCaptionEditor=editor;
+        editor.classList.add('scelyo-mobile-caption-sheet');
+        document.body.append(editor);
+      } else anchor.append(editor);
+      requestAnimationFrame(()=>{
+        if(input.isConnected&&!manipulating&&!window.matchMedia('(max-width: 700px)').matches)input.focus();
+      });
     }
     surface.append(anchor);
   }
@@ -311,7 +326,8 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     if(!force&&key===signature)return;
     // Preserve text field focus/caret during typing if its node is still active:
     // input handlers never force reconstruction on every render frame.
-    if(!force && surface.contains(document.activeElement))return;
+    if(!force && (surface.contains(document.activeElement)||mobileCaptionEditor?.contains(document.activeElement)))return;
+    if(mobileCaptionEditor){mobileCaptionEditor.remove();mobileCaptionEditor=null;}
     signature=key;surface.replaceChildren();
     if(caption)createCaptionOverlay(caption);
     active.forEach(drawLayerHitbox);
@@ -343,6 +359,6 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       for(const layer of layers)if(time>=layer.start&&time<layer.end)drawText(ctx,layer,w,h);
     },
     updateSurface,
-    reset() {layers.length=0;selected=null;selectedCaption=null;signature='';showControls(null);listRefresh();updateSurface(true)},
+    reset() {if(mobileCaptionEditor){mobileCaptionEditor.remove();mobileCaptionEditor=null;}layers.length=0;selected=null;selectedCaption=null;signature='';showControls(null);listRefresh();updateSurface(true)},
   };
 }
