@@ -1,0 +1,88 @@
+/* FondVidéo / New Meet — Cinematic Interface v1
+   Visual-only layer: does not alter media processing, room state or recording.
+   Design principles: cinematic contrast, lucid controls, accessible focus,
+   restrained motion and one shared identity across both products. */
+:root {
+  --fv-ink:#070b13;
+  --fv-surface:#101827;
+  --fv-raised:#172236;
+  --fv-line:rgba(192,207,241,.16);
+  --fv-white:#f7f9ff;
+  --fv-muted:#a9b8ce;
+  --fv-violet:#a78bfa;
+  --fv-blue:#60c9ff;
+  --fv-danger:#ff657c;
+  --fv-gradient:linear-gradient(115deg,#b49aff 0%,#7e8fff 48%,#68d8ee 100%);
+}
+html {scroll-behavior:smooth}
+body {background:#070b13;color:var(--fv-white);-webkit-font-smoothing:antialiased}
+body::selection {background:#8c74f0;color:white}
+button,a,input,select,textarea {font-family:inherit}
+button {transition:transform .18s ease,background-color .18s ease,border-color .18s ease,box-shadow .18s ease}
+button:not(:disabled):active {transform:scale(.975)}
+:where(button,a,input,select,textarea,[tabindex]):focus-visible {outline:2px solid #b9a5ff!important;outline-offset:3px!important}
+:where(input,textarea,select)::placeholder {color:#8898b0}
+:where(.header,.topbar){backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--fv-line)!important}
+:where(.brand strong,.brand){letter-spacing:-.045em}
+:where(.header,.topbar) .brand-mark {background:var(--fv-gradient)!important;box-shadow:0 9px 35px #8779f44b!important;border-radius:13px}
+:where(.header,.topbar) .brand span {color:#b7a5ff}
+:where(.eyebrow,.pill) {letter-spacing:.11em}
+:where(.btn.primary,.primary) {background:linear-gradient(110deg,#9982fb,#6d75e8)!important;color:#fff!important;border-color:#b3a2ff66!important;box-shadow:0 12px 34px #755ef53d!important}
+:where(.btn.primary,.primary):hover:not(:disabled){background:linear-gradient(110deg,#ad99ff,#7e8fff)!important;box-shadow:0 15px 38px #755ef55c!important}
+:where(.btn.subtle,.ghost,.secondary,.icon-btn,.tool-btn,.small,.bg,.fmt,.size,.tab){border-color:var(--fv-line)}
+:where(.btn.subtle,.ghost,.secondary,.icon-btn,.tool-btn,.small,.bg,.fmt,.size,.tab):hover:not(:disabled){border-color:#a69bf380;background-color:#27334b}
+:where(.landing,.prejoin,.meeting,.editor){isolation:isolate}
+:where(.app-shell){background:radial-gradient(ellipse at 14% 4%,#34306d46,transparent 42%),radial-gradient(ellipse at 94% 60%,#10527a24,transparent 50%),#080d17!important}
+:where(.landing) .hero-copy h1{letter-spacing:-.058em;line-height:1.09}
+:where(.landing) .hero-copy h1 em{background:var(--fv-gradient);background-clip:text;color:transparent}
+:where(.hero-copy p,.hint,.camera-note){color:var(--fv-muted)}
+:where(.preview-art,.prejoin-visual,.video-tile,.settings-panel,.chat-panel,.panel,.cap-auto,.stageWrap){border:1px solid var(--fv-line)!important;box-shadow:0 28px 85px #0005, inset 0 1px #ffffff08}
+.preview-art {background:linear-gradient(150deg,#1e2945,#101929 58%,#0c1525)!important;transform:rotate(0)!important;border-radius:26px!important}
+.preview-art:hover{transform:translateY(-4px)!important}
+.preview-art .art-person{border-radius:14px}
+.preview-art .art-float{background:#182640!important;border:1px solid #9388f34d!important;backdrop-filter:blur(15px)}
+:where(.prejoin-visual,.video-tile){background:radial-gradient(circle at 50% 25%,#273d69,#101b2e 70%,#0a1220)!important}
+:where(.prejoin-card,.settings-panel){color:var(--fv-white)}
+:where(.text-input,.join-form,.chat-entry input,.cap-auto select,.cap-manual textarea){background:#111b2d!important;border-color:#42506a!important;color:#f7f9ff!important}
+:where(.text-input,.join-form):focus-within{border-color:#b19bff!important;box-shadow:0 0 0 3px #9e89fa1c}
+:where(.prejoin-avatar,.empty-avatar){background:linear-gradient(135deg,#6156ad,#284772)!important;border:1px solid #b5abff55;color:white}
+:where(.meeting){max-width:1720px}
+:where(.meeting-header h2,.editorHead h2){letter-spacing:-.04em}
+.video-tile{border-radius:20px!important;transition:border-color .2s ease,box-shadow .2s ease}
+.video-tile:focus-within,.video-tile:hover{border-color:#afa1fb7a!important}
+.tile-name{background:#080e1bdc!important;backdrop-filter:blur(12px);border:1px solid #ffffff22}
+.meeting-toolbar{gap:10px}
+.tool-btn{background:#1a283d!important;border-radius:16px!important;box-shadow:inset 0 1px #ffffff0b}
+.tool-btn.active-tool {background:#6157bf!important;border-color:#a398ff!important}
+.tool-btn.disabled-tool{background:#543043!important}
+.tool-btn.end-tool{background:#d94364!important;border-radius:17px!important}
+.tool-btn.recording-tool{background:#542a40!important}
+:where(.chat-panel,.settings-panel){background:linear-gradient(150deg,#19243b,#101a2b)!important;border-radius:22px!important}
+.chat-entry button{background:linear-gradient(120deg,#9581f3,#676be2)!important}
+:where(.status-line.success){color:#8be8c5}
+:where(.rec-banner){border:1px solid #ff728540}
+:where(.topbar){background:#090e1be8!important}
+body:has(#app) {background:radial-gradient(circle at 20% 0%,#302b6740,transparent 42%),#080d17!important}
+body:has(#app) .landing{max-width:1060px}
+body:has(#app) .landing h1{font-weight:850;letter-spacing:-.055em;line-height:1.08}
+body:has(#app) .landing h1 span{color:#b7a5ff}
+body:has(#app) .landing > p{max-width:650px;line-height:1.7}
+body:has(#app) .cards article{background:linear-gradient(155deg,#19243a,#111928)!important;border:1px solid var(--fv-line)!important;border-radius:20px!important}
+body:has(#app) .stageWrap{background:#090f1c;border-radius:22px;padding:10px}
+body:has(#app) .stage{border-radius:16px;overflow:hidden}
+body:has(#app) .tabs{gap:5px;padding:5px;border:1px solid var(--fv-line);border-radius:16px;background:#0e1726}
+body:has(#app) .tab{border-radius:12px!important}
+body:has(#app) :where(.tab.active,.selected){border-color:#a99afa!important;box-shadow:inset 0 0 0 1px #a99afa50;background:#50447746!important}
+body:has(#app) .panel{background:linear-gradient(145deg,#182236,#101a2a)!important;border-radius:18px}
+body:has(#app) :where(.privacy,.status){border-radius:12px}
+@media(max-width:790px){
+  .preview-art{margin:28px 8px 0;min-height:unset}
+  .meeting-toolbar{flex-wrap:wrap;gap:8px}
+  .tool-btn{width:47px;height:47px;border-radius:14px!important}
+  .meeting{padding-left:12px;padding-right:12px}
+  .video-tile{border-radius:14px!important}
+  :where(.settings-panel){padding:20px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
