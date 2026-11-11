@@ -2426,6 +2426,7 @@ function App() {
                   </div>
                 </article>)}
               </div>}
+            {uploadedLink && <p className="drive-transfer success"><Check size={16}/> Fichier envoyé dans Google Drive · <a href={uploadedLink} target="_blank" rel="noreferrer">Voir dans Drive <ExternalLink size={13}/></a></p>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
               <p>Pour envoyer directement dans Drive, connecte ton compte Google dans les paramètres. Tu peux aussi utiliser « Partager » sur iPhone ou télécharger le fichier sur PC, sans connexion OAuth.</p>
