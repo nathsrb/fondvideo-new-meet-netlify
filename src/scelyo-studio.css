@@ -234,3 +234,48 @@ body:has(#app) footer.scelyo-studio-footer{border-top:1px solid #ffffff15;displa
 .scelyo-caption-size-step{min-width:30px;min-height:30px;padding:3px 7px;border:1px solid #a492e2;
   border-radius:8px;background:#59478c;color:#fff;font-size:19px;font-weight:800;cursor:pointer}
 .scelyo-caption-size-step:hover{background:#765eb5}
+
+
+/* SCELYO Studio V15 — touch-first caption editing on small screens.
+   Keep the desktop visual editor unchanged. */
+@media (max-width: 700px) {
+  body:has(#app) .editorWorkspace,
+  body:has(#app) .previewColumn,
+  body:has(#app) .controlsColumn,
+  body:has(#app) .stageWrap {min-width:0!important;max-width:100%!important}
+  body:has(#app) .editorWorkspace {display:flex!important;flex-direction:column!important;gap:12px!important}
+  body:has(#app) .previewColumn,
+  body:has(#app) .controlsColumn {width:100%!important}
+  body:has(#app) .stageWrap {overflow:visible!important}
+  body:has(#app) .tabs {display:flex!important;overflow-x:auto!important;overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;max-width:100%;padding-bottom:8px}
+  body:has(#app) .tabs .tab {flex:0 0 auto;min-height:44px;scroll-snap-align:start}
+  .scelyo-caption-hitbox.editing {z-index:60!important}
+  .scelyo-caption-inline {
+    position:fixed!important;left:12px!important;right:12px!important;
+    top:auto!important;bottom:max(12px,env(safe-area-inset-bottom))!important;
+    width:auto!important;max-width:none!important;
+    max-height:min(48dvh,420px)!important;overflow-y:auto!important;
+    padding:14px!important;border-radius:18px!important;
+    box-sizing:border-box!important;box-shadow:0 12px 55px #000c!important;
+    overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+    z-index:9999!important;
+  }
+  .scelyo-caption-inline textarea {
+    display:block;width:100%!important;min-height:66px!important;
+    font-size:16px!important;line-height:1.45!important;
+    box-sizing:border-box;resize:vertical;
+  }
+  .scelyo-caption-editor-head {cursor:default!important;touch-action:auto!important}
+  .scelyo-caption-editor-head small {display:none!important}
+  .scelyo-caption-size-row {display:grid!important;grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:center;gap:10px!important;white-space:normal!important}
+  .scelyo-caption-size-row input[type=range] {width:100%;min-height:40px;touch-action:pan-x}
+  .scelyo-caption-size-step {min-width:48px!important;min-height:48px!important;font-size:24px!important}
+  .scelyo-caption-inline-actions {display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  .scelyo-caption-inline-actions button {min-height:48px!important;font-size:14px!important;padding:10px!important}
+  .scelyo-caption-move-handle,.scelyo-caption-resize-handle {min-width:48px!important;min-height:48px!important}
+  #capTimeline,#capWords {max-width:100%;overflow-x:auto;touch-action:pan-x}
+  #capWords input,#capWords textarea {font-size:16px!important;max-width:100%;box-sizing:border-box}
+  .cap-sliders input[type=range] {min-height:42px;max-width:100%}
+}
