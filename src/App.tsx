@@ -2187,7 +2187,7 @@ function App() {
           <aside className="fv-sidebar" aria-label="Navigation principale">
             <div className="fv-sidebar-label">SCELYO / ESPACES</div>
             <div className="fv-sidebar-active"><Video size={19}/> Tableau de bord <span>01</span></div>
-            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> Nouvelle session <ArrowRight size={16}/></button>
+            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> SCELYO Live <ArrowRight size={16}/></button>
             <a href="./fondvideo.html"><Camera size={19}/> SCELYO Studio <ArrowRight size={16}/></a>
             <button type="button" onClick={() => setLibraryOpen(true)}><Library size={19}/> SCELYO Vault <ArrowRight size={16}/></button>
             <div className="fv-sidebar-bottom">
@@ -2202,11 +2202,11 @@ function App() {
             <div className="fv-dashboard-topline"><span><span className="fv-online-dot"/> TON UNIVERS SCELYO</span><span>LIVE · STUDIO · VAULT</span></div>
             <section className="fv-feature-hero">
               <div className="fv-feature-content">
-                <div className="fv-kicker"><span className="fv-kicker-dash"/> CRÉER. RÉUNIR. CAPTURER.</div>
-                <h1>Le live devient<br/><em>création.</em></h1>
-                <p>Lance tes sessions, transforme tes vidéos et retrouve tes captures dans un seul espace créatif.</p>
+                <div className="fv-kicker"><span className="fv-kicker-dash"/> LA VISIO, SANS LES COMPLICATIONS.</div>
+                <h1>Vos meilleures conversations<br/><em>méritent mieux qu’un simple appel.</em></h1>
+                <p>Réunissez-vous, échangez et enregistrez vos moments importants. Avec SCELYO, tout devient plus simple, plus fluide, plus vivant.</p>
                 <div className="fv-hero-buttons">
-                  <button className="fv-hero-primary" onClick={() => openRoom(newCode())}><Plus size={21}/> Créer une session <ArrowRight size={18}/></button>
+                  <button className="fv-hero-primary" onClick={() => openRoom(newCode())}><Plus size={21}/> Créer une réunion <ArrowRight size={18}/></button>
                   <a className="fv-hero-secondary" href="./fondvideo.html"><PlayCircle size={21}/> Ouvrir le Studio</a>
                 </div>
                 <div className="fv-feature-metrics"><span><span className="fv-metric-dot"/> ÉCHANGES EN DIRECT</span><span><ShieldCheck size={15}/> ACCÈS PRIVÉ</span></div>
@@ -2227,24 +2227,24 @@ function App() {
               </div>
             </section>
 
-            <div className="fv-section-heading"><div><span>TON WORKSPACE</span><h2>Quelle sera ta prochaine création ?</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
+            <div className="fv-section-heading"><div><span>LES TROIS UNIVERS SCELYO</span><h2>Trois bonnes raisons de rester</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
             <section className="fv-action-grid">
               <button className="fv-action-card fv-action-meet" onClick={() => openRoom(newCode())}>
                 <span className="fv-action-top"><span className="fv-action-icon"><Video size={26}/></span><ArrowRight size={21}/></span>
-                <span className="fv-action-bottom"><small>01 / SE CONNECTER</small><strong>Nouvelle session</strong><span>Lance une session vidéo en un instant.</span></span>
+                <span className="fv-action-bottom"><small>01 / SE CONNECTER</small><strong>SCELYO Live</strong><span>Les meilleures conversations commencent ici. Rapprochez-vous, même à distance.</span></span>
               </button>
               <a className="fv-action-card fv-action-studio" href="./fondvideo.html">
                 <span className="fv-action-top"><span className="fv-action-icon"><Camera size={26}/></span><ArrowRight size={21}/></span>
-                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>SCELYO Studio</strong><span>Mets tes vidéos en scène et exporte-les.</span></span>
+                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>SCELYO Studio</strong><span>Votre vidéo mérite de sortir du lot. Un meilleur décor, des sous-titres et un son plus agréable.</span></span>
               </a>
               <button className="fv-action-card fv-action-library" onClick={() => setLibraryOpen(true)}>
                 <span className="fv-action-top"><span className="fv-action-icon"><Library size={26}/></span><ArrowRight size={21}/></span>
-                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>SCELYO Vault</strong><span>Retrouve tes captures sur cet appareil.</span></span>
+                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>SCELYO Vault</strong><span>Les bons moments passent. Pas les souvenirs. Retrouvez vos enregistrements sur cet appareil.</span></span>
               </button>
             </section>
 
             <section className="fv-join-strip">
-              <div className="fv-join-copy"><span className="fv-join-icon"><Link2 size={23}/></span><div><strong>Une invitation à rejoindre ?</strong><p>Entre un code pour accéder à une session.</p></div></div>
+              <div className="fv-join-copy"><span className="fv-join-icon"><Link2 size={23}/></span><div><strong>Un lien à partager. Et vous voilà ensemble.</strong><p>Vous avez reçu une invitation ? Entrez votre code pour rejoindre la conversation.</p></div></div>
               <div className="fv-join-form">
                 <input value={newRoom} onChange={e => setNewRoom(e.target.value.toLowerCase())}
                   placeholder="Code de session (12 caractères)" aria-label="Code de session"
@@ -2280,11 +2280,11 @@ function App() {
               </div>
             </div>
             <div className="prejoin-card">
-              <div className="eyebrow">SCELYO LIVE / AVANT LA SESSION</div>
-              <h2>Rejoindre la session</h2>
-              <p>Prépare ta présence avant d'entrer en direct.</p>
+              <div className="eyebrow">PLUS QU’UN CLIC AVANT DE SE RETROUVER.</div>
+              <h2>Tout est prêt pour vous ?</h2>
+              <p>Prenez quelques secondes pour vérifier votre micro et votre caméra. Ensuite, place à la conversation.</p>
               <label className="field-label" htmlFor="name">
-                Ton prénom
+                Votre nom
               </label>
               <input
                 id="name"
@@ -2303,7 +2303,7 @@ function App() {
                   onClick={() => setMicOn(!micOn)}
                 >
                   {micOn ? <Mic size={19} /> : <MicOff size={19} />} Micro{' '}
-                  {micOn ? 'activé' : 'coupé'}
+                  {micOn ? 'allumé' : 'éteint'}
                 </button>
                 <button
                   className={camOn ? 'toggle-on' : 'toggle-off'}
@@ -2317,17 +2317,17 @@ function App() {
                 <div className="scelyo-clearvoice-prejoin-header">
                   <div className="scelyo-clearvoice-headline">
                     <span className="scelyo-clearvoice-icon"><AudioLines size={20}/></span>
-                    <span><strong>SCELYO ClearVoice</strong><small>Ta voix, plus claire pendant la session</small></span>
+                    <span><strong>SCELYO ClearVoice</strong><small>Faites entendre votre voix. Pas le bruit autour.</small></span>
                   </div>
                 </div>
                 <label className="scelyo-clearvoice-option">
-                  <span><strong>Réduire les bruits de fond</strong><small>Traitement local, avec réduction native si disponible</small></span>
+                  <span><strong>Réduire les bruits de fond</strong><small>Atténuez les bruits gênants autour de vous</small></span>
                   <input type="checkbox" checked={noiseReduction}
                     onChange={event => void changeNoiseReduction(event.target.checked)}
                     aria-label="Réduire les bruits de fond"/>
                 </label>
                 <label className="scelyo-clearvoice-option">
-                  <span><strong>Améliorer la voix</strong><small>Clarté, fréquences et volume</small></span>
+                  <span><strong>Améliorer la voix</strong><small>Donnez plus de présence à votre voix</small></span>
                   <input type="checkbox" checked={voiceEnhancement}
                     onChange={event => void changeVoiceEnhancement(event.target.checked)}
                     aria-label="Améliorer la voix"/>
@@ -2337,7 +2337,7 @@ function App() {
                     onChange={event => changeVoiceProfile(event.target.value as VoiceProfile)}>
                     <option value="natural">Naturel</option>
                     <option value="balanced">Équilibré</option>
-                    <option value="strong">Renforcé</option>
+                    <option value="strong">Voix plus présente</option>
                   </select>
                 </label>
                 <p className="scelyo-clearvoice-note">Par défaut, le son est naturel sans traitement supplémentaire. Active ces filtres seulement si tu le souhaites ; les bruits faibles sont surtout atténués pendant les pauses.</p>
@@ -2348,7 +2348,7 @@ function App() {
                   <option value="user">Avant</option>
                   <option value="environment">Arrière</option>
                 </select>
-                <label>Qualité de capture demandée</label>
+                <label>Qualité de votre image</label>
                 <select
                   value={quality}
                   onChange={e => {
@@ -2356,18 +2356,18 @@ function App() {
                     configRef.current.quality = e.target.value;
                   }}
                 >
-                  <option value="2160">4K si disponible (plus gourmand)</option>
-                  <option value="1080">1080p (si disponible)</option>
-                  <option value="720">720p</option>
+                  <option value="2160">Très haute qualité</option>
+                  <option value="1080">Haute qualité</option>
+                  <option value="720">Qualité standard</option>
                 </select>
-                <p>iPhone : le navigateur détermine la résolution réelle.</p>
+                <p>La meilleure qualité disponible dépend de votre appareil et de votre connexion.</p>
               </div>
               <button
                 className="btn primary wide"
                 disabled={busy}
                 onClick={joinMeeting}
               >
-                {busy ? 'Connexion…' : 'Entrer dans la session'}{' '}
+                {busy ? 'Connexion…' : 'Rejoindre la réunion'}{' '}
                 <ArrowRight size={18} />
               </button>
               <div className="room-code">
@@ -2375,7 +2375,7 @@ function App() {
                   Code : <strong>{room}</strong>
                 </span>
                 <button onClick={copyInvite}>
-                  <Copy size={16} /> Copier le lien
+                  <Copy size={16} /> Copier le lien d’invitation
                 </button>
               </div>
             </div>
@@ -2387,7 +2387,7 @@ function App() {
         <main className="meeting">
           <div className="meeting-header">
             <div>
-              <div className="eyebrow">SCELYO LIVE / EN DIRECT</div>
+              <div className="eyebrow">SCELYO LIVE — EN DIRECT</div>
               <h2>
                 SCELYO Live <span className="meeting-id">#{room}</span>
               </h2>
@@ -2414,7 +2414,7 @@ function App() {
           </div>
           <div className="live-tools">
             <strong>
-              <Camera size={17} /> Mise en scène
+              <Camera size={17} /> Votre image, votre style
             </strong>
             <label>
               Fond
@@ -2520,7 +2520,7 @@ function App() {
                   onChange={event => changeVoiceProfile(event.target.value as VoiceProfile)}>
                   <option value="natural">Naturel</option>
                   <option value="balanced">Équilibré</option>
-                  <option value="strong">Renforcé</option>
+                  <option value="strong">Voix plus présente</option>
                 </select>
               </label>
               <p className="scelyo-clearvoice-note">
@@ -2924,7 +2924,7 @@ function App() {
       )}
       <footer className="footer">
         <span>© SCELYO · Version de prévisualisation</span>
-        <span>Live · Studio · Vault — Tes captures restent sous ton contrôle</span>
+        <span>Live · Studio · Vault — Créez. Échangez. Conservez ce qui compte.</span>
       </footer>
 
       {showSettings && (
