@@ -203,7 +203,7 @@ function App() {
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
   const [musicName, setMusicName] = useState('');
   const [musicPlaying, setMusicPlaying] = useState(false);
-  const [musicVolume, setMusicVolume] = useState(45);
+  const [musicVolume, setMusicVolume] = useState(15);
   const [musicLoop, setMusicLoop] = useState(false);
   const [musicMonitor, setMusicMonitor] = useState(false);
   const [musicTime, setMusicTime] = useState(0);
@@ -986,7 +986,9 @@ function App() {
         media = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
-            noiseSuppression: noiseReduction,
+            // iPhone speaker playback can bleed into the microphone. Keep
+            // native WebRTC noise reduction active on handheld devices.
+            noiseSuppression: noiseReduction || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
             autoGainControl: false,
           },
           video: {
@@ -1002,6 +1004,9 @@ function App() {
         toast('Caméra ou micro indisponible. Connexion en mode écoute seule.');
       }
       rawRef.current = media;
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        toast('Conseil audio : utilise des écouteurs pour éviter écho et sifflements. Éloigne le téléphone de l’ordinateur.');
+      }
       const microphoneTrack = media?.getAudioTracks()[0];
       // In the natural default mode, do not launch worklets or resample the mic.
       if (microphoneTrack && (voiceEnhancement || noiseReduction))
@@ -2459,7 +2464,7 @@ function App() {
                             musicRef.current?.setVolume(next);
                           }}/>
                       </label>
-                      <p className="scelyo-music-volume-note">Réglage indépendant du micro : plus tu montes la jauge, plus la musique s’entend. Elle baisse automatiquement pendant les prises de parole.</p>
+                      <p className="scelyo-music-volume-note">Voix prioritaire : la musique est limitée pour éviter les sifflements. Utilise des écouteurs si deux appareils participent à proximité.</p>
                       <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
                         onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
                         <Repeat2 size={17}/> En boucle</label>
