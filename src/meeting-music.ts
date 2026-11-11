@@ -34,6 +34,7 @@ export class MeetingMusicMixer {
   private disposed = false;
   private lastSpeechAt = 0;
   private voicePriority = true;
+  private currentVolume = 30;
 
   constructor(file: File, microphoneStream: MediaStream, onProgress: (progress: MusicProgress) => void) {
     const microphone = microphoneStream.getAudioTracks()[0];
@@ -132,6 +133,7 @@ export class MeetingMusicMixer {
   setVolume(level: number) {
     // 0–100% controls actual musical loudness. A 100% setting approaches
     // source level; the voice-first sidechain and limiter manage peaks.
+    this.currentVolume = level;
     const normalized = Math.max(0, Math.min(1, level / 100));
     const backgroundGain = Math.pow(normalized, 0.92);
     this.musicGain.gain.setTargetAtTime(backgroundGain, this.context.currentTime, 0.04);
@@ -150,10 +152,17 @@ export class MeetingMusicMixer {
     const resumed = this.context.resume();
     const played = this.audio.play();
     await Promise.all([resumed, played]);
+    if(!this.audio.paused)this.setVolume(this.currentVolume);
     this.notify();
   }
 
-  pause() { this.audio.pause(); this.notify(); }
+  pause() {
+    const now=this.context.currentTime;
+    this.musicGain.gain.cancelScheduledValues(now);
+    this.musicGain.gain.setValueAtTime(0,now);
+    this.audio.pause();
+    this.notify();
+  }
 
   seek(value: number) {
     if (!Number.isFinite(this.audio.duration)) return;
