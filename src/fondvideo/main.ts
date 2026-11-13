@@ -14,6 +14,9 @@ import {
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { createCaptionStudio } from './caption-studio';
+import { createStudioAudioProcessor } from './audio-enhancement';
+import { createVisualTextEditor } from './visual-text';
+import { saveStudioProject, getStudioProject, listStudioProjects, deleteStudioProject } from './projects';
 
 const $ = id => document.getElementById(id);
 const video = $('video');
@@ -52,10 +55,26 @@ const state = {
   exportObjectUrl: '',
   aacFallbackRegistered: false,
   exportProfile: 'balanced',
+  audioNoiseReduction: true,
+  audioVoiceEnhancement: true,
+  audioProfile: 'balanced',
   maskWorkA: null,
   maskWorkB: null,
   maskRefined: null,
 };
+const textEditor = createVisualTextEditor({
+  stage: $('stage'),
+  canvas,
+  getTime: () => state.demo ? 1.5 : video.currentTime,
+  getDuration: () => state.duration,
+  getCaption: () => captions,
+  redraw: () => draw(),
+  pause: () => { video.pause(); $('play').textContent = '▶'; },
+});
+function renderOverlays(ctx, time, width, height) {
+  captions.render(ctx, time, width, height);
+  textEditor.render(ctx, time, width, height);
+}
 const show = (id, yes = true) => $(id).classList.toggle('hidden', !yes);
 const fmtTime = s =>
   Number.isFinite(s)
@@ -265,7 +284,7 @@ function drawOriginal(target = canvas) {
   c.clearRect(0, 0, target.width, target.height);
   if (state.demo) {
     drawDemo(target);
-    captions.render(c, 1.5, target.width, target.height);
+    renderOverlays(c, 1.5, target.width, target.height);
     return;
   }
   if (!state.file || video.readyState < 2) return;
@@ -273,7 +292,7 @@ function drawOriginal(target = canvas) {
   c.fillRect(0, 0, target.width, target.height);
   const r = rect(target.width, target.height);
   c.drawImage(video, r.x, r.y, r.w, r.h);
-  captions.render(c, video.currentTime, target.width, target.height);
+  renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
 async function initSegmenter() {
@@ -402,7 +421,7 @@ function compositeWithMask(target, mask) {
   s.filter = 'none';
   s.globalCompositeOperation = 'source-over';
   c.drawImage(subject, 0, 0);
-  captions.render(c, video.currentTime, target.width, target.height);
+  renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
 async function draw(target = canvas) {
@@ -422,6 +441,7 @@ async function draw(target = canvas) {
     compositeWithMask(target, mask);
   } finally {
     state.rendering = false;
+    if (target === canvas) textEditor.updateSurface();
   }
 }
 function frameLoop() {
@@ -435,6 +455,7 @@ function frameLoop() {
 
 async function loadFile(file) {
   reset(false);
+  activeProjectId=null;
   state.file = file;
   state.url = URL.createObjectURL(file);
   video.src = state.url;
@@ -468,6 +489,22 @@ async function loadFile(file) {
       'Le codec de ce fichier n’est pas pris en charge par ce navigateur. Essaie Safari sur iPhone ou un MP4 H.264.';
   }
 }
+// Direct preview editing is handled by the interactive layer mounted on #visualLayer.
+$('quickAddText').addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(button=>button.classList.toggle('active',button.dataset.panel==='text'));
+  document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('activePanel',panel.id==='text'));
+  $('textAdd').click();
+});
+
+$('audioNoiseReduction').addEventListener('change',event => {
+  state.audioNoiseReduction = event.target.checked;
+});
+$('audioVoiceEnhancement').addEventListener('change',event => {
+  state.audioVoiceEnhancement = event.target.checked;
+});
+$('audioProfile').addEventListener('change',event => {
+  state.audioProfile = event.target.value;
+});
 $('videoInput').addEventListener('change', e => {
   const f = e.target.files?.[0];
   if (f) loadFile(f);
@@ -508,6 +545,7 @@ video.addEventListener('timeupdate', () => {
   );
   $('current').textContent = fmtTime(video.currentTime);
   if (video.paused) draw();
+  textEditor.updateSurface();
 });
 video.addEventListener('ended', () => ($('play').textContent = '▶'));
 $('timeline').addEventListener('input', () => {
@@ -829,7 +867,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
     c.fillStyle = '#050608';
     c.fillRect(0, 0, target.width, target.height);
     sample.draw(c, r.x, r.y, r.w, r.h);
-    captions.render(
+    renderOverlays(
       c,
       Number(sample.timestamp) || 0,
       target.width,
@@ -849,7 +887,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
   }
   if (!mask) {
     sample.draw(c, r.x, r.y, r.w, r.h);
-    captions.render(
+    renderOverlays(
       c,
       Number(sample.timestamp) || 0,
       target.width,
@@ -872,7 +910,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
   s.filter = 'none';
   s.globalCompositeOperation = 'source-over';
   c.drawImage(subject, 0, 0);
-  captions.render(
+  renderOverlays(
     c,
     Number(sample.timestamp) || 0,
     target.width,
@@ -965,6 +1003,17 @@ $('exportBtn').addEventListener('click', async () => {
       input,
       output,
       tracks: 'primary',
+      audio: (state.audioVoiceEnhancement || state.audioNoiseReduction)
+        ? {
+          codec: 'aac',
+          quality: new Quality('high'),
+          forceTranscode: true,
+          process: createStudioAudioProcessor({
+            noiseReduction: state.audioNoiseReduction,
+            enhanceVoice: state.audioVoiceEnhancement,
+            profile: state.audioProfile,
+          }),
+        } : undefined,
       video: {
         codec: 'avc',
         quality: new Quality('very-high'),
@@ -1121,7 +1170,7 @@ $('savePhotos').addEventListener('click', async () => {
       !navigator.canShare?.({ files: [state.exportFile] })
     )
       throw new Error('file sharing unavailable');
-    await navigator.share({ files: [state.exportFile], title: 'FondVidéo' });
+    await navigator.share({ files: [state.exportFile], title: 'SCELYO Studio' });
     $('exportInfo').textContent =
       'Dans le menu iPhone, choisis « Enregistrer la vidéo » pour l’ajouter à Photos.';
   } catch (e) {
@@ -1131,6 +1180,82 @@ $('savePhotos').addEventListener('click', async () => {
     show('download');
   }
 });
+// Projects preserve the original video and editable subtitles, not only the exported MP4.
+let activeProjectId = null;
+let projectSaving = false;
+function projectBar() {
+  let bar=document.getElementById('scelyo-project-bar');
+  if(bar)return bar;
+  bar=document.createElement('section');
+  bar.id='scelyo-project-bar';
+  bar.style.cssText='display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px;margin:12px 0;border:1px solid #7b829766;border-radius:14px;background:#1b2030;color:white';
+  const save=document.createElement('button');save.textContent='Enregistrer le projet';save.type='button';
+  const open=document.createElement('button');open.textContent='Reprendre un montage';open.type='button';
+  const note=document.createElement('span');note.style.cssText='font-size:12px;opacity:.8';note.textContent='Vidéos et sous-titres conservés sur cet appareil';
+  for(const b of [save,open])b.style.cssText='padding:10px 12px;border-radius:9px;border:1px solid #a3a7b7;background:#30384d;color:white;cursor:pointer';
+  bar.append(save,open,note);
+  save.onclick=()=>void persistProject(note);
+  open.onclick=()=>void showProjects(note);
+  const target=document.getElementById('editor')||document.getElementById('landing');
+  target?.parentElement?.insertBefore(bar,target);
+  return bar;
+}
+async function persistProject(note) {
+  if(!state.file || projectSaving)return;
+  projectSaving=true;
+  try {
+    activeProjectId ||= crypto.randomUUID();
+    await saveStudioProject({
+      id:activeProjectId,name:state.file.name,updatedAt:Date.now(),video:state.file,
+      captions:captions.snapshot(),text:textEditor.snapshot(),
+      settings:{bg:state.bg,format:state.format,crop:state.crop,exportSize:state.exportSize,exportProfile:state.exportProfile}
+    });
+    note.textContent='Projet enregistré sur cet appareil. Vous pourrez modifier les sous-titres plus tard.';
+  } catch(e) {
+    note.textContent='Sauvegarde impossible : vérifiez l’espace disponible sur cet appareil.';
+    console.error('SCELYO project save',e);
+  } finally {projectSaving=false;}
+}
+async function showProjects(note) {
+  try {
+    const projects=await listStudioProjects();
+    const old=document.getElementById('scelyo-project-list');old?.remove();
+    const panel=document.createElement('div');panel.id='scelyo-project-list';
+    panel.style.cssText='flex-basis:100%;display:grid;gap:8px';
+    if(!projects.length)panel.textContent='Aucun projet enregistré pour le moment.';
+    for(const item of projects) {
+      const line=document.createElement('div');line.style.cssText='display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+      const resume=document.createElement('button');resume.type='button';resume.textContent='Modifier · '+item.name+' ('+new Date(item.updatedAt).toLocaleDateString('fr-FR')+')';
+      const remove=document.createElement('button');remove.type='button';remove.textContent='Supprimer';
+      for(const b of [resume,remove])b.style.cssText='padding:9px;border:1px solid #888;border-radius:8px;color:white;background:#30384d';
+      resume.onclick=async()=>{
+        try {
+          const project=await getStudioProject(item.id);
+          if(!project?.video)throw Error('Vidéo introuvable');
+          await loadFile(project.video);
+          activeProjectId=project.id;
+          captions.restore(project.captions);
+          textEditor.restore(project.text);
+          if(project.settings) {
+            state.exportSize=project.settings.exportSize||'original';
+            state.exportProfile=project.settings.exportProfile||'balanced';
+          }
+          draw();note.textContent='Montage rouvert : vous pouvez modifier les sous-titres puis enregistrer à nouveau.';
+          panel.remove();
+        }catch(e){note.textContent='Impossible de rouvrir ce projet.';console.error(e);}
+      };
+      remove.onclick=async()=>{
+        if(!confirm('Supprimer définitivement ce projet et sa vidéo enregistrée sur cet appareil ?'))return;
+        await deleteStudioProject(item.id);
+        if(activeProjectId===item.id)activeProjectId=null;
+        void showProjects(note);
+      };
+      line.append(resume,remove);panel.append(line);
+    }
+    projectBar().append(panel);
+  } catch(e){note.textContent='Impossible d’ouvrir les projets sur cet appareil.';console.error(e);}
+}
+projectBar();
 function reset(landing = true) {
   try {
     video.pause();
@@ -1138,6 +1263,7 @@ function reset(landing = true) {
   if (state.url) URL.revokeObjectURL(state.url);
   if (state.customUrl) URL.revokeObjectURL(state.customUrl);
   captions.reset();
+  textEditor.reset();
   state.file = null;
   state.url = '';
   state.width = 0;
