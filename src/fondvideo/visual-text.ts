@@ -359,6 +359,8 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       for(const layer of layers)if(time>=layer.start&&time<layer.end)drawText(ctx,layer,w,h);
     },
     updateSurface,
+    snapshot() {return layers.map(layer=>({...layer}));},
+    restore(saved) {layers.length=0;for(const layer of (Array.isArray(saved)?saved:[])) {if(typeof layer.text==='string') layers.push({...layer});} selected=null;showControls(null);listRefresh();repaint();},
     reset() {if(mobileCaptionEditor){mobileCaptionEditor.remove();mobileCaptionEditor=null;}layers.length=0;selected=null;selectedCaption=null;signature='';showControls(null);listRefresh();updateSurface(true)},
   };
 }
