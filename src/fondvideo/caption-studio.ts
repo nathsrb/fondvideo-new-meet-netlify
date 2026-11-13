@@ -776,6 +776,18 @@ export function createCaptionStudio({
       report('Corrige le mot sélectionné, puis continue la lecture.');
       return true;
     },
+    snapshot: () => JSON.parse(JSON.stringify(state)),
+    restore: saved => {
+      if (!saved || !Array.isArray(saved.words)) return;
+      Object.assign(state, initial(), saved);
+      state.words = saved.words.filter(w => typeof w.text === 'string' && Number.isFinite(w.start) && Number.isFinite(w.end));
+      page = 0;
+      byId('capEnabled').checked = state.enabled;
+      byId('capSize').value = String(state.size);
+      byId('capSizeValue').textContent = state.size + ' %';
+      byId('capPosition').value = String(state.y);
+      refresh(); repaint();
+    },
     reset: () => {
       Object.assign(state, initial());page=0;
       byId('capText').value = '';
