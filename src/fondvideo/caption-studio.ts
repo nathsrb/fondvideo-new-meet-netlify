@@ -717,6 +717,37 @@ export function createCaptionStudio({
   };
   refresh();
   return {
+    exportState: () => ({
+      words: state.words.map(word => ({ text: String(word.text), start: word.start, end: word.end })),
+      style: state.style, size: state.size, x: state.x, y: state.y, enabled: state.enabled,
+    }),
+    restoreState: snapshot => {
+      const data = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      const safeWords = Array.isArray(data.words) ? data.words.slice(0, 30000)
+        .filter(word => word && typeof word.text === 'string' &&
+          Number.isFinite(Number(word.start)) && Number.isFinite(Number(word.end)))
+        .map(word => ({
+          text: word.text.slice(0, 120),
+          start: Math.max(0, Number(word.start)),
+          end: Math.max(Number(word.start) + 0.05, Number(word.end)),
+        })).sort((a, b) => a.start - b.start) : [];
+      Object.assign(state, initial(), {
+        words: safeWords,
+        style: catalog.some(style => style.id === data.style) ? data.style : 'viral',
+        size: Number.isFinite(Number(data.size)) ? Math.min(24, Math.max(2.5, Number(data.size))) : 8.2,
+        x: Number.isFinite(Number(data.x)) ? Math.min(92, Math.max(8, Number(data.x))) : 50,
+        y: Number.isFinite(Number(data.y)) ? Math.min(90, Math.max(12, Number(data.y))) : 76,
+        enabled: data.enabled !== false,
+      });
+      page = 0;
+      byId('capEnabled').checked = state.enabled;
+      byId('capSize').value = String(state.size);
+      byId('capSizeValue').textContent = state.size + ' %';
+      byId('capPosition').value = String(state.y);
+      refresh();
+      repaint();
+      report(safeWords.length + ' mots restaurés. Tu peux les modifier à nouveau.');
+    },
     render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
     activeGroup: time => {
       if (!state.enabled) return null;
