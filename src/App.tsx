@@ -795,7 +795,24 @@ function App() {
           : track.kind === 'video' && screenRef.current
             ? screenRef.current.getVideoTracks()[0]
             : track;
-        if (selected) pc.addTrack(selected, source);
+        if (selected) {
+          const sender = pc.addTrack(selected, source);
+          // A seven-person mesh can mean six outgoing copies of the camera.
+          // Cap each outgoing video to protect mobile uplinks and keep audio stable.
+          if (selected.kind === 'video') {
+            try {
+              const parameters = sender.getParameters();
+              parameters.encodings = parameters.encodings?.length
+                ? parameters.encodings.map(encoding => ({ ...encoding, maxBitrate: 750_000 }))
+                : [{ maxBitrate: 750_000 }];
+              void sender.setParameters(parameters).catch(() => {
+                // Some Safari implementations reject bitrate constraints.
+              });
+            } catch {
+              // Continue the call even if bandwidth hints are unsupported.
+            }
+          }
+        }
       });
     } else {
       // A listen-only guest can still negotiate and receive audio and video.
