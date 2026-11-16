@@ -279,3 +279,28 @@ body:has(#app) footer.scelyo-studio-footer{border-top:1px solid #ffffff15;displa
   #capWords input,#capWords textarea {font-size:16px!important;max-width:100%;box-sizing:border-box}
   .cap-sliders input[type=range] {min-height:42px;max-width:100%}
 }
+
+
+/* Local, resumable Studio projects: prominent title and clear save feedback. */
+.scelyo-studio-header-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.scelyo-project-name-label{display:flex;gap:12px;align-items:center;font-size:13px;font-weight:800;color:#eef1ff;margin:2px 0 8px}
+.scelyo-project-name-label span{font-size:10px;font-weight:600;color:#ad9bff}
+.scelyo-project-name-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.scelyo-project-name-line input{flex:1 1 230px;max-width:550px;min-width:0;border:2px solid #a991ff;border-radius:12px;padding:12px 15px;background:#0c1425;color:#fff;font:750 18px Manrope,sans-serif;box-shadow:0 0 0 3px #a991ff12}
+.scelyo-project-name-line input:focus{outline:2px solid #c6adff;outline-offset:3px}
+.scelyo-project-name-line button{flex-shrink:0}
+.scelyo-save-status{color:#9bd8bc;font-size:11px;min-height:18px;margin-top:8px}
+.scelyo-video-original-name{font-size:12px!important;font-weight:500!important;color:#9aa9c1;margin:8px 0 4px!important;overflow-wrap:anywhere}
+.scelyo-saved-projects{grid-column:1/-1;order:4;background:#131b2b;border:1px solid #ffffff28;padding:20px;border-radius:18px;margin-top:8px;width:100%}
+.scelyo-saved-projects[hidden]{display:none!important}
+.scelyo-saved-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.scelyo-saved-heading span{font-size:10px;color:#bba8ff;letter-spacing:.12em;font-weight:800}
+.scelyo-saved-heading h2{font:800 20px Manrope,sans-serif;margin:5px 0}
+.scelyo-saved-heading p{font-size:12px;color:#b1bcd0;margin:0 0 10px}
+.scelyo-saved-list{display:grid;gap:9px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:12px}
+.scelyo-saved-item{border:1px solid #ffffff24;background:#1b2639;border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.scelyo-saved-item strong{font-size:14px;overflow-wrap:anywhere}
+.scelyo-saved-item small{color:#b3bfd2;font-size:11px}
+.scelyo-saved-actions{display:flex;gap:8px}
+.scelyo-saved-actions button:first-child{flex:1}
+@media(max-width:740px){.scelyo-project-name-line{align-items:stretch;flex-direction:column}.scelyo-project-name-line input,.scelyo-project-name-line button{width:100%;max-width:none;flex:initial}.scelyo-studio-header-actions{gap:4px}.scelyo-saved-projects{padding:15px}}
