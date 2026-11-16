@@ -25,10 +25,23 @@
           <span class="active" aria-current="page">Studio</span>
           <a href="./index.html#/vault">Vault</a>
         </nav>
-        <button id="newProject" class="ghost hidden">Nouveau projet</button>
+        <div class="scelyo-studio-header-actions">
+          <button id="studioBackToProjects" class="ghost hidden" type="button">Mes projets</button>
+          <button id="newProject" class="ghost hidden" type="button">Nouveau projet</button>
+        </div>
       </header>
       <main>
         <section id="landing" class="landing scelyo-studio-landing">
+          <section id="savedProjectsSection" class="scelyo-saved-projects" aria-labelledby="savedProjectsTitle">
+            <div class="scelyo-saved-heading">
+              <div><span>TON ESPACE DE TRAVAIL</span><h2 id="savedProjectsTitle">Reprendre un projet</h2>
+                <p>Retrouve tes sous-titres, leurs modifications et tes réglages sur cet appareil.</p>
+              </div>
+              <button id="refreshSavedProjects" type="button" class="ghost">Actualiser</button>
+            </div>
+            <div id="savedProjectsList" class="scelyo-saved-list"></div>
+            <p id="savedProjectsEmpty" class="hint">Aucun projet enregistré sur cet appareil pour le moment.</p>
+          </section>
           <div class="scelyo-studio-copy">
             <div class="scelyo-studio-overline"><span></span> SCELYO / STUDIO CRÉATIF</div>
             <div class="scelyo-studio-pill">Ton studio vidéo, directement dans ton navigateur</div>
@@ -64,7 +77,14 @@
         <section id="editor" class="editor hidden">
           <div class="editorHead">
             <div>
-              <div class="scelyo-editor-overline">SCELYO STUDIO / PROJET EN COURS</div><h2 id="fileName">Vidéo</h2>
+              <div class="scelyo-editor-overline">SCELYO STUDIO / PROJET EN COURS</div>
+              <label class="scelyo-project-name-label" for="studioProjectName">Nom du projet <span>✎ Modifiable</span></label>
+              <div class="scelyo-project-name-line">
+                <input id="studioProjectName" type="text" maxlength="90" placeholder="Nomme ton projet..." autocomplete="off" />
+                <button id="studioSaveProject" class="primary" type="button">Enregistrer le projet</button>
+              </div>
+              <div id="studioSaveStatus" class="scelyo-save-status" role="status" aria-live="polite">Enregistrement local sur cet appareil</div>
+              <h2 id="fileName" class="scelyo-video-original-name">Vidéo</h2>
               <div id="fileMeta" class="meta"></div>
             </div>
             <div id="status" class="status">IA en attente</div>
