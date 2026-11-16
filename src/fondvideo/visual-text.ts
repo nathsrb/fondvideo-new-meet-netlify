@@ -355,6 +355,32 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
   };
   listRefresh();showControls(null);
   return {
+    exportState() {
+      return layers.map(layer => ({ ...layer }));
+    },
+    restoreState(snapshot) {
+      if (mobileCaptionEditor) { mobileCaptionEditor.remove(); mobileCaptionEditor = null; }
+      layers.length = 0;
+      if (Array.isArray(snapshot)) {
+        for (const entry of snapshot.slice(0, 150)) {
+          if (!entry || typeof entry.text !== 'string') continue;
+          const start = Math.max(0, Number(entry.start) || 0);
+          layers.push({
+            id: typeof entry.id === 'string' ? entry.id : crypto.randomUUID(),
+            text: entry.text.slice(0, 350),
+            start,
+            end: Math.max(start + .05, Number(entry.end) || start + 3),
+            x: clamp(Number(entry.x) || 50, 7, 93),
+            y: clamp(Number(entry.y) || 36, 8, 92),
+            size: clamp(Number(entry.size) || 8.4, 2.5, 24),
+            style: presets.some(p => p.id === entry.style) ? entry.style : 'impact',
+            color: /^#[0-9a-f]{6}$/i.test(entry.color || '') ? entry.color : '#ffffff',
+          });
+        }
+      }
+      selected = null; selectedCaption = null; signature = '';
+      showControls(null); listRefresh(); updateSurface(true); redraw();
+    },
     render(ctx,time,w,h) {
       for(const layer of layers)if(time>=layer.start&&time<layer.end)drawText(ctx,layer,w,h);
     },
