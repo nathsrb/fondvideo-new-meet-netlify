@@ -128,7 +128,7 @@ export default async function handler(request: Request): Promise<Response> {
       if (!uuidPattern.test(String(peer_id)) || !uuidPattern.test(String(connection_id)) ||
           typeof name !== 'string' || !name.trim() || name.length > 40) return fail('Participant invalide.');
       const members = await membersOf(room);
-      if (members.length >= 6) return fail('Prévisualisation limitée à six participants.', 409);
+      if (members.length >= 7) return fail('Cette réunion est limitée à sept personnes, organisateur compris.', 409);
       const settings = await getSettings(room);
       if (members.length && settings.locked) return fail('Cette réunion est verrouillée par son organisateur.', 403);
       // Reset previous room restrictions for the first member of a new session.
