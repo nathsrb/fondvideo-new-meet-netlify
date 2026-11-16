@@ -100,12 +100,12 @@ function readStudioSettings() {
   };
 }
 async function saveCurrentProject(force = false) {
-  if (!activeProjectId || !mediaSavedLocally || projectRestoreBusy || !state.file || state.demo) return;
+  if (!activeProjectId || projectRestoreBusy || !state.file || state.demo) return;
   const name = $('studioProjectName').value.trim().slice(0, 90)
     || state.file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
   const project = {
     id: activeProjectId, name, videoName: state.file.name,
-    videoSize: state.file.size, updatedAt: Date.now(),
+    videoSize: state.file.size, videoStored: mediaSavedLocally, updatedAt: Date.now(),
     settings: readStudioSettings(),
     captions: captions.exportState(),
     textLayers: textEditor.exportState(),
@@ -118,7 +118,9 @@ async function saveCurrentProject(force = false) {
   try {
     await saveStudioProject(project);
     lastProjectSnapshot = signature;
-    projectSaveMessage('✓ Projet enregistré sur cet appareil · ' + new Date().toLocaleTimeString('fr-FR'));
+    projectSaveMessage(mediaSavedLocally
+      ? '✓ Projet enregistré sur cet appareil · ' + new Date().toLocaleTimeString('fr-FR')
+      : '✓ Modifications sauvegardées · vidéo à relier pour rouvrir ce projet.', !mediaSavedLocally);
   } catch (error) {
     console.error('Studio project save:', error);
     projectSaveMessage('Sauvegarde impossible : espace local insuffisant ou navigateur privé.', true);
@@ -150,14 +152,35 @@ async function listSavedProjects() {
       new Date(project.updatedAt || Date.now()).toLocaleString('fr-FR');
     const actions = document.createElement('div'); actions.className = 'scelyo-saved-actions';
     const open = document.createElement('button'); open.type = 'button'; open.className = 'primary'; open.textContent = 'Reprendre l’édition';
+    if (project.videoStored === false) open.textContent = 'Reprendre (vidéo à relier)';
     open.onclick = async () => {
       open.disabled = true; open.textContent = 'Ouverture…';
       try {
-        const file = await getStudioVideo(project.id);
-        if (!file) throw new Error('Vidéo source introuvable sur cet appareil.');
+        let file = await getStudioVideo(project.id);
+        let reattachVideo = false;
+        if (!file) {
+          reattachVideo = true;
+          projectSaveMessage('Vidéo à relier : sélectionne le fichier source.');
+          file = await new Promise((resolve, reject) => {
+            const picker = document.createElement('input');
+            picker.type = 'file'; picker.accept = 'video/*'; picker.style.display = 'none';
+            document.body.append(picker);
+            picker.onchange = () => {
+              const selected = picker.files?.[0] || null;
+              picker.remove();
+              if (!selected) { reject(new Error('Vidéo non sélectionnée.')); return; }
+              if (project.videoSize && project.videoSize !== selected.size) {
+                reject(new Error('La taille ne correspond pas à la vidéo source de ce projet.'));
+                return;
+              }
+              resolve(selected);
+            };
+            picker.click();
+          });
+        }
         const videoFile = file instanceof File
           ? file : new File([file], project.videoName || 'video.mp4', { type: file.type || 'video/mp4' });
-        await loadFile(videoFile, { project });
+        await loadFile(videoFile, { project, reattachVideo });
       } catch (error) {
         alert('Impossible de rouvrir ce projet : ' + (error.message || error));
         open.disabled = false; open.textContent = 'Reprendre l’édition';
@@ -602,7 +625,7 @@ async function loadFile(file, options = {}) {
   reset(false);
   activeProjectId = options.project?.id || crypto.randomUUID();
   projectRestoreBusy = Boolean(options.project);
-  mediaSavedLocally = Boolean(options.project);
+  mediaSavedLocally = Boolean(options.project?.videoStored);
   lastProjectSnapshot = '';
   $('studioProjectName').value = options.project?.name ||
     file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
@@ -633,6 +656,10 @@ async function loadFile(file, options = {}) {
     if (video.readyState < 2) await wait(video, 'loadeddata');
     drawOriginal();
     if (options.project) {
+      if (options.reattachVideo) {
+        try { await saveStudioVideo(activeProjectId, file); mediaSavedLocally = true; }
+        catch (error) { mediaSavedLocally = false; console.warn('Video reattachment not stored:', error); }
+      }
       try {
         await restoreStudioProject(options.project);
         projectSaveMessage('✓ Projet restauré, sous-titres modifiables.');
