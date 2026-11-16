@@ -16,6 +16,10 @@ import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { createCaptionStudio } from './caption-studio';
 import { createStudioAudioProcessor } from './audio-enhancement';
 import { createVisualTextEditor } from './visual-text';
+import {
+  listStudioProjects, saveStudioProject, saveStudioVideo, getStudioVideo,
+  saveStudioBackground, getStudioBackground, deleteStudioProject,
+} from './project-storage';
 
 const $ = id => document.getElementById(id);
 const video = $('video');
@@ -70,6 +74,147 @@ const textEditor = createVisualTextEditor({
   redraw: () => draw(),
   pause: () => { video.pause(); $('play').textContent = '▶'; },
 });
+
+let activeProjectId = null;
+let mediaSavedLocally = false;
+let projectRestoreBusy = false;
+let projectSaving = false;
+let projectSaveQueued = false;
+let lastProjectSnapshot = '';
+
+function projectSaveMessage(message, error = false) {
+  const element = $('studioSaveStatus');
+  if (element) {
+    element.textContent = message;
+    element.style.color = error ? '#ffb8af' : '#9bd8bc';
+  }
+}
+function readStudioSettings() {
+  const controls = ['softness', 'smoothing', 'antiHalo', 'holeRepair', 'stability'];
+  return {
+    bg: state.bg, format: state.format, crop: state.crop,
+    exportSize: state.exportSize, exportProfile: state.exportProfile,
+    audioNoiseReduction: state.audioNoiseReduction,
+    audioVoiceEnhancement: state.audioVoiceEnhancement, audioProfile: state.audioProfile,
+    controls: Object.fromEntries(controls.map(id => [id, $(id)?.value])),
+  };
+}
+async function saveCurrentProject(force = false) {
+  if (!activeProjectId || !mediaSavedLocally || projectRestoreBusy || !state.file || state.demo) return;
+  const name = $('studioProjectName').value.trim().slice(0, 90)
+    || state.file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
+  const project = {
+    id: activeProjectId, name, videoName: state.file.name,
+    videoSize: state.file.size, updatedAt: Date.now(),
+    settings: readStudioSettings(),
+    captions: captions.exportState(),
+    textLayers: textEditor.exportState(),
+  };
+  const signature = JSON.stringify([project.name, project.settings, project.captions, project.textLayers]);
+  if (!force && signature === lastProjectSnapshot) return;
+  if (projectSaving) { projectSaveQueued = true; return; }
+  projectSaving = true;
+  projectSaveMessage('Enregistrement local…');
+  try {
+    await saveStudioProject(project);
+    lastProjectSnapshot = signature;
+    projectSaveMessage('✓ Projet enregistré sur cet appareil · ' + new Date().toLocaleTimeString('fr-FR'));
+  } catch (error) {
+    console.error('Studio project save:', error);
+    projectSaveMessage('Sauvegarde impossible : espace local insuffisant ou navigateur privé.', true);
+  } finally {
+    projectSaving = false;
+    if (projectSaveQueued) {
+      projectSaveQueued = false;
+      void saveCurrentProject();
+    }
+  }
+}
+async function listSavedProjects() {
+  const list = $('savedProjectsList');
+  if (!list) return;
+  list.replaceChildren();
+  let projects = [];
+  try { projects = await listStudioProjects(); }
+  catch (error) {
+    $('savedProjectsEmpty').textContent = 'Stockage local indisponible : ' + (error.message || error);
+    return;
+  }
+  $('savedProjectsEmpty').hidden = projects.length > 0;
+  for (const project of projects) {
+    const item = document.createElement('article');
+    item.className = 'scelyo-saved-item';
+    const name = document.createElement('strong'); name.textContent = project.name || 'Mon projet';
+    const meta = document.createElement('small');
+    meta.textContent = (project.captions?.words?.length || 0) + ' mots de sous-titres · ' +
+      new Date(project.updatedAt || Date.now()).toLocaleString('fr-FR');
+    const actions = document.createElement('div'); actions.className = 'scelyo-saved-actions';
+    const open = document.createElement('button'); open.type = 'button'; open.className = 'primary'; open.textContent = 'Reprendre l’édition';
+    open.onclick = async () => {
+      open.disabled = true; open.textContent = 'Ouverture…';
+      try {
+        const file = await getStudioVideo(project.id);
+        if (!file) throw new Error('Vidéo source introuvable sur cet appareil.');
+        const videoFile = file instanceof File
+          ? file : new File([file], project.videoName || 'video.mp4', { type: file.type || 'video/mp4' });
+        await loadFile(videoFile, { project });
+      } catch (error) {
+        alert('Impossible de rouvrir ce projet : ' + (error.message || error));
+        open.disabled = false; open.textContent = 'Reprendre l’édition';
+      }
+    };
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'ghost'; remove.textContent = 'Supprimer';
+    remove.setAttribute('aria-label', 'Supprimer le projet ' + (project.name || 'Mon projet'));
+    remove.onclick = async () => {
+      if (!confirm('Supprimer ce projet et sa vidéo sauvegardée sur cet appareil ?')) return;
+      try { await deleteStudioProject(project.id); await listSavedProjects(); }
+      catch (error) { alert('Suppression impossible : ' + (error.message || error)); }
+    };
+    actions.append(open, remove);
+    item.append(name, meta, actions);
+    list.append(item);
+  }
+}
+async function restoreStudioProject(project) {
+  const saved = project?.settings || {};
+  for (const key of ['bg', 'format', 'crop', 'exportSize', 'exportProfile', 'audioProfile']) {
+    if (typeof saved[key] === 'string') state[key] = saved[key];
+  }
+  state.audioNoiseReduction = saved.audioNoiseReduction !== false;
+  state.audioVoiceEnhancement = saved.audioVoiceEnhancement !== false;
+  $('audioNoiseReduction').checked = state.audioNoiseReduction;
+  $('audioVoiceEnhancement').checked = state.audioVoiceEnhancement;
+  $('audioProfile').value = state.audioProfile;
+  for (const [id, value] of Object.entries(saved.controls || {})) {
+    if ($(id) && value !== undefined && value !== null) $(id).value = String(value);
+  }
+  if (state.bg === 'custom') {
+    const background = await getStudioBackground(project.id).catch(() => null);
+    if (background) {
+      state.customUrl = URL.createObjectURL(background);
+      const image = new Image();
+      image.src = state.customUrl;
+      await image.decode();
+      state.customImage = image;
+    } else state.bg = 'original';
+  }
+  document.querySelectorAll('.bg').forEach(button =>
+    button.classList.toggle('selected', button.dataset.bg === state.bg));
+  document.querySelectorAll('.fmt').forEach(button =>
+    button.classList.toggle('selected', button.dataset.format === state.format));
+  document.querySelectorAll('.size').forEach(button =>
+    button.classList.toggle('selected', button.dataset.size === state.exportSize));
+  document.querySelectorAll('.profile').forEach(button =>
+    button.classList.toggle('selected', button.dataset.profile === state.exportProfile));
+  $('fit').classList.toggle('selected', state.crop === 'fit');
+  $('fill').classList.toggle('selected', state.crop === 'fill');
+  captions.restoreState(project.captions);
+  textEditor.restoreState(project.textLayers);
+  resizeCanvas();
+  if (state.bg !== 'original') void initSegmenter().then(() => draw()).catch(() => {});
+  else drawOriginal();
+}
+
 function renderOverlays(ctx, time, width, height) {
   captions.render(ctx, time, width, height);
   textEditor.render(ctx, time, width, height);
@@ -452,8 +597,16 @@ function frameLoop() {
   });
 }
 
-async function loadFile(file) {
+async function loadFile(file, options = {}) {
+  await saveCurrentProject(true);
   reset(false);
+  activeProjectId = options.project?.id || crypto.randomUUID();
+  projectRestoreBusy = Boolean(options.project);
+  mediaSavedLocally = Boolean(options.project);
+  lastProjectSnapshot = '';
+  $('studioProjectName').value = options.project?.name ||
+    file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
+  projectSaveMessage(options.project ? 'Restauration de ton projet…' : 'Préparation de la sauvegarde locale…');
   state.file = file;
   state.url = URL.createObjectURL(file);
   video.src = state.url;
@@ -462,6 +615,7 @@ async function loadFile(file) {
   show('landing', false);
   show('editor');
   show('newProject');
+  show('studioBackToProjects');
   show('overlay');
   $('overlayTitle').textContent = 'Ouverture de ta vidéo…';
   $('overlayText').textContent = 'Aucun upload cloud.';
@@ -478,6 +632,25 @@ async function loadFile(file) {
     resizeCanvas();
     if (video.readyState < 2) await wait(video, 'loadeddata');
     drawOriginal();
+    if (options.project) {
+      try {
+        await restoreStudioProject(options.project);
+        projectSaveMessage('✓ Projet restauré, sous-titres modifiables.');
+      } catch (error) {
+        console.error('Restore Studio project:', error);
+        projectSaveMessage('Restauration partielle : ' + (error.message || error), true);
+      }
+    } else {
+      try {
+        await saveStudioVideo(activeProjectId, file);
+        mediaSavedLocally = true;
+      } catch (error) {
+        mediaSavedLocally = false;
+        projectSaveMessage('Vidéo non sauvegardée : stockage local insuffisant. Exporte ton travail avant de quitter.', true);
+      }
+    }
+    projectRestoreBusy = false;
+    if (mediaSavedLocally) await saveCurrentProject(true);
     show('overlay', false);
     initSegmenter().catch(() => {});
   } catch (e) {
@@ -519,10 +692,28 @@ $('demoBtn').addEventListener('click', () => {
   show('landing', false);
   show('editor');
   show('newProject');
+  show('studioBackToProjects');
+  $('studioProjectName').value = 'Mode démo';
+  projectSaveMessage('Mode démo : importe une vidéo pour enregistrer un projet.');
   resizeCanvas();
   setStatus('Mode démo', 'success');
 });
-$('newProject').addEventListener('click', () => reset(true));
+async function returnToStudioProjects() {
+  await saveCurrentProject(true);
+  reset(true);
+  await listSavedProjects();
+}
+$('newProject').addEventListener('click', () => void returnToStudioProjects());
+$('studioBackToProjects').addEventListener('click', () => void returnToStudioProjects());
+$('refreshSavedProjects').addEventListener('click', () => void listSavedProjects());
+$('studioSaveProject').addEventListener('click', () => void saveCurrentProject(true));
+$('studioProjectName').addEventListener('input', () => projectSaveMessage('Nom modifié · sauvegarde automatique en cours…'));
+window.setInterval(() => { if (!state.exporting) void saveCurrentProject(); }, 2500);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) void saveCurrentProject();
+});
+window.addEventListener('pagehide', () => { void saveCurrentProject(); });
+void listSavedProjects();
 $('play').addEventListener('click', async () => {
   if (state.demo) return;
   if (!state.file) return;
@@ -594,6 +785,10 @@ $('imageInput').addEventListener('change', async e => {
   await img.decode();
   state.customImage = img;
   state.bg = 'custom';
+  if (activeProjectId && mediaSavedLocally) {
+    saveStudioBackground(activeProjectId, f)
+      .catch(error => projectSaveMessage('Fond personnalisé non sauvegardé : ' + (error.message || error), true));
+  }
   document.querySelectorAll('.bg').forEach(x => x.classList.remove('selected'));
   document.querySelector('label[for="imageInput"]')?.classList.add('selected');
   if (!state.demo) await initSegmenter();
@@ -1186,6 +1381,11 @@ function reset(landing = true) {
   if (state.customUrl) URL.revokeObjectURL(state.customUrl);
   captions.reset();
   textEditor.reset();
+  activeProjectId = null;
+  mediaSavedLocally = false;
+  projectRestoreBusy = false;
+  lastProjectSnapshot = '';
+  $('studioProjectName').value = '';
   state.file = null;
   state.url = '';
   state.width = 0;
@@ -1206,6 +1406,7 @@ function reset(landing = true) {
   video.load();
   show('editor', false);
   show('newProject', false);
+  show('studioBackToProjects', false);
   show('download', false);
   show('savePhotos', false);
   if (landing) show('landing');
