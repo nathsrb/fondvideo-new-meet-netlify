@@ -623,7 +623,11 @@ function frameLoop() {
 }
 
 async function loadFile(file, options = {}) {
-  await saveCurrentProject(true);
+  const savedPrevious = await saveCurrentProject(true);
+  if (savedPrevious === false) {
+    alert('Les dernières modifications ne sont pas encore enregistrées. Réessaie avant de changer de projet.');
+    return;
+  }
   reset(false);
   activeProjectId = options.project?.id || crypto.randomUUID();
   projectRestoreBusy = Boolean(options.project);
