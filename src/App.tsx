@@ -311,21 +311,9 @@ function App() {
   const nameRef = useRef(displayName);
   const isJoinedRef = useRef(false);
 
-  useEffect(() => {
-    // Public Google OAuth client ID can be configured once by the app owner.
-    // End users only see the standard Google authorization window.
-    let active = true;
-    api.get('/api/drive/config')
-      .then(result => {
-        const configured = result.data?.clientId;
-        if(active && !configuredGoogleClientId && typeof configured === 'string' && configured.endsWith('.apps.googleusercontent.com')) {
-          setClientId(configured);
-          localStorage.setItem('nexa_google_client', configured);
-        }
-      })
-      .catch(() => { /* Local fallback remains available */ });
-    return () => { active = false; };
-  }, []);
+  // Google OAuth client IDs are public: use the build-time ID or the saved
+  // local setting. Never call a Netlify Function just to retrieve this value.
+  // Access tokens remain in the user's browser; no client secret is shipped.
 
   const focusRef=useRef(peerId.current);
   const shareRef=useRef<string|null>(null);
