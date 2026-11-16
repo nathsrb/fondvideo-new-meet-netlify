@@ -100,7 +100,7 @@ function readStudioSettings() {
   };
 }
 async function saveCurrentProject(force = false) {
-  if (!activeProjectId || projectRestoreBusy || !state.file || state.demo) return;
+  if (!activeProjectId || projectRestoreBusy || !state.file || state.demo) return true;
   const name = $('studioProjectName').value.trim().slice(0, 90)
     || state.file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
   const project = {
@@ -111,8 +111,8 @@ async function saveCurrentProject(force = false) {
     textLayers: textEditor.exportState(),
   };
   const signature = JSON.stringify([project.name, project.settings, project.captions, project.textLayers]);
-  if (!force && signature === lastProjectSnapshot) return;
-  if (projectSaving) { projectSaveQueued = true; return; }
+  if (!force && signature === lastProjectSnapshot) return true;
+  if (projectSaving) { projectSaveQueued = true; return false; }
   projectSaving = true;
   projectSaveMessage('Enregistrement local…');
   try {
@@ -121,9 +121,11 @@ async function saveCurrentProject(force = false) {
     projectSaveMessage(mediaSavedLocally
       ? '✓ Projet enregistré sur cet appareil · ' + new Date().toLocaleTimeString('fr-FR')
       : '✓ Modifications sauvegardées · vidéo à relier pour rouvrir ce projet.', !mediaSavedLocally);
+    return true;
   } catch (error) {
     console.error('Studio project save:', error);
     projectSaveMessage('Sauvegarde impossible : espace local insuffisant ou navigateur privé.', true);
+    return false;
   } finally {
     projectSaving = false;
     if (projectSaveQueued) {
@@ -726,7 +728,11 @@ $('demoBtn').addEventListener('click', () => {
   setStatus('Mode démo', 'success');
 });
 async function returnToStudioProjects() {
-  await saveCurrentProject(true);
+  const saved = await saveCurrentProject(true);
+  if (saved === false) {
+    alert('Les modifications ne sont pas encore enregistrées. Réessaie avant de quitter le projet.');
+    return;
+  }
   reset(true);
   await listSavedProjects();
 }
@@ -734,7 +740,27 @@ $('newProject').addEventListener('click', () => void returnToStudioProjects());
 $('studioBackToProjects').addEventListener('click', () => void returnToStudioProjects());
 $('refreshSavedProjects').addEventListener('click', () => void listSavedProjects());
 $('studioSaveProject').addEventListener('click', () => void saveCurrentProject(true));
-$('studioProjectName').addEventListener('input', () => projectSaveMessage('Nom modifié · sauvegarde automatique en cours…'));
+let studioAutosaveTimer = null;
+function queueStudioAutosave() {
+  if (!activeProjectId || projectRestoreBusy || !state.file || state.demo) return;
+  projectSaveMessage('Modifications en attente de sauvegarde…');
+  if (studioAutosaveTimer) clearTimeout(studioAutosaveTimer);
+  studioAutosaveTimer = setTimeout(() => {
+    studioAutosaveTimer = null;
+    void saveCurrentProject();
+  }, 900);
+}
+// Word correction, timeline adjustment, style selection and project naming
+// all trigger the same browser-only save. No Netlify request is involved.
+for (const eventName of ['input', 'change', 'click', 'pointerup']) {
+  $('editor').addEventListener(eventName, event => {
+    const target = event.target;
+    if (!target || !target.closest) return;
+    if (target.closest('#studioSaveProject, #studioBackToProjects, #newProject, #play, #timeline, #quickAddText') &&
+        eventName === 'click') return;
+    queueStudioAutosave();
+  });
+}
 window.setInterval(() => { if (!state.exporting) void saveCurrentProject(); }, 2500);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) void saveCurrentProject();
@@ -1401,6 +1427,10 @@ $('savePhotos').addEventListener('click', async () => {
   }
 });
 function reset(landing = true) {
+  if (studioAutosaveTimer) {
+    clearTimeout(studioAutosaveTimer);
+    studioAutosaveTimer = null;
+  }
   try {
     video.pause();
   } catch {}
