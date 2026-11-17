@@ -187,6 +187,12 @@ function App() {
   const [roomSettings,setRoomSettings]=useState<RoomSettings>(defaultRoomSettings);
   const [hostBusy,setHostBusy]=useState(false);
   const [gallery,setGallery]=useState(false);
+  // The dropdown controls real upstream video subscriptions, not CSS visibility.
+  const [videoLimit,setVideoLimit]=useState<'auto'|'6'|'3'|'1'|'0'>('auto');
+  const [networkTier,setNetworkTier]=useState('4g');
+  const effectiveVideoLimit = videoLimit === 'auto'
+    ? (networkTier === 'slow-2g' || networkTier === '2g' ? 0 : networkTier === '3g' || isPhone ? 1 : 3)
+    : Number(videoLimit);
   const [streams, setStreams] = useState<Record<string, MediaStream>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -286,6 +292,9 @@ function App() {
   const peerId = useRef(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
+  const videoSenders = useRef(new Map<string, RTCRtpSender>());
+  const videoWantedByPeer = useRef(new Map<string, boolean>());
+  const requestedRemoteVideo = useRef(new Map<string, boolean>());
   const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const streamsRef = useRef<Record<string, MediaStream>>({});
   const localRef = useRef<MediaStream | null>(null);
@@ -419,6 +428,29 @@ function App() {
     },240);
     return()=>{clearInterval(timer);for(const node of nodes.values()){node.source.disconnect();node.analyser.disconnect();}void audio.close();};
   },[joined]);
+
+  useEffect(() => {
+    type NetInfo = EventTarget & { effectiveType?: string };
+    const info = (navigator as Navigator & { connection?: NetInfo }).connection;
+    if (!info) return;
+    const changed = () => setNetworkTier(info.effectiveType || '4g');
+    changed();
+    info.addEventListener('change', changed);
+    return () => info.removeEventListener('change', changed);
+  }, []);
+
+  useEffect(() => {
+    if (!joined || !connRef.current) return;
+    const priority = [pinned, activeSpeaker, ...members.map(member => member.id)]
+      .filter((id): id is string => Boolean(id) && id !== peerId.current);
+    const wanted = new Set(Array.from(new Set(priority)).slice(0, effectiveVideoLimit));
+    for (const member of members) {
+      const enabled = wanted.has(member.id);
+      if (requestedRemoteVideo.current.get(member.id) === enabled) continue;
+      requestedRemoteVideo.current.set(member.id, enabled);
+      void sendSignal(member.id, { type: 'video.pref', enabled });
+    }
+  }, [joined, members, pinned, activeSpeaker, effectiveVideoLimit]);
 
   function pinParticipant(id:string){
     const next=pinRef.current===id?null:id;
@@ -788,6 +820,7 @@ function App() {
           // A seven-person mesh can mean six outgoing copies of the camera.
           // Cap each outgoing video to protect mobile uplinks and keep audio stable.
           if (selected.kind === 'video') {
+            videoSenders.current.set(id, sender);
             try {
               const parameters = sender.getParameters();
               parameters.encodings = parameters.encodings?.length
@@ -862,6 +895,16 @@ function App() {
 
   async function onSignal(from: string, signal: any) {
     try {
+      if (signal?.type === 'video.pref') {
+        if (typeof signal.enabled !== 'boolean') return;
+        videoWantedByPeer.current.set(from, signal.enabled);
+        const sender = videoSenders.current.get(from);
+        if (sender) {
+          const video = screenRef.current?.getVideoTracks()[0] || localRef.current?.getVideoTracks()[0] || null;
+          await sender.replaceTrack(signal.enabled ? video : null);
+        }
+        return;
+      }
       const pc = getPeer(from);
       if (signal.type === 'offer') {
         await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
@@ -897,6 +940,9 @@ function App() {
   function closePeer(id: string) {
     pcs.current.get(id)?.close();
     pcs.current.delete(id);
+    videoSenders.current.delete(id);
+    videoWantedByPeer.current.delete(id);
+    requestedRemoteVideo.current.delete(id);
     const { [id]: _removed, ...rest } = streamsRef.current;
     streamsRef.current = rest;
     setStreams(rest);
@@ -1012,9 +1058,10 @@ function App() {
       localRef.current = stream;
       setLocalStream(stream);
       const videoTrack = stream.getVideoTracks()[0] || null;
-      for (const pc of pcs.current.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(videoTrack);
+      for (const [id, pc] of pcs.current) {
+        const sender = videoSenders.current.get(id) ||
+          pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(videoWantedByPeer.current.get(id) === false ? null : videoTrack);
       }
     } catch (err) {
       toast('Décor indisponible : ' + readableError(err));
@@ -1210,6 +1257,9 @@ function App() {
     connRef.current = null;
     pcs.current.forEach(pc => pc.close());
     pcs.current.clear();
+    videoSenders.current.clear();
+    videoWantedByPeer.current.clear();
+    requestedRemoteVideo.current.clear();
     pendingIce.current.clear();
     effectRef.current?.stop();
     effectRef.current = null;
@@ -2641,6 +2691,17 @@ function App() {
               </div>}
               {members.map(m=><StreamAudio key={'audio-'+m.id} stream={streams[m.id]||null} onPlaybackBlocked={setAudioNeedsGesture}/>)}
               <div className="program-actions">
+                <label className="scelyo-video-limit" style={{display:'inline-flex',alignItems:'center',gap:8}}>
+                  Vidéos simultanées
+                  <select aria-label="Limiter les vidéos reçues" value={videoLimit}
+                    onChange={event=>setVideoLimit(event.target.value as typeof videoLimit)}>
+                    <option value="auto">Auto (conseillé)</option>
+                    <option value="6">6 vidéos</option>
+                    <option value="3">3 vidéos</option>
+                    <option value="1">1 vidéo (intervenant)</option>
+                    <option value="0">Audio seul (7 personnes)</option>
+                  </select>
+                </label>
                 <button onClick={()=>setGallery(!gallery)}>{gallery?'Vue intervenant':'Vue mosaïque'}</button>
                 {members.length>0&&<button type="button" onClick={()=>void enableRemoteAudio()} title="Autoriser la lecture des voix des autres participants"><Volume2 size={16}/> {audioNeedsGesture?'Débloquer le son':'Activer le son'}</button>}
                 {members.length>0&&<button type="button" onClick={()=>void diagnoseRemoteAudio()} title="Vérifier la réception du microphone de chaque participant">Diagnostic audio</button>}
