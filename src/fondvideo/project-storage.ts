@@ -44,7 +44,10 @@ function openDatabase(): Promise<IDBDatabase> {
         if (oldProject && !oldProject.videoName && oldProject.video instanceof Blob) {
           const video = oldProject.video as Blob & { name?: string };
           media.put(video, oldProject.id + ':video');
-          const { video: _legacyVideo, text: legacyText, ...metadata } = oldProject;
+          const metadata = { ...oldProject };
+          const legacyText = metadata.text;
+          delete metadata.video;
+          delete metadata.text;
           cursor.update({
             ...metadata,
             videoName: video.name || metadata.name || 'video.mp4',
