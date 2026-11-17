@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, ws } from './netlify-transport';
+import { api, ws } from './realtime-transport';
 import { MeetingMusicMixer } from './meeting-music';
 import { ClearVoiceProcessor, type VoiceProfile } from './clearvoice';
 import {
@@ -907,6 +907,21 @@ function App() {
   }
 
   handleRef.current = (message: any) => {
+    if(message?.type==='room.limit'&&message.payload?.roomId===roomRef.current) {
+      void leaveMeeting();toast('Cette réunion est limitée à sept personnes.');
+      return;
+    }
+    if(message?.type==='room.resynced'&&message.payload?.roomId===roomRef.current) {
+      // A reconnect produces new WebRTC handshakes, even if the UI retained prior members.
+      for (const id of pcs.current.keys()) closePeer(id);
+      void api.get('/api/rooms/'+roomRef.current).then(result=>{
+        setMembers(result.data.members||[]);
+        setHostId(result.data.hostId||peerId.current);
+        setRoomSettings(result.data.settings||defaultRoomSettings);
+        for(const member of result.data.members||[])void initiate(member.id);
+      }).catch(error=>toast('Reconnexion : '+readableError(error)));
+      return;
+    }
     if(message?.type==='host.mute'&&message.payload?.roomId===roomRef.current) {
       rawRef.current?.getAudioTracks().forEach(t=>t.enabled=false);
       setMicOn(false);toast('L’hôte a coupé ton micro. Tu peux le réactiver.');
@@ -1109,7 +1124,7 @@ function App() {
           toast('Effet indisponible : ' + readableError(err));
         }
       }
-      const connection = ws.connect();
+      const connection = ws.connect(roomRef.current);
       connRef.current = connection;
       connection.onMessage(msg => handleRef.current(msg));
       await connection.ready;
