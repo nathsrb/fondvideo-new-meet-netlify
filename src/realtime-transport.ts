@@ -184,7 +184,8 @@ class RoomConnection {
       if (this.closed) return;
       void this.open().then(async () => {
         if (!this.memberId) return;
-        this.members.clear();
+        // Keep the last known host/settings until the new Presence snapshot arrives.
+        // Clearing these here would let a reconnecting guest impersonate a host.
         try {
           await this.track();
           this.lostConnection = false;
