@@ -25,7 +25,6 @@ import {
   Users,
   Circle,
   Square,
-  Settings,
   CloudUpload,
   Download,
   ShieldCheck,
@@ -34,7 +33,6 @@ import {
   Link2,
   Menu,
   Send,
-  HardDrive,
   AlertCircle,
   ExternalLink,
   Camera,
@@ -65,13 +63,6 @@ type ChatItem = {
   ts: number;
 };
 type Recording = { blob: Blob; name: string; url: string };
-type AnySignal = {
-  type: string;
-  sdp?: string;
-  candidate?: string;
-  sdpMid?: string | null;
-  sdpMLineIndex?: number | null;
-};
 
 const alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
 function newCode() {
@@ -289,7 +280,7 @@ function App() {
 
   const musicRef = useRef<MeetingMusicMixer | null>(null);
   const clearVoiceRef = useRef<ClearVoiceProcessor | null>(null);
-  const peerId = useRef(crypto.randomUUID());
+  const peerId = useRef<string>(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
   const videoSenders = useRef(new Map<string, RTCRtpSender>());
