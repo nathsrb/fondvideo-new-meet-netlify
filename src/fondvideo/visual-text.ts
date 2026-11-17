@@ -111,6 +111,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     pause();showControls(layer);listRefresh();updateSurface(true);redraw();
   };
   const closeCaption=()=>{
+    getCaption().clearGroupPreview();
     selectedCaption=null;
     if(mobileCaptionEditor){mobileCaptionEditor.remove();mobileCaptionEditor=null;}
     updateSurface(true);
@@ -152,6 +153,9 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       input.value=group.text;
       input.setAttribute('aria-label','Texte du sous-titre');
       input.placeholder='Modifie le sous-titre directement ici…';
+      // Updating the draft redraws the canvas instantly, but does not modify
+      // the stored caption or its timestamps until the user commits the edit.
+      input.oninput=()=>getCaption().previewGroup(group.begin,group.length,input.value);
       const actions=document.createElement('div');
       actions.className='scelyo-caption-inline-actions';
       const saveButton=document.createElement('button');
@@ -194,16 +198,44 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       larger.setAttribute('aria-label','Agrandir la taille des sous-titres');
       larger.onclick=()=>applySize(Number(slider.value)+0.8);
       sizeRow.append(sizeCaption,smaller,slider,larger,sizeValue);
+      let editFinished=false;
       const save=()=>{
-        getCaption().replaceGroup(group.begin,group.length,input.value);
-        selectedCaption=null;redraw();updateSurface(true);
+        if(editFinished)return;
+        const text=input.value.trim();
+        if(!text){
+          input.setCustomValidity('Le sous-titre ne peut pas être vide.');
+          input.reportValidity();
+          input.focus();
+          return;
+        }
+        input.setCustomValidity('');
+        editFinished=true;
+        if(text!==group.text.trim()) {
+          if(!getCaption().replaceGroup(group.begin,group.length,text)) {
+            editFinished=false;
+            return;
+          }
+          // The mobile edit sheet is mounted on <body>, outside #editor.
+          // Dispatch from the real Studio stage to trigger local autosave.
+          stage.dispatchEvent(new Event('change',{bubbles:true}));
+        }
+        closeCaption();
       };
       input.onkeydown=e=>{
         if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();save()}
-        if(e.key==='Escape')closeCaption();
+        if(e.key==='Escape'){e.preventDefault();editFinished=true;closeCaption()}
       };
       saveButton.onclick=save;
-      cancelButton.onclick=closeCaption;
+      cancelButton.onclick=()=>{editFinished=true;closeCaption()};
+      editor.addEventListener('focusout',event=>{
+        if(editFinished)return;
+        const next=event.relatedTarget;
+        if(next instanceof Node && editor.contains(next))return;
+        // A correction is also committed when clicking outside the editor,
+        // instead of silently disappearing as in the earlier preview.
+        if(input.value.trim())save();
+        else {editFinished=true;closeCaption()}
+      });
       const connectPointerDrag=(handle,kind)=>{
         let gesture=null;
         handle.onpointerdown=e=>{
