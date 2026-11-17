@@ -438,6 +438,9 @@ export function createCaptionStudio({
   preview,
 }) {
   let page=0;
+  // The on-video editor previews the draft without changing stored captions.
+  // Only committing the edit updates the real words (and thus MP4/SRT export).
+  let captionDraftWords = null;
   const pageSize=100;
   const state = initial(),
     report = text => {
@@ -722,6 +725,7 @@ export function createCaptionStudio({
       style: state.style, size: state.size, x: state.x, y: state.y, enabled: state.enabled,
     }),
     restoreState: snapshot => {
+      captionDraftWords = null;
       const data = snapshot && typeof snapshot === 'object' ? snapshot : {};
       const safeWords = Array.isArray(data.words) ? data.words.slice(0, 30000)
         .filter(word => word && typeof word.text === 'string' &&
@@ -748,7 +752,33 @@ export function createCaptionStudio({
       repaint();
       report(safeWords.length + ' mots restaurés. Tu peux les modifier à nouveau.');
     },
-    render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
+    render: (ctx, time, w, h) => drawCaption(ctx, time, w, h,
+      captionDraftWords ? { ...state, words: captionDraftWords } : state),
+    previewGroup: (begin, length, text) => {
+      const original = state.words.slice(begin, begin + length);
+      if (!original.length) return false;
+      const words = wordsOf(text);
+      if (!words.length) {
+        // An empty draft is not a valid caption; keep the original visible.
+        captionDraftWords = null;
+      } else {
+        const first = original[0].start;
+        const end = original.at(-1).end;
+        captionDraftWords = [
+          ...state.words.slice(0, begin),
+          ...distribute(text, first, end),
+          ...state.words.slice(begin + length),
+        ];
+      }
+      repaint();
+      return true;
+    },
+    clearGroupPreview: () => {
+      if (captionDraftWords) {
+        captionDraftWords = null;
+        repaint();
+      }
+    },
     activeGroup: time => {
       if (!state.enabled) return null;
       const index=state.words.findIndex(word=>time>=word.start && time<word.end);
@@ -766,6 +796,7 @@ export function createCaptionStudio({
       const group=state.words.slice(begin,begin+length);
       if(!group.length || !text.trim())return false;
       const tokens=wordsOf(text);
+      captionDraftWords = null;
       if(tokens.length===group.length){
         group.forEach((word,index)=>word.text=tokens[index]);
       }else{
@@ -808,6 +839,7 @@ export function createCaptionStudio({
       return true;
     },
     reset: () => {
+      captionDraftWords = null;
       Object.assign(state, initial());page=0;
       byId('capText').value = '';
       byId('capEnabled').checked = true;
