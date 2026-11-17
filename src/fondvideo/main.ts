@@ -29,7 +29,12 @@ const captions = createCaptionStudio({
   getFile: () => state.file,
   getDuration: () => state.duration,
   getTime: () => (state.demo ? 1.5 : video.currentTime),
-  preview: () => draw(),
+  // A new transcription changes the caption hitboxes immediately, even when
+  // the video is paused or an earlier asynchronous canvas draw is in flight.
+  preview: () => {
+    void draw();
+    queueMicrotask(() => textEditor?.updateSurface());
+  },
 });
 const state = {
   file: null,
