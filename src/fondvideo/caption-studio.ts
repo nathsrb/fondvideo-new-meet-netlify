@@ -792,6 +792,25 @@ export function createCaptionStudio({
         x:state.x??50,y:state.y,size:state.size,style:state.style
       };
     },
+    // Edit the real caption model on every keystroke, not a temporary draft.
+    // Keep the original number of timed word slots so the on-canvas editor
+    // stays attached to the same caption even while words are added/deleted.
+    updateGroupLive: (begin, length, text) => {
+      const group = state.words.slice(begin, begin + length);
+      if (!group.length) return false;
+      captionDraftWords = null;
+      const tokens = wordsOf(text);
+      group.forEach((word, index) => {
+        word.text = index === group.length - 1
+          ? tokens.slice(index).join(' ')
+          : (tokens[index] || '');
+      });
+      // Updating the timeline/word inputs is safe: it doesn't replace the
+      // on-video textarea, so the caret and keyboard remain stable.
+      refresh();
+      repaint();
+      return true;
+    },
     replaceGroup: (begin,length,text) => {
       const group=state.words.slice(begin,begin+length);
       if(!group.length || !text.trim())return false;
