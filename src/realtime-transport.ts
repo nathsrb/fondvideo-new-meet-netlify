@@ -19,8 +19,11 @@ type PhoenixMessage = { topic: string; event: string; payload: any; ref?: string
 type PresenceMeta = PresenceMember & { phx_ref?: string };
 type PresenceState = Record<string, { metas: PresenceMeta[] }>;
 
-const URL = String(import.meta.env.VITE_SCELYO_REALTIME_URL || '').trim();
-const KEY = String(import.meta.env.VITE_SCELYO_REALTIME_KEY || '').trim();
+// These are PUBLIC values. Never embed a Supabase secret/service_role key.
+// The isolated scelyo-live-* channels do not access Sophia Learn's data tables.
+// Move to a dedicated SCELYO project once its free project is available.
+const URL = String(import.meta.env.VITE_SCELYO_REALTIME_URL || 'https://atyuuoagdfeipzojqkri.supabase.co').trim();
+const KEY = String(import.meta.env.VITE_SCELYO_REALTIME_KEY || 'sb_publishable_XlHdeINtMP0qsK-o1p0Q7A_ARCmdXNt').trim();
 const roomPattern = /^[a-z2-9]{12}$/;
 const defaultSettings: RoomSettings = { locked: false, allowScreenShare: true, allowRecording: true };
 const validSettings = (value: any): RoomSettings => ({
