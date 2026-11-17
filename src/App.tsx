@@ -191,7 +191,7 @@ function App() {
   const [videoLimit,setVideoLimit]=useState<'auto'|'6'|'3'|'1'|'0'>('auto');
   const [networkTier,setNetworkTier]=useState('4g');
   const effectiveVideoLimit = videoLimit === 'auto'
-    ? (networkTier === 'slow-2g' || networkTier === '2g' ? 0 : networkTier === '3g' || isPhone ? 1 : 3)
+    ? (networkTier === 'slow-2g' || networkTier === '2g' ? 0 : networkTier === '3g' || /iPhone|iPad|Android/i.test(navigator.userAgent) ? 1 : 3)
     : Number(videoLimit);
   const [streams, setStreams] = useState<Record<string, MediaStream>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -821,6 +821,8 @@ function App() {
           // Cap each outgoing video to protect mobile uplinks and keep audio stable.
           if (selected.kind === 'video') {
             videoSenders.current.set(id, sender);
+            if (videoWantedByPeer.current.get(id) === false)
+              void sender.replaceTrack(null).catch(() => {});
             try {
               const parameters = sender.getParameters();
               parameters.encodings = parameters.encodings?.length
