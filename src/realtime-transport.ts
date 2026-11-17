@@ -60,7 +60,6 @@ class RoomConnection {
   private memberName = '';
   private joinedAt = 0;
   private ownSettings: RoomSettings = { ...defaultSettings };
-  private lostConnection = false;
   private retries = 0;
 
   constructor(readonly room: string) {
@@ -170,7 +169,6 @@ class RoomConnection {
           reject(new Error('Le service de réunion a fermé la connexion.'));
         }
         if (!this.closed) {
-          this.lostConnection = true;
           this.scheduleReconnect();
         }
       };
@@ -188,7 +186,6 @@ class RoomConnection {
         // Clearing these here would let a reconnecting guest impersonate a host.
         try {
           await this.track();
-          this.lostConnection = false;
           // Allow Presence to repopulate before renegotiating existing peers.
           setTimeout(() => {
             if (!this.closed && this.channelReady)
