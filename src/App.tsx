@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, ws } from './netlify-transport';
+import { api, ws } from './realtime-transport';
 import { MeetingMusicMixer } from './meeting-music';
 import { ClearVoiceProcessor, type VoiceProfile } from './clearvoice';
 import {
@@ -25,7 +25,6 @@ import {
   Users,
   Circle,
   Square,
-  Settings,
   CloudUpload,
   Download,
   ShieldCheck,
@@ -34,7 +33,6 @@ import {
   Link2,
   Menu,
   Send,
-  HardDrive,
   AlertCircle,
   ExternalLink,
   Camera,
@@ -65,13 +63,6 @@ type ChatItem = {
   ts: number;
 };
 type Recording = { blob: Blob; name: string; url: string };
-type AnySignal = {
-  type: string;
-  sdp?: string;
-  candidate?: string;
-  sdpMid?: string | null;
-  sdpMLineIndex?: number | null;
-};
 
 const alphabet = 'abcdefghijkmnopqrstuvwxyz23456789';
 function newCode() {
@@ -187,6 +178,12 @@ function App() {
   const [roomSettings,setRoomSettings]=useState<RoomSettings>(defaultRoomSettings);
   const [hostBusy,setHostBusy]=useState(false);
   const [gallery,setGallery]=useState(false);
+  // The dropdown controls real upstream video subscriptions, not CSS visibility.
+  const [videoLimit,setVideoLimit]=useState<'auto'|'6'|'3'|'1'|'0'>('auto');
+  const [networkTier,setNetworkTier]=useState('4g');
+  const effectiveVideoLimit = videoLimit === 'auto'
+    ? (networkTier === 'slow-2g' || networkTier === '2g' ? 0 : networkTier === '3g' || /iPhone|iPad|Android/i.test(navigator.userAgent) ? 1 : 3)
+    : Number(videoLimit);
   const [streams, setStreams] = useState<Record<string, MediaStream>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [micOn, setMicOn] = useState(true);
@@ -283,9 +280,12 @@ function App() {
 
   const musicRef = useRef<MeetingMusicMixer | null>(null);
   const clearVoiceRef = useRef<ClearVoiceProcessor | null>(null);
-  const peerId = useRef(crypto.randomUUID());
+  const peerId = useRef<string>(crypto.randomUUID());
   const connRef = useRef<ReturnType<typeof ws.connect> | null>(null);
   const pcs = useRef(new Map<string, RTCPeerConnection>());
+  const videoSenders = useRef(new Map<string, RTCRtpSender>());
+  const videoWantedByPeer = useRef(new Map<string, boolean>());
+  const requestedRemoteVideo = useRef(new Map<string, boolean>());
   const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const streamsRef = useRef<Record<string, MediaStream>>({});
   const localRef = useRef<MediaStream | null>(null);
@@ -311,21 +311,9 @@ function App() {
   const nameRef = useRef(displayName);
   const isJoinedRef = useRef(false);
 
-  useEffect(() => {
-    // Public Google OAuth client ID can be configured once by the app owner.
-    // End users only see the standard Google authorization window.
-    let active = true;
-    api.get('/api/drive/config')
-      .then(result => {
-        const configured = result.data?.clientId;
-        if(active && !configuredGoogleClientId && typeof configured === 'string' && configured.endsWith('.apps.googleusercontent.com')) {
-          setClientId(configured);
-          localStorage.setItem('nexa_google_client', configured);
-        }
-      })
-      .catch(() => { /* Local fallback remains available */ });
-    return () => { active = false; };
-  }, []);
+  // Google OAuth client IDs are public: use the build-time ID or the saved
+  // local setting. Never call a Netlify Function just to retrieve this value.
+  // Access tokens remain in the user's browser; no client secret is shipped.
 
   const focusRef=useRef(peerId.current);
   const shareRef=useRef<string|null>(null);
@@ -431,6 +419,29 @@ function App() {
     },240);
     return()=>{clearInterval(timer);for(const node of nodes.values()){node.source.disconnect();node.analyser.disconnect();}void audio.close();};
   },[joined]);
+
+  useEffect(() => {
+    type NetInfo = EventTarget & { effectiveType?: string };
+    const info = (navigator as Navigator & { connection?: NetInfo }).connection;
+    if (!info) return;
+    const changed = () => setNetworkTier(info.effectiveType || '4g');
+    changed();
+    info.addEventListener('change', changed);
+    return () => info.removeEventListener('change', changed);
+  }, []);
+
+  useEffect(() => {
+    if (!joined || !connRef.current) return;
+    const priority = [pinned, shareOwner, activeSpeaker, ...members.map(member => member.id)]
+      .filter((id): id is string => Boolean(id) && id !== peerId.current);
+    const wanted = new Set(Array.from(new Set(priority)).slice(0, effectiveVideoLimit));
+    for (const member of members) {
+      const enabled = wanted.has(member.id);
+      if (requestedRemoteVideo.current.get(member.id) === enabled) continue;
+      requestedRemoteVideo.current.set(member.id, enabled);
+      void sendSignal(member.id, { type: 'video.pref', enabled });
+    }
+  }, [joined, members, pinned, shareOwner, activeSpeaker, effectiveVideoLimit]);
 
   function pinParticipant(id:string){
     const next=pinRef.current===id?null:id;
@@ -795,7 +806,27 @@ function App() {
           : track.kind === 'video' && screenRef.current
             ? screenRef.current.getVideoTracks()[0]
             : track;
-        if (selected) pc.addTrack(selected, source);
+        if (selected) {
+          const sender = pc.addTrack(selected, source);
+          // A seven-person mesh can mean six outgoing copies of the camera.
+          // Cap each outgoing video to protect mobile uplinks and keep audio stable.
+          if (selected.kind === 'video') {
+            videoSenders.current.set(id, sender);
+            if (videoWantedByPeer.current.get(id) === false)
+              void sender.replaceTrack(null).catch(() => {});
+            try {
+              const parameters = sender.getParameters();
+              parameters.encodings = parameters.encodings?.length
+                ? parameters.encodings.map(encoding => ({ ...encoding, maxBitrate: 750_000 }))
+                : [{ maxBitrate: 750_000 }];
+              void sender.setParameters(parameters).catch(() => {
+                // Some Safari implementations reject bitrate constraints.
+              });
+            } catch {
+              // Continue the call even if bandwidth hints are unsupported.
+            }
+          }
+        }
       });
     } else {
       // A listen-only guest can still negotiate and receive audio and video.
@@ -857,6 +888,16 @@ function App() {
 
   async function onSignal(from: string, signal: any) {
     try {
+      if (signal?.type === 'video.pref') {
+        if (typeof signal.enabled !== 'boolean') return;
+        videoWantedByPeer.current.set(from, signal.enabled);
+        const sender = videoSenders.current.get(from);
+        if (sender) {
+          const video = screenRef.current?.getVideoTracks()[0] || localRef.current?.getVideoTracks()[0] || null;
+          await sender.replaceTrack(signal.enabled ? video : null);
+        }
+        return;
+      }
       const pc = getPeer(from);
       if (signal.type === 'offer') {
         await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
@@ -892,6 +933,9 @@ function App() {
   function closePeer(id: string) {
     pcs.current.get(id)?.close();
     pcs.current.delete(id);
+    videoSenders.current.delete(id);
+    videoWantedByPeer.current.delete(id);
+    requestedRemoteVideo.current.delete(id);
     const { [id]: _removed, ...rest } = streamsRef.current;
     streamsRef.current = rest;
     setStreams(rest);
@@ -902,6 +946,21 @@ function App() {
   }
 
   handleRef.current = (message: any) => {
+    if(message?.type==='room.limit'&&message.payload?.roomId===roomRef.current) {
+      void leaveMeeting();toast('Cette réunion est limitée à sept personnes.');
+      return;
+    }
+    if(message?.type==='room.resynced'&&message.payload?.roomId===roomRef.current) {
+      // A reconnect produces new WebRTC handshakes, even if the UI retained prior members.
+      for (const id of pcs.current.keys()) closePeer(id);
+      void api.get('/api/rooms/'+roomRef.current).then(result=>{
+        setMembers(result.data.members||[]);
+        setHostId(result.data.hostId||peerId.current);
+        setRoomSettings(result.data.settings||defaultRoomSettings);
+        for(const member of result.data.members||[])void initiate(member.id);
+      }).catch(error=>toast('Reconnexion : '+readableError(error)));
+      return;
+    }
     if(message?.type==='host.mute'&&message.payload?.roomId===roomRef.current) {
       rawRef.current?.getAudioTracks().forEach(t=>t.enabled=false);
       setMicOn(false);toast('L’hôte a coupé ton micro. Tu peux le réactiver.');
@@ -992,9 +1051,10 @@ function App() {
       localRef.current = stream;
       setLocalStream(stream);
       const videoTrack = stream.getVideoTracks()[0] || null;
-      for (const pc of pcs.current.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(videoTrack);
+      for (const [id, pc] of pcs.current) {
+        const sender = videoSenders.current.get(id) ||
+          pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(videoWantedByPeer.current.get(id) === false ? null : videoTrack);
       }
     } catch (err) {
       toast('Décor indisponible : ' + readableError(err));
@@ -1104,7 +1164,7 @@ function App() {
           toast('Effet indisponible : ' + readableError(err));
         }
       }
-      const connection = ws.connect();
+      const connection = ws.connect(roomRef.current);
       connRef.current = connection;
       connection.onMessage(msg => handleRef.current(msg));
       await connection.ready;
@@ -1190,6 +1250,9 @@ function App() {
     connRef.current = null;
     pcs.current.forEach(pc => pc.close());
     pcs.current.clear();
+    videoSenders.current.clear();
+    videoWantedByPeer.current.clear();
+    requestedRemoteVideo.current.clear();
     pendingIce.current.clear();
     effectRef.current?.stop();
     effectRef.current = null;
@@ -1326,9 +1389,10 @@ function App() {
     }
     if (screenRef.current) {
       const videoTrack = localRef.current?.getVideoTracks()[0];
-      for (const pc of pcs.current.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(videoTrack || null);
+      for (const [id, pc] of pcs.current) {
+        const sender = videoSenders.current.get(id) ||
+          pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(videoWantedByPeer.current.get(id) === false ? null : videoTrack || null);
       }
       screenRef.current.getTracks().forEach(t => t.stop());
       screenRef.current = null;
@@ -1351,11 +1415,14 @@ function App() {
       setScreenStream(stream);
       setSharing(true);shareRef.current=peerId.current;setShareOwner(peerId.current);
       void emit('screen',{active:true}).catch(() => {});
-      for (const pc of pcs.current.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(track);
+      for (const [id, pc] of pcs.current) {
+        const sender = videoSenders.current.get(id) ||
+          pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(videoWantedByPeer.current.get(id) === false ? null : track);
         else if (localRef.current) {
-          pc.addTrack(track, localRef.current);
+          const newSender = pc.addTrack(track, localRef.current);
+          videoSenders.current.set(id, newSender);
+          if (videoWantedByPeer.current.get(id) === false) await newSender.replaceTrack(null);
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           // Renegotiation may be limited with some peers.
@@ -2621,6 +2688,17 @@ function App() {
               </div>}
               {members.map(m=><StreamAudio key={'audio-'+m.id} stream={streams[m.id]||null} onPlaybackBlocked={setAudioNeedsGesture}/>)}
               <div className="program-actions">
+                <label className="scelyo-video-limit" style={{display:'inline-flex',alignItems:'center',gap:8}}>
+                  Vidéos simultanées
+                  <select aria-label="Limiter les vidéos reçues" value={videoLimit}
+                    onChange={event=>setVideoLimit(event.target.value as typeof videoLimit)}>
+                    <option value="auto">Auto (conseillé)</option>
+                    <option value="6">6 vidéos</option>
+                    <option value="3">3 vidéos</option>
+                    <option value="1">1 vidéo (intervenant)</option>
+                    <option value="0">Audio seul (7 personnes)</option>
+                  </select>
+                </label>
                 <button onClick={()=>setGallery(!gallery)}>{gallery?'Vue intervenant':'Vue mosaïque'}</button>
                 {members.length>0&&<button type="button" onClick={()=>void enableRemoteAudio()} title="Autoriser la lecture des voix des autres participants"><Volume2 size={16}/> {audioNeedsGesture?'Débloquer le son':'Activer le son'}</button>}
                 {members.length>0&&<button type="button" onClick={()=>void diagnoseRemoteAudio()} title="Vérifier la réception du microphone de chaque participant">Diagnostic audio</button>}
