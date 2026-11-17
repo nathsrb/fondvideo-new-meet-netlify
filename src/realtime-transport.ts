@@ -188,7 +188,11 @@ class RoomConnection {
         try {
           await this.track();
           this.lostConnection = false;
-          this.deliver({ v: 1, type: 'room.resynced', payload: { roomId: this.room } });
+          // Allow Presence to repopulate before renegotiating existing peers.
+          setTimeout(() => {
+            if (!this.closed && this.channelReady)
+              this.deliver({ v: 1, type: 'room.resynced', payload: { roomId: this.room } });
+          }, 950);
         } catch (error) { console.warn('SCELYO Realtime resync:', error); }
       }).catch(error => {
         console.warn('SCELYO Realtime connection:', error);
@@ -291,8 +295,9 @@ class RoomConnection {
     const event = value.payload;
     if (event?.roomId !== this.room || typeof event.from !== 'string') return;
     if (event.from === this.memberId) return;
-    // Ignore messages from clients that are not present in the room.
-    if (!this.members.has(event.from)) return;
+    // SDP/ICE may arrive before Presence has propagated the newly joined peer.
+    // Accept targeted negotiation only; other actions still require Presence.
+    if (event.type !== 'rtc.signal' && !this.members.has(event.from)) return;
 
     if (event.type === 'rtc.signal' && event.to === this.memberId && event.signal) {
       this.deliver({ v: 1, type: 'rtc.signal', payload: {
@@ -361,7 +366,7 @@ class RoomConnection {
     }
     if (!this.memberId || !this.channelReady) throw new Error('Réunion déconnectée.');
     if (action === 'signal') {
-      if (!this.members.has(data.to) ||
+      if (typeof data.to !== 'string' || !data.to ||
           !['offer', 'answer', 'candidate', 'video.pref'].includes(data.signal?.type))
         throw new Error('Destinataire ou signal WebRTC invalide.');
       this.sendEvent('rtc.signal', { to: data.to, signal: data.signal });
