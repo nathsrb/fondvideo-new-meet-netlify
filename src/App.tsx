@@ -441,7 +441,7 @@ function App() {
 
   useEffect(() => {
     if (!joined || !connRef.current) return;
-    const priority = [pinned, activeSpeaker, ...members.map(member => member.id)]
+    const priority = [pinned, shareOwner, activeSpeaker, ...members.map(member => member.id)]
       .filter((id): id is string => Boolean(id) && id !== peerId.current);
     const wanted = new Set(Array.from(new Set(priority)).slice(0, effectiveVideoLimit));
     for (const member of members) {
@@ -450,7 +450,7 @@ function App() {
       requestedRemoteVideo.current.set(member.id, enabled);
       void sendSignal(member.id, { type: 'video.pref', enabled });
     }
-  }, [joined, members, pinned, activeSpeaker, effectiveVideoLimit]);
+  }, [joined, members, pinned, shareOwner, activeSpeaker, effectiveVideoLimit]);
 
   function pinParticipant(id:string){
     const next=pinRef.current===id?null:id;
@@ -1398,9 +1398,10 @@ function App() {
     }
     if (screenRef.current) {
       const videoTrack = localRef.current?.getVideoTracks()[0];
-      for (const pc of pcs.current.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(videoTrack || null);
+      for (const [id, pc] of pcs.current) {
+        const sender = videoSenders.current.get(id) ||
+          pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(videoWantedByPeer.current.get(id) === false ? null : videoTrack || null);
       }
       screenRef.current.getTracks().forEach(t => t.stop());
       screenRef.current = null;
@@ -1423,11 +1424,14 @@ function App() {
       setScreenStream(stream);
       setSharing(true);shareRef.current=peerId.current;setShareOwner(peerId.current);
       void emit('screen',{active:true}).catch(() => {});
-      for (const pc of pcs.current.values()) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(track);
+      for (const [id, pc] of pcs.current) {
+        const sender = videoSenders.current.get(id) ||
+          pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(videoWantedByPeer.current.get(id) === false ? null : track);
         else if (localRef.current) {
-          pc.addTrack(track, localRef.current);
+          const newSender = pc.addTrack(track, localRef.current);
+          videoSenders.current.set(id, newSender);
+          if (videoWantedByPeer.current.get(id) === false) await newSender.replaceTrack(null);
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           // Renegotiation may be limited with some peers.
