@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="450" height="108" viewBox="0 0 450 108" role="img" aria-label="SCELYO">
+<defs><linearGradient id="l" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#C38BFF"/><stop offset=".52" stop-color="#8B7CFF"/><stop offset="1" stop-color="#5BC6FF"/></linearGradient></defs>
+<rect x="3" y="7" width="94" height="94" rx="25" fill="#121629"/>
+<path d="M26 29c0-5 5-8 10-5.5l44.4 25.6a10 10 0 0 1 0 17.4L36 92c-5 3-10-.5-10-5.5V73l15 8.6 31.1-18L41 45.7 26 54.5Z" fill="url(#l)"/>
+<path d="M26 54.5 60.2 74.2l-14 8L26 70.7Z" fill="#F3EBFF"/>
+<text x="119" y="76" fill="#F7F7FF" font-family="Manrope, Inter, Arial, sans-serif" font-weight="800" font-size="67" letter-spacing="-4">SCELYO</text>
+</svg>

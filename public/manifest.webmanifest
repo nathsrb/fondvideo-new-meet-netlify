@@ -1,11 +1,19 @@
 {
-  "name": "FondVidéo",
-  "short_name": "FondVidéo",
-  "description": "Montage local, fonds et sous-titres",
-  "start_url": "/",
+  "name": "SCELYO — Live, Studio & Vault",
+  "short_name": "SCELYO",
+  "description": "Le live devient création. Crée, réunis et capture.",
+  "start_url": "./index.html#/meet",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#08090d",
-  "theme_color": "#08090d",
-  "lang": "fr"
+  "background_color": "#090B12",
+  "theme_color": "#090B12",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/scelyo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

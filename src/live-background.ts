@@ -194,9 +194,9 @@ export async function processCamera(raw, initial, report) {
         const options = {
           baseOptions: {
             modelAssetPath:
-              input.videoHeight > input.videoWidth
-                ? 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'
-                : 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite',
+              /iPhone|iPad|Android/i.test(navigator.userAgent)
+                ? 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/latest/selfie_segmenter_landscape.tflite'
+                : 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite',
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
@@ -227,7 +227,7 @@ export async function processCamera(raw, initial, report) {
       }
       const scale = Math.min(
         1,
-        512 / Math.max(input.videoWidth, input.videoHeight)
+        (/iPhone|iPad|Android/i.test(navigator.userAgent) ? 512 : 640) / Math.max(input.videoWidth, input.videoHeight)
       );
       segCanvas.width = Math.max(2, Math.round(input.videoWidth * scale));
       segCanvas.height = Math.max(2, Math.round(input.videoHeight * scale));
@@ -256,18 +256,36 @@ export async function processCamera(raw, initial, report) {
               if (!data) return resolve();
               if (!oldMask || oldMask.length !== data.length)
                 oldMask = new Float32Array(data.length);
-              for (let i = 0, j = 0; i < data.length; i++, j += 4) {
+              const width = maskCanvas.width, height = maskCanvas.height;
+              for (let i = 0; i < data.length; i++) {
                 const alpha = floats
                   ? Math.max(0, Math.min(255, data[i] * 255))
-                  : data[i] === 1
-                    ? 255
-                    : 0;
-                const pixel = alpha < 16 ? 0 : alpha > 246 ? 255 : alpha;
-                oldMask[i] = pixel * 0.97 + oldMask[i] * 0.03;
-                img.data[j] = 255;
-                img.data[j + 1] = 255;
-                img.data[j + 2] = 255;
-                img.data[j + 3] = oldMask[i];
+                  : data[i] === 1 ? 255 : 0;
+                const pixel = alpha < 8 ? 0 : alpha > 251 ? 255 : alpha;
+                oldMask[i] = pixel * 0.82 + oldMask[i] * 0.18;
+              }
+              // Close tiny holes in fingers, hair and clothing without
+              // producing the large halos of strong dilation.
+              const expanded = new Uint8ClampedArray(data.length);
+              for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+                let value = 0;
+                for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                  const sy = Math.max(0, Math.min(height-1, y+dy));
+                  const sx = Math.max(0, Math.min(width-1, x+dx));
+                  value = Math.max(value, oldMask[sy*width+sx]);
+                }
+                expanded[y*width+x] = value;
+              }
+              for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+                let value = 255;
+                for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                  const sy = Math.max(0, Math.min(height-1, y+dy));
+                  const sx = Math.max(0, Math.min(width-1, x+dx));
+                  value = Math.min(value, expanded[sy*width+sx]);
+                }
+                const j = (y*width+x)*4;
+                img.data[j] = img.data[j+1] = img.data[j+2] = 255;
+                img.data[j+3] = value;
               }
               c.putImageData(img, 0, 0);
               lastMaskReady = performance.now();
@@ -319,14 +337,16 @@ export async function processCamera(raw, initial, report) {
         if (config.bg === 'original') ctx.drawImage(input, r.x, r.y, r.w, r.h);
         else {
           background(ctx, canvas.width, canvas.height, r);
-          if (maskCanvas && personCtx && performance.now() - lastMaskReady < 350) {
+          if (maskCanvas && personCtx && performance.now() - lastMaskReady < 1000) {
             // FondVidéo classic's compositing: softly feathered mask, rather than sharp edges.
             personCtx.globalCompositeOperation = 'source-over';
             personCtx.filter = 'none';
             personCtx.clearRect(0, 0, person.width, person.height);
             personCtx.drawImage(input, r.x, r.y, r.w, r.h);
             personCtx.globalCompositeOperation = 'destination-in';
-            personCtx.filter = 'blur(1.6px)';
+            personCtx.imageSmoothingEnabled = true;
+            personCtx.imageSmoothingQuality = 'high';
+            personCtx.filter = 'blur(0.9px)';
             personCtx.drawImage(maskCanvas, r.x, r.y, r.w, r.h);
             personCtx.filter = 'none';
             personCtx.globalCompositeOperation = 'source-over';
