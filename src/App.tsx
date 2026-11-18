@@ -235,6 +235,7 @@ function App() {
   const [musicName, setMusicName] = useState('');
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicVolume, setMusicVolume] = useState(15);
+  const [musicVoicePriority, setMusicVoicePriority] = useState(true);
   const [musicLoop, setMusicLoop] = useState(false);
   const [musicMonitor, setMusicMonitor] = useState(false);
   const [musicTime, setMusicTime] = useState(0);
@@ -734,6 +735,7 @@ function App() {
         setMusicDuration(progress.duration);
       });
       next.setVolume(musicVolume);
+      next.setVoicePriority(musicVoicePriority);
       next.setLoop(musicLoop);
       next.setMonitor(musicMonitor);
       const senders = [...pcs.current.values()].flatMap(pc => pc.getSenders())
@@ -2651,15 +2653,18 @@ function App() {
                     </div>
                     <div className="scelyo-music-settings">
                       <label className="scelyo-music-volume">
-                        <Volume2 size={18}/> <span>Musique en arrière-plan : {musicVolume}%</span>
-                        <input type="range" min="0" max="100" value={musicVolume}
+                        <Volume2 size={18}/> <span>Volume de la musique : {musicVolume}% {musicVolume > 100 ? '(amplifié)' : ''}</span>
+                        <input type="range" min="0" max="200" step="1" value={musicVolume}
                           aria-label="Volume de la musique d’ambiance" onChange={event => {
                             const next = Number(event.target.value);
                             setMusicVolume(next);
                             musicRef.current?.setVolume(next);
                           }}/>
                       </label>
-                      <p className="scelyo-music-volume-note">Voix prioritaire : la musique est limitée pour éviter les sifflements. Utilise des écouteurs si deux appareils participent à proximité.</p>
+                      <p className="scelyo-music-volume-note">0 % : silence · 100 % : volume original · 200 % : amplification. Le volume change en direct pour les participants. Au-delà de 100 %, privilégie des écouteurs pour éviter les échos.</p>
+                      <label className="scelyo-music-check"><input type="checkbox" checked={musicVoicePriority}
+                        onChange={event => {setMusicVoicePriority(event.target.checked);musicRef.current?.setVoicePriority(event.target.checked);}}/>
+                        <Mic size={17}/> Atténuer la musique quand quelqu’un parle</label>
                       <label className="scelyo-music-check"><input type="checkbox" checked={musicLoop}
                         onChange={event => {setMusicLoop(event.target.checked);musicRef.current?.setLoop(event.target.checked);}}/>
                         <Repeat2 size={17}/> En boucle</label>
