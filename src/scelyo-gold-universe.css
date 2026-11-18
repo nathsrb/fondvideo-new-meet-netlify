@@ -1,4 +1,4 @@
-/* SCEYLLIO STUDIO — Obsidian & Gold / complete UI layer for V15 */
+/* SCEYLLIO STUDIO — unified visual system for every V15 screen; the prototype gallery is intentionally absent */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
 :root {
   color-scheme:dark; --sc-bg:#0b0c12; --sc-surface:#161820; --sc-raised:#22232a;
@@ -101,56 +101,183 @@ body:has(#app) .scelyo-art-screen{background:radial-gradient(circle at 55% 20%,#
 body:has(#app) :is(.scelyo-art-light,.scelyo-art-halo){background:#e1ab6142!important}
 body:has(#app) :is(.status,.meta,.hint,.cap-status){color:#bdb6a8}
 body:has(#app) .transport button:hover,body:has(#app) .tab:hover{color:#eac579!important}
-/* Complete immersive gallery — tuned to reference image */
-.scelyo-universe-screen{position:fixed;inset:0;display:flex;flex-direction:column;z-index:61000;
- background:radial-gradient(circle at 70% -10%,#2a2422 0,transparent 36%),#101117;
- color:#f7f6f2;font-family:'DM Sans',Arial,sans-serif;overflow:auto}
-.scelyo-universe-topbar{height:77px;min-height:77px;display:flex;align-items:center;gap:28px;
- padding:0 clamp(15px,2.2vw,40px);border-bottom:1px solid #ffffff25;background:#111218;
- position:sticky;top:0;z-index:5}
-.scelyo-universe-brand{display:flex;align-items:center;gap:11px;white-space:nowrap;min-width:195px}
-.scelyo-universe-brand img{width:43px;height:43px;object-fit:contain}
-.scelyo-universe-brand>span{font:800 clamp(16px,1.6vw,25px)/1 Manrope,Arial,sans-serif;letter-spacing:-.06em}
-.scelyo-universe-brand small{display:block;font:750 10px/1.7 'DM Sans',sans-serif;letter-spacing:.29em;color:#f1c66b}
-.scelyo-universe-topbar nav{flex:1;display:flex;align-items:center;justify-content:center;gap:clamp(6px,1.2vw,22px)}
-.scelyo-universe-topbar nav :is(a,button,span){display:flex;align-items:center;justify-content:center;gap:10px;
- padding:12px 16px;white-space:nowrap;border:1px solid transparent;border-radius:17px;
- background:transparent;color:#e7e5e8;font-size:13px;font-weight:700;text-decoration:none}
-.scelyo-universe-topbar nav .scelyo-universe-current{background:linear-gradient(130deg,#403016,#78562550)!important;border-color:#dfb058!important;color:#ffd782!important;box-shadow:inset 0 0 19px #f2b64d28}
-.scelyo-universe-close{width:43px;height:43px;background:#25252c;color:#f3e1b7;border:1px solid #ffffff23;border-radius:13px;display:grid;place-items:center}
-.scelyo-universe-layout{display:grid;grid-template-columns:232px minmax(0,1fr);flex:1;min-height:0}
-.scelyo-universe-sidebar{display:flex;flex-direction:column;gap:9px;background:#101116;border-right:1px solid #ffffff21;padding:30px 8px}
-.scelyo-universe-sidebar :is(a,button,span){display:flex;align-items:center;gap:15px;padding:16px 15px;color:#dedee4;background:transparent;border:0;border-radius:12px;font-size:13px;text-align:left;text-decoration:none;min-height:49px;cursor:pointer}
-.scelyo-universe-sidebar :is(a,button):hover{background:#ffffff13}
-.scelyo-universe-sidebar .selected{background:linear-gradient(100deg,#72501d,#3c301f);color:#fcd67a;border:1px solid #be8b3e}
-.scelyo-universe-sidebar-bottom{margin-top:auto;border-top:1px solid #ffffff26;padding-top:16px}
-.scelyo-universe-main{padding:21px clamp(17px,1.6vw,29px);max-width:1690px;width:100%;margin:auto}
-.scelyo-universe-heading{display:flex;align-items:center;gap:20px;margin-bottom:24px}
-.scelyo-universe-heading>svg{color:#ebe9e6}
-.scelyo-universe-heading h2{font:800 clamp(27px,2.3vw,39px)/1.15 Manrope,Arial,sans-serif;margin:0 0 9px;letter-spacing:-.045em}
-.scelyo-universe-heading p{margin:0;font-size:13px;color:#adaab0}
-.scelyo-universe-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
-.scelyo-universe-card{position:relative;overflow:hidden;aspect-ratio:1.72;border:1px solid #77757b;border-radius:16px;
- padding:0;background:#1c1e23;min-height:130px;text-align:left;isolation:isolate}
-.scelyo-universe-card>img,.scelyo-universe-card-crop{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}
-.scelyo-universe-card:hover>img,.scelyo-universe-card:hover>.scelyo-universe-card-crop{transform:scale(1.04)}
-.scelyo-universe-card-shade{position:absolute;inset:0;background:linear-gradient(0deg,#050509b7,transparent 48%);z-index:1}
-.scelyo-universe-card strong{position:absolute;left:17px;bottom:16px;z-index:2;color:white;font-size:14px;font-weight:800;text-shadow:0 2px 8px #0009}
-.scelyo-universe-card.active{outline:2px solid #f0be57;outline-offset:0;border-color:#ffdc76;box-shadow:0 0 0 2px #e7b65b38}
-.scelyo-universe-check{position:absolute;right:10px;top:9px;background:#f3cb74;color:#242016;
- z-index:2;border-radius:50%;width:33px;height:33px;display:grid;place-items:center}
-.scelyo-universe-bottom{min-height:93px;display:flex;align-items:center;justify-content:space-between;gap:16px;
- border-top:1px solid #ffffff24;background:#13141b;padding:16px 24px;position:sticky;bottom:0}
-.scelyo-universe-bottom>div{display:flex;gap:12px}
-.scelyo-universe-upload,.scelyo-universe-ghost,.scelyo-universe-primary,.scelyo-open-universe-gallery{display:flex;align-items:center;justify-content:center;gap:11px;
- min-height:49px;border:1px solid #66636a;background:#1a1a21;border-radius:13px;color:#f3eee7;padding:12px 20px;cursor:pointer;font-size:13px;font-weight:800}
-.scelyo-universe-primary{background:linear-gradient(130deg,#fbe397,#dba148);border-color:#f0c66e;color:#1c140a}
-.scelyo-open-universe-gallery{margin:13px 0;background:#f0c56e20;border-color:#f0c56e9b;color:#f7dca1}
-.scelyo-universe-preview{position:fixed;inset:0;background:#000d;z-index:20;display:grid;place-items:center;padding:25px}
-.scelyo-universe-preview-inner{width:min(1180px,95vw);position:relative;padding:10px;background:#22232b;border:1px solid #caa45c;border-radius:18px;box-shadow:0 25px 80px #000d}
-.scelyo-universe-preview-inner>img,.scelyo-universe-preview-crop{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:#222}
-.scelyo-universe-preview-inner>strong{display:block;margin:10px;font-size:17px}
-.scelyo-universe-preview-inner>button{position:absolute;top:24px;right:24px;z-index:3;width:45px;height:45px;border-radius:50%;border:1px solid #fff8;color:#fff;background:#171720}
-@media(max-width:1160px){.scelyo-universe-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.scelyo-universe-topbar nav{gap:2px}.scelyo-universe-topbar nav :is(a,button,span){padding:9px;font-size:11px}}
-@media(max-width:780px){.scelyo-universe-topbar{height:auto;min-height:65px;gap:12px;padding:12px}.scelyo-universe-brand{min-width:auto}.scelyo-universe-brand img{width:35px;height:35px}.scelyo-universe-topbar nav{justify-content:flex-end;overflow:auto}.scelyo-universe-topbar nav :is(a,button,span){font-size:0;min-width:40px;padding:10px}.scelyo-universe-layout{display:block}.scelyo-universe-sidebar{display:none}.scelyo-universe-main{padding:20px 14px}.scelyo-universe-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.scelyo-universe-card{border-radius:11px;min-height:104px}.scelyo-universe-card strong{font-size:11px;left:10px;bottom:10px}.scelyo-universe-bottom{padding:12px;flex-wrap:wrap}.scelyo-universe-bottom>div{flex:1}.scelyo-universe-bottom :is(.scelyo-universe-primary,.scelyo-universe-ghost){flex:1;padding:10px;font-size:11px}}
-@media(max-width:440px){.scelyo-universe-brand>span{font-size:15px}.scelyo-universe-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.scelyo-universe-card{min-height:98px}.scelyo-universe-card strong{font-size:10px}.scelyo-universe-topbar nav :is(a,button,span){min-width:34px;padding:7px}.scelyo-universe-bottom>.scelyo-universe-upload{width:100%}}
+
+/* ── Shared design tokens. Applied in Live, Studio, Vault, Drive, NOVA and every modal. ── */
+:root{
+  --sc-gold-100:#fff0c0;--sc-gold-200:#f9d994;--sc-gold-300:#f0c36a;
+  --sc-gold-500:#d49b3f;--sc-gold-700:#8e672c;
+  --sc-canvas:#101116;--sc-card:#191a21;--sc-card-raised:#22232a;
+  --sc-divider:#ffffff22;--sc-ink:#f8f6f1;--sc-subtle:#b9b6b5;
+  --sc-focus:#f3ca79;--sc-glow:0 10px 38px #b9873133;
+}
+body, .app-shell, body:has(#app){color:var(--sc-ink)}
+:where(.app-shell,body:has(#app)) :is(h1,h2,h3,h4){font-family:Manrope,'DM Sans',Arial,sans-serif;letter-spacing:-.035em}
+:where(.app-shell,body:has(#app)) :is(button,a,input,textarea,select):focus-visible{
+ outline:2px solid var(--sc-focus)!important;outline-offset:3px!important;
+}
+:where(.app-shell,body:has(#app)) :is(button,a,input,textarea,select){-webkit-tap-highlight-color:transparent}
+:where(.app-shell,body:has(#app)) :is(button,a){transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease,color .18s ease}
+:where(.app-shell,body:has(#app)) :is(button,input,select,textarea):disabled{cursor:not-allowed;opacity:.6}
+:where(.app-shell,body:has(#app)) :is(input,textarea,select)::placeholder{color:#98969c}
+:where(.app-shell,body:has(#app)) :is(input:not([type=range]):not([type=checkbox]):not([type=radio]),textarea,select){
+ background-color:#13141b;color:#f6f1e7;border-color:#ffffff36;
+}
+:where(.app-shell,body:has(#app)) :is(input,textarea,select):focus{
+ border-color:#efc36b!important;box-shadow:0 0 0 3px #dca74d22;
+}
+:where(.app-shell,body:has(#app)) :is(input[type=range],input[type=checkbox],input[type=radio],progress){accent-color:#e9b75d}
+:where(.app-shell,body:has(#app)) ::-webkit-scrollbar{width:9px;height:9px}
+:where(.app-shell,body:has(#app)) ::-webkit-scrollbar-thumb{background:#8c7654;border:2px solid #16171d;border-radius:99px}
+:where(.app-shell,body:has(#app)) ::-webkit-scrollbar-track{background:#14151a}
+
+/* Brand / navigation: identical visual DNA across the app, not a separate prototype. */
+.scelyo-brand{gap:11px}
+.scelyo-brand-name{font:800 23px/1 Manrope,sans-serif!important;letter-spacing:-.06em!important}
+.scelyo-brand-descriptor{font-size:10px!important;letter-spacing:.26em!important;font-weight:800!important;color:#eec36d!important}
+.scelyo-brand img,.scelyo-studio-brand img{filter:drop-shadow(0 4px 16px #b68a3930)}
+.scelyo-header-nav{border-radius:18px!important}
+.scelyo-header-nav .scelyo-nav-item{border-radius:14px!important}
+.scelyo-header-nav .scelyo-nav-item.selected,.scelyo-studio-nav .active{
+ background:linear-gradient(120deg,#6b4d20b5,#2e2519)!important;
+ border:1px solid #c39545!important;color:#ffd27a!important;
+}
+.scelyo-mobile-menu{background:#17181f!important;border:1px solid #b49a6457!important;box-shadow:0 24px 55px #0009!important}
+.scelyo-mobile-menu :is(a,button){color:#f2eee4!important;border-color:#ffffff1c!important}
+.scelyo-mobile-menu :is(a,button):hover{background:#e9b85b22!important;color:#f6cf81!important}
+.scelyo-drive-btn,.scelyo-menu-toggle,.icon-btn{border-radius:12px!important}
+.scelyo-drive-btn:hover,.scelyo-menu-toggle:hover,.icon-btn:hover{border-color:#efc56d!important;background:#e5b7601c!important;color:#ffdc8e!important}
+
+/* Home dashboard, action cards and join flow */
+.fv-dashboard-content{background:transparent!important}
+.fv-sidebar .fv-sidebar-active{border-radius:13px!important}
+.fv-heading-index,.fv-kicker-dash,.fv-action-icon,.fv-join-icon{color:#f3c96f!important}
+.fv-action-card{border:1px solid #ffffff2b!important;box-shadow:0 17px 42px #0004!important;border-radius:21px!important}
+.fv-action-card:hover{border-color:#cba25991!important;box-shadow:0 16px 48px #b4862620!important}
+.fv-action-card :is(h3,strong){color:#fff9ee}
+.fv-join-strip{background:linear-gradient(120deg,#221e1a,#181920)!important;border-color:#a7834b64!important}
+.fv-join-form input{background:#101116!important;border-color:#ffffff37!important;color:#fff9ed!important}
+.fv-hero-secondary,.btn.subtle{background:#26252b!important;border:1px solid #ffffff32!important;color:#f2ece1!important}
+.fv-hero-secondary:hover,.btn.subtle:hover{border-color:#c7a46b!important;color:#ffdb9b!important}
+.fv-glass-head,.fv-glass-controls{background:#171920!important;border-color:#ffffff22!important}
+.fv-glass-guest{background:#2b2825!important}
+.prejoin{background:transparent}
+.prejoin-visual,.prejoin-card{border-radius:23px!important}
+.prejoin-avatar{background:linear-gradient(140deg,#3b342a,#1a1c23)!important;color:#f5d89b!important}
+.prejoin-card .field-label{color:#d4c4a8!important}
+.prejoin-card .control-toggles{border-color:#ffffff28!important}
+.prejoin-card .toggle-off{background:#322226!important;color:#ffd2c5!important}
+
+/* Meeting / camera effects / stage / host controls */
+.meeting-header{background:#181920!important;border:1px solid #ffffff2b!important;border-radius:19px!important}
+.meeting-id{color:#f3d39a!important}
+.meeting-meta{color:#c4c0b8!important}
+.meeting-members{color:#d8c7a9!important}
+.live-tools{border:1px solid #b29a6954!important;border-radius:17px!important;box-shadow:0 12px 30px #0003!important}
+.live-tools>strong{color:#f5dfb1!important}
+.live-tools :is(label,small){color:#c7c3b9!important}
+.live-tools select{background:#101116!important;border:1px solid #9b85575c!important;color:#f4eee2!important}
+.scelyo-photo-background-gallery{gap:10px}
+.scelyo-photo-background-gallery .scelyo-photo-bg{border:1px solid #ffffff2e!important;border-radius:12px!important;overflow:hidden;background:#22232a!important}
+.scelyo-photo-background-gallery .scelyo-photo-bg:hover{border-color:#e3b75d!important;box-shadow:0 0 0 1px #e3b75d5a!important}
+.scelyo-photo-background-gallery .scelyo-photo-bg.selected{border-color:#f4cb73!important;box-shadow:0 0 0 2px #e6b65c8a!important}
+.scelyo-photo-background-gallery .scelyo-photo-bg span{color:#fff5e1!important;text-shadow:0 1px 8px #000b}
+.scelyo-immersive-import{background:#1e1d22!important;border-color:#b3986450!important;border-radius:12px!important}
+.scelyo-immersive-import .upload,.live-tools .upload{border-color:#b59a6b!important;color:#f6d69c!important;background:#3d32241a!important}
+.meeting-videos{background:#121318!important;border:1px solid #ffffff26!important;border-radius:18px!important}
+.video-tile{border-radius:16px!important;overflow:hidden}
+.program-stage{border-radius:20px!important;overflow:hidden}
+.program-screen{background:#101115!important}
+.program-heading{color:#f5f1e9!important}
+.program-actions :is(button,select){background:#232329!important;border-color:#ffffff36!important;color:#eae4da!important}
+.program-actions button:hover{border-color:#d5ac5c!important}
+.program-thumb.pinned{border-color:#f0c46c!important}
+.moderation-panel,.scelyo-host-security{background:#191920!important;border:1px solid #b39b6c50!important;border-radius:16px!important}
+.meeting-toolbar{background:#171820!important;border:1px solid #ffffff29!important;border-radius:21px!important}
+.meeting-toolbar .tool-btn{background:#27272c!important;border:1px solid #ffffff2a!important;color:#f5f2e9!important;border-radius:13px!important}
+.meeting-toolbar .tool-btn:hover{background:#44351e!important;border-color:#dfb562!important}
+.meeting-toolbar .tool-btn.active-tool{background:#695022!important;color:#ffe5a2!important;border-color:#efc772!important}
+.meeting-toolbar .tool-btn.end-tool{background:#7a2636!important;border-color:#e26b7d!important;color:#fff!important}
+.meeting-toolbar .tool-btn.recording-tool{border-color:#c97980!important}
+.scelyo-video-limit,.scelyo-mic-test-box,.scelyo-record-music-choice{background:#201f24!important;border-color:#b9a06c58!important}
+.scelyo-music-panel,.scelyo-clearvoice-panel,.scelyo-clearvoice-prejoin{background:linear-gradient(125deg,#26221e,#171920)!important;border:1px solid #b89a655c!important;border-radius:18px!important}
+.scelyo-music-title-icon,.scelyo-clearvoice-icon{background:#b98b3d35!important;color:#f4ca79!important}
+.scelyo-music-panel :is(button,select,input),.scelyo-clearvoice-panel :is(button,select,input){accent-color:#e7b65d}
+.scelyo-music-player,.scelyo-music-track,.scelyo-music-settings,.scelyo-clearvoice-option{background:#171820!important;border-color:#ffffff2b!important}
+.scelyo-music-transport button:hover,.scelyo-clearvoice-close:hover{color:#f5d58f!important}
+.scelyo-music-volume input[type=range]{accent-color:#efc56d!important}
+
+/* Recording, subtitles, downloads, vault, Drive and settings. */
+.scelyo-rec-setup,.scelyo-download-card,.local-recordings-panel,.settings-panel{background:#191a21!important;border:1px solid #b99d6759!important;border-radius:22px!important;box-shadow:0 30px 90px #000a!important}
+.scelyo-rec-setup-head,.scelyo-download-card-head,.modal-header{border-bottom:1px solid #ffffff26!important}
+.scelyo-rec-setup-icon,.recording-kind,.drive-icon,.drive-account-icon{background:#b9894031!important;color:#f5c96d!important}
+.scelyo-rec-music-options label,.scelyo-download-variants label{background:#222228!important;border-color:#ffffff31!important;color:#f5f0e6!important}
+.scelyo-rec-music-options label.selected,.scelyo-download-variants label.selected{background:#5d472738!important;border-color:#e9bb66!important}
+.scelyo-download-main,.scelyo-rec-start,.library-import-action{background:linear-gradient(125deg,#ffe29b,#dfaa4f)!important;color:#211b10!important;border:1px solid #f4cc77!important;border-radius:13px!important;box-shadow:0 8px 25px #c08e3c2c!important}
+.scelyo-download-main:hover,.scelyo-rec-start:hover,.library-import-action:hover{filter:brightness(1.06)}
+.scelyo-download-more :is(a,button),.recording-item-actions button,.recordings-destinations a{
+ background:#27262b!important;color:#f1e7d8!important;border:1px solid #ffffff2d!important;border-radius:11px!important
+}
+.scelyo-download-more :is(a,button):hover,.recording-item-actions button:hover{border-color:#f0c56c!important;color:#f8d18a!important}
+.recording-item{background:#212127!important;border:1px solid #ffffff2a!important;border-radius:16px!important}
+.recording-info small,.local-recordings-hint,.recordings-destinations p,.settings-hint{color:#c0bab1!important}
+.recordings-empty{background:#1d1e24!important;border-color:#ffffff27!important}
+.drive-connect-intro,.drive-account,.drive-automation,.drive-advanced,.drive-needs-setup{background:#222228!important;border:1px solid #ffffff2b!important;border-radius:15px!important}
+.drive-account strong,.drive-connect-intro strong{color:#fff4db!important}
+.settings-panel .google-connect-btn,.drive-header-action{background:linear-gradient(125deg,#ffe09b,#dba247)!important;color:#241d12!important;border-color:#e8bc69!important}
+.chat-panel{background:#191920!important;border:1px solid #ffffff29!important}
+.chat-heading,.chat-entry{background:#1d1e25!important}
+.chat-message.self-chat{background:#493a243c!important;border-color:#c99c5360!important}
+.chat-entry button{background:#d5a14c!important;color:#1c1610!important}
+.toast{background:#28221d!important;border:1px solid #cda65b!important;color:#fcebd1!important;box-shadow:0 16px 42px #0008!important}
+.footer,.scelyo-studio-footer{border-top:1px solid #ffffff1e!important;color:#aaa5a0!important}
+
+/* Video studio: media timeline, transcriptions, NOVA excerpts, subtitles, music and export. */
+body:has(#app) :is(.landing,.editor,.editorWorkspace,.previewColumn,.controlsColumn){color:#f6f3ed}
+body:has(#app) .scelyo-studio-nav{border:1px solid #ffffff20!important;border-radius:16px!important}
+body:has(#app) .scelyo-studio-nav .active{background:linear-gradient(115deg,#6b4e21,#3b3020)!important;border-color:#c69745!important;color:#ffe09b!important}
+body:has(#app) .scelyo-studio-header-actions .ghost{background:#24242b!important;border-color:#ffffff35!important;color:#f4e9d8!important}
+body:has(#app) .scelyo-studio-header-actions .ghost:hover{border-color:#e6bc69!important;color:#fbd58b!important}
+body:has(#app) .scelyo-studio-overline{color:#efc66f!important}
+body:has(#app) .scelyo-studio-pill{border:1px solid #b7935d!important;background:#3e301e3d!important;color:#f4d6a1!important}
+body:has(#app) .scelyo-studio-benefit{border:1px solid #ffffff2a!important;background:#1c1d24!important;border-radius:16px!important}
+body:has(#app) .scelyo-studio-benefit svg{color:#f3c86d!important}
+body:has(#app) .editor{border:1px solid #ffffff29!important;border-radius:20px!important;background:#17181f!important}
+body:has(#app) .editorHead{background:#1b1c23!important;border-bottom:1px solid #ffffff27!important}
+body:has(#app) .scelyo-project-name-line{background:#121319!important;border-color:#ffffff37!important}
+body:has(#app) .scelyo-editor-overline,.scelyo-project-name-label{color:#efc36b!important}
+body:has(#app) .stageWrap{border-radius:17px!important}
+body:has(#app) .stage{background:#0c0d12!important;border:1px solid #ffffff2b!important;border-radius:16px!important}
+body:has(#app) .tabs{background:#191a20!important;border-bottom:1px solid #ffffff2c!important}
+body:has(#app) .tab{color:#c9c4bd!important}
+body:has(#app) .tab.active{background:#4a38203d!important;border-color:#e9bb67!important;color:#ffe1a2!important}
+body:has(#app) .panel{background:#1b1c23!important;border:1px solid #ffffff2b!important;border-radius:15px!important}
+body:has(#app) :is(.bg,.fmt,.size,.profile,.choices button,.small,.cap-style,.scelyo-text-layer){
+ background:#27272e!important;color:#eee8dd!important;border:1px solid #ffffff32!important;border-radius:11px!important
+}
+body:has(#app) :is(.bg,.fmt,.size,.profile,.choices button,.small,.cap-style,.scelyo-text-layer):hover{
+ background:#3b3124!important;border-color:#d7ad60!important;color:#ffe0a1!important
+}
+body:has(#app) :is(.bg.selected,.fmt.selected,.size.selected,.profile.selected,.choices .selected,.small.selected,.cap-style.active,.scelyo-text-layer.selected){
+ background:#634a244a!important;border-color:#f1c66e!important;color:#ffdd93!important
+}
+body:has(#app) :is(.cap-auto,.cap-manual,.cap-words,.cap-timeline,.cap-sliders,.scelyo-text-form,.scelyo-saved-projects){
+ background:#1d1e25!important;border:1px solid #ffffff2a!important;border-radius:15px!important
+}
+body:has(#app) :is(.scelyo-caption-inline,.scelyo-text-inline,.scelyo-text-hitbox-select){border-color:#f0c86f!important}
+body:has(#app) :is(.scelyo-caption-move-handle,.scelyo-caption-resize-handle){background:#e5b65f!important}
+body:has(#app) :is(.scelyo-text-pill,.scelyo-add-text,.scelyo-quick-add-text){border-color:#c9a45f!important;color:#f6d79b!important}
+body:has(#app) .transport :is(button,select){background:#23242b!important;color:#eee7da!important;border-color:#ffffff32!important}
+body:has(#app) .transport button:hover{border-color:#e8bc68!important;color:#f9d993!important}
+body:has(#app) .scelyo-studio-audio-toggle{border-color:#ba985f!important;color:#f3d49a!important}
+body:has(#app) .scelyo-saved-item{background:#23232b!important;border-color:#ffffff30!important}
+body:has(#app) .scelyo-save-status{color:#e4c58e!important}
+body:has(#app) .scelyo-studio-footer{background:#101116!important}
+@media(max-width:700px){
+  .scelyo-brand-descriptor{font-size:9px!important;letter-spacing:.16em!important}
+  .meeting-toolbar .tool-btn{border-radius:11px!important}
+  .scelyo-photo-background-gallery .scelyo-photo-bg{border-radius:10px!important}
+  body:has(#app) .scelyo-studio-nav{max-width:100%;overflow:auto}
+}
+@media(prefers-reduced-motion:reduce){
+ :where(.app-shell,body:has(#app)) :is(button,a){transition:none!important}
+}
