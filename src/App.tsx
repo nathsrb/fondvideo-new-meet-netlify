@@ -200,6 +200,16 @@ function App() {
   const [recordVideoQuality, setRecordVideoQuality] = useState<'1080'|'original'>('1080');
   const [face, setFace] = useState('user');
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
+  const [sceneOverrides, setSceneOverrides] = useState<Record<string,string>>(() => {
+    const values: Record<string,string> = {};
+    for (const scene of immersiveBackgrounds) {
+      try {
+        const saved = localStorage.getItem('sceyllio-scene-'+scene.id);
+        if (saved?.startsWith('data:image/')) values[scene.id] = saved;
+      } catch { /* Private browsing or storage unavailable */ }
+    }
+    return values;
+  });
   const [cameraInfo, setCameraInfo] = useState('');
   const [effectBusy, setEffectBusy] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -1043,7 +1053,7 @@ function App() {
             candidate.crossOrigin = 'anonymous';
             candidate.onload = () => resolve(candidate);
             candidate.onerror = () => reject(new Error('La photo de ce décor est indisponible.'));
-            candidate.src = preset.src;
+            candidate.src = sceneOverrides[preset.id] || preset.src;
           });
           presetPhotoCache.set(preset.id, image);
         }
@@ -1109,6 +1119,31 @@ function App() {
       toast('Image invalide.');
     };
     image.src = url;
+  }
+
+  function chooseImmersivePhoto(sceneId: string, file: File | null) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const width = 1280, height = 720;
+      const output = document.createElement('canvas');
+      output.width = width; output.height = height;
+      const c = output.getContext('2d');
+      if (!c) return;
+      const scale = Math.max(width/img.naturalWidth,height/img.naturalHeight);
+      const w = img.naturalWidth*scale, h = img.naturalHeight*scale;
+      c.drawImage(img,(width-w)/2,(height-h)/2,w,h);
+      const encoded = output.toDataURL('image/webp',0.8);
+      try { localStorage.setItem('sceyllio-scene-'+sceneId,encoded); }
+      catch { toast('Décor prêt pour cette session, mais espace local insuffisant pour le conserver.'); }
+      setSceneOverrides(previous => ({ ...previous,[sceneId]:encoded }));
+      presetPhotoCache.set(sceneId,img);
+      void changeCamera(sceneId,format,quality,img);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); toast('Cette image ne peut pas être chargée.'); };
+    img.src = url;
   }
 
   async function joinMeeting() {
@@ -2541,12 +2576,24 @@ function App() {
               ))}
             </div>
             <div className="scelyo-photo-background-heading"><strong>Univers immersifs</strong><small>12 décors pour changer d’horizon</small></div>
+            <div className="scelyo-immersive-import">
+              <span>Décors personnels : sélectionne un univers, puis importe son image haute qualité.</span>
+              <label className="upload">
+                <Camera size={15}/> Importer pour {immersiveBackgrounds.find(item => item.id === bg)?.label || 'un univers'}
+                <input type="file" hidden accept="image/*"
+                  onChange={event => {
+                    const selected = immersiveBackgrounds.some(item => item.id === bg) ? bg : 'amazon-anaconda-panther';
+                    chooseImmersivePhoto(selected,event.target.files?.[0] || null);
+                    event.target.value = '';
+                  }}/>
+              </label>
+            </div>
             <div className="scelyo-photo-background-gallery scelyo-immersive-gallery" role="group" aria-label="Univers immersifs">
               {immersiveBackgrounds.map(item => (
                 <button key={item.id} type="button" className={'scelyo-photo-bg'+(bg === item.id ? ' selected' : '')}
                   onClick={() => void changeCamera(item.id, format, quality)} disabled={effectBusy}
                   aria-pressed={bg === item.id} title={'Décor immersif : '+item.label}>
-                  <img src={item.thumbnail} alt="" loading="lazy" decoding="async" />
+                  <img src={sceneOverrides[item.id] || item.thumbnail} alt="" loading="lazy" decoding="async" />
                   <span>{item.label}</span>
                 </button>
               ))}
