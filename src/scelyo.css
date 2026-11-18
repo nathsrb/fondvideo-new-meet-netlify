@@ -170,3 +170,12 @@
 .scelyo-photo-background-heading small { font-size: 11px; color:#adb4ca; }
 .scelyo-immersive-gallery .scelyo-photo-bg { flex-basis:155px; }
 .scelyo-immersive-gallery .scelyo-photo-bg img { height:88px; }
+
+
+.scelyo-immersive-import {
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:10px;width:100%;padding:9px 12px;border-radius:12px;
+  border:1px solid #37435f;background:rgba(24,33,54,.72);
+}
+.scelyo-immersive-import>span {font-size:11px;color:#cbd5eb;max-width:420px}
+.scelyo-immersive-import .upload {cursor:pointer;font-size:11px;white-space:normal}
