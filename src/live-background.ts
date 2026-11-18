@@ -15,93 +15,102 @@ export const photoBackgrounds = [
   src: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&crop=entropy&w=1280&h=720&q=82`,
   thumbnail: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=320&h=180&q=65`,
 }));
-// The four original user-uploaded artworks are first-party assets.
-// The other eight use the user's exact reference URLs rather than unrelated stock
-// imagery. External images may require a permanent licensed copy for reliability.
+// All 12 backgrounds are first-party local assets. Seven are individual
+// crops of our locally hosted scene sheet; the user's four exact uploads
+// are standalone WebP files. No external network request is required.
 export const immersiveBackgrounds = [
   {
     "id": "tiny-amazon",
     "label": "Tiny house en Amazonie",
-    "src": "https://images.openai.com/static-rsc-4/i4PNf3AiG-jsARzO0V_PJKMIfgFGprXiznI2fKniwID_-SO-0gY5tYvcykvJMZyj0IPUodoz4SdrPvp118iWoUoB_ztd2g8P2Zc1_GMlmrtDyNsiirdrv9SAhHhpgbydQnKnRUtflmHKOw4nuqzxExpUdJAdDgG4xWJaG4lVlwU?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/i4PNf3AiG-jsARzO0V_PJKMIfgFGprXiznI2fKniwID_-SO-0gY5tYvcykvJMZyj0IPUodoz4SdrPvp118iWoUoB_ztd2g8P2Zc1_GMlmrtDyNsiirdrv9SAhHhpgbydQnKnRUtflmHKOw4nuqzxExpUdJAdDgG4xWJaG4lVlwU?purpose=inline",
-    "local": false
+    "src": "/immersive/tiny-amazon.png",
+    "thumbnail": "/immersive/tiny-amazon.png"
   },
   {
     "id": "mars-base",
     "label": "Base sur Mars",
-    "src": "https://images.openai.com/static-rsc-4/yjw3Xd5_k5FMfbczXqGITqrWIfROgAAFadlYuev68Ffhiubj3PQ8OSFeVWrBWeR3tQQ5A2SW_tH1BQ7n4hFRztHWMRD5v4C07ND2lzZH1oN6hVGh2EBf2zP--xvZTC1qt9Fye7ZZX1c3t5DOLMc9Es3g4DngzmjEmPNORgSCkUc?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/yjw3Xd5_k5FMfbczXqGITqrWIfROgAAFadlYuev68Ffhiubj3PQ8OSFeVWrBWeR3tQQ5A2SW_tH1BQ7n4hFRztHWMRD5v4C07ND2lzZH1oN6hVGh2EBf2zP--xvZTC1qt9Fye7ZZX1c3t5DOLMc9Es3g4DngzmjEmPNORgSCkUc?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      0,
+      1
+    ]
   },
   {
     "id": "moon-base",
     "label": "Station sur la Lune",
-    "src": "https://images.openai.com/static-rsc-4/ghy43xTMbukTt9Rpe5Nq_4OH-2uKpujSxBhEoNq2RzBuw7VmYYgaS5xavVT-Uj2nHXv0qvnCqtR4zVil4KwSy4X3EYcRl2bMJMRkW1AdL8uPxpUbcqlejFTaMvTw8iWs9kEeaTBw50iiDiwqDvur6Vy_UX9Z5wu09SDqawJGTwg?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/ghy43xTMbukTt9Rpe5Nq_4OH-2uKpujSxBhEoNq2RzBuw7VmYYgaS5xavVT-Uj2nHXv0qvnCqtR4zVil4KwSy4X3EYcRl2bMJMRkW1AdL8uPxpUbcqlejFTaMvTw8iWs9kEeaTBw50iiDiwqDvur6Vy_UX9Z5wu09SDqawJGTwg?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      0,
+      2
+    ]
   },
   {
     "id": "space-universe",
     "label": "Au cœur de l’Univers",
-    "src": "https://images.openai.com/static-rsc-4/AGG2HU3t011g32FgJiY9U7e9AP0MU8BAz-9G2hNXTsIgW9z2kn0eWm2V4FSgMkuWtd8_RoV0st6zmKyZ_M84mQNW5fEcuQDSZAulgK325SeQpucnhrxLdkD9suSn27m6cAPlda3Upt8vVcwnSZzu97HunR-mcpxKijwqxHpP_qk?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/AGG2HU3t011g32FgJiY9U7e9AP0MU8BAz-9G2hNXTsIgW9z2kn0eWm2V4FSgMkuWtd8_RoV0st6zmKyZ_M84mQNW5fEcuQDSZAulgK325SeQpucnhrxLdkD9suSn27m6cAPlda3Upt8vVcwnSZzu97HunR-mcpxKijwqxHpP_qk?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      0,
+      3
+    ]
   },
   {
     "id": "ocean-storm",
     "label": "Tempête océanique",
-    "src": "https://images.openai.com/static-rsc-4/kQVY7tHkgMcL6b93Iqr2oc5fq8VxzJIPjaYzR2DJtK9SC3WvVZOxShIZ6oyToxq-BcUUtPWga0xHdFHpymbnI75y_47-bRsvUK7Ii3TDwKGytcV4TIII2OOk7Y9AllXfWdyyI_672mgb1Kzn6I0hr0H3QBrwvPni1OS66l-0JaE?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/kQVY7tHkgMcL6b93Iqr2oc5fq8VxzJIPjaYzR2DJtK9SC3WvVZOxShIZ6oyToxq-BcUUtPWga0xHdFHpymbnI75y_47-bRsvUK7Ii3TDwKGytcV4TIII2OOk7Y9AllXfWdyyI_672mgb1Kzn6I0hr0H3QBrwvPni1OS66l-0JaE?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      1,
+      0
+    ]
   },
   {
     "id": "savanna-cats",
     "label": "Savane · lions, guépards et léopards",
     "src": "/immersive/savanna-cats.webp",
-    "thumbnail": "/immersive/savanna-cats.webp",
-    "local": true
+    "thumbnail": "/immersive/savanna-cats.webp"
   },
   {
     "id": "amazon-anaconda-panther",
     "label": "Amazonie · anaconda et panthère noire",
     "src": "/immersive/amazon-anaconda-panther.webp",
-    "thumbnail": "/immersive/amazon-anaconda-panther.webp",
-    "local": true
+    "thumbnail": "/immersive/amazon-anaconda-panther.webp"
   },
   {
     "id": "ancient-cave-office",
     "label": "Bureau dans une grotte ancienne",
     "src": "/immersive/ancient-cave-office.webp",
-    "thumbnail": "/immersive/ancient-cave-office.webp",
-    "local": true
+    "thumbnail": "/immersive/ancient-cave-office.webp"
   },
   {
     "id": "dubai-penthouse",
     "label": "Appartement à Dubaï",
     "src": "/immersive/dubai-penthouse.webp",
-    "thumbnail": "/immersive/dubai-penthouse.webp",
-    "local": true
+    "thumbnail": "/immersive/dubai-penthouse.webp"
   },
   {
     "id": "batcave",
     "label": "Batcave",
-    "src": "https://images.openai.com/static-rsc-4/NRLPMX8AM5UMqKoP_p_tIYGAORr31UPDGI_9SelDMVl97D7bynY8MSNeeBEdXq0ZYkcIkcVdCN2xitP_lW_WnCmFsQZfOTY_Id8G0WkSX--cIc2kqvBHsDd0DyWJRrrmdPnfyzJ15wyyGPhSuStuean4VWGtgtBkGhyrAGCmr8Y?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/NRLPMX8AM5UMqKoP_p_tIYGAORr31UPDGI_9SelDMVl97D7bynY8MSNeeBEdXq0ZYkcIkcVdCN2xitP_lW_WnCmFsQZfOTY_Id8G0WkSX--cIc2kqvBHsDd0DyWJRrrmdPnfyzJ15wyyGPhSuStuean4VWGtgtBkGhyrAGCmr8Y?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      2,
+      0
+    ]
   },
   {
     "id": "secret-lab",
     "label": "Mon laboratoire",
-    "src": "https://images.openai.com/static-rsc-4/80UqZEitud4iN4cgGMYKFGAlg9eas4N9ydy7pBqQ7RNeg2jmWlmUF-QCIrbiCdlGtKbwfMS7CLv5st01K7JAmlb8vtMvC6sTSLc4fO1-r05kSbUeDg7j8PX9tg2lXgz-RI-lid1l3-E1pxzIp2999KnPHtY9ETrDvZW2bGxzH8?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/80UqZEitud4iN4cgGMYKFGAlg9eas4N9ydy7pBqQ7RNeg2jmWlmUF-QCIrbiCdlGtKbwfMS7CLv5st01K7JAmlb8vtMvC6sTSLc4fO1-r05kSbUeDg7j8PX9tg2lXgz-RI-lid1l3-E1pxzIp2999KnPHtY9ETrDvZW2bGxzH8?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      2,
+      1
+    ]
   },
   {
     "id": "royal-palace",
     "label": "Palais royal",
-    "src": "https://images.openai.com/static-rsc-4/TMfcHbay4i-W2jbAX--JocleiOkKCuTfJItuzTZx--2AIl4oWIAHY4JB7fiI9cj_xsntPdOnGEl4tBxv2VRb0iobXCO8AwEu1tQAFsmRknNl-uGvib0rTKKhOpRag2zcQRarp2bZFhQnH9J4osGbviK4vsLUW08QjNxrfnI_nfY?purpose=inline",
-    "thumbnail": "https://images.openai.com/static-rsc-4/TMfcHbay4i-W2jbAX--JocleiOkKCuTfJItuzTZx--2AIl4oWIAHY4JB7fiI9cj_xsntPdOnGEl4tBxv2VRb0iobXCO8AwEu1tQAFsmRknNl-uGvib0rTKKhOpRag2zcQRarp2bZFhQnH9J4osGbviK4vsLUW08QjNxrfnI_nfY?purpose=inline",
-    "local": false
+    "src": "/immersive/scene-collage.png",
+    "crop": [
+      2,
+      2
+    ]
   }
 ];
 export const backgrounds = [
