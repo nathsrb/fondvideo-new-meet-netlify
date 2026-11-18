@@ -22,26 +22,20 @@ export const immersiveBackgrounds = [
   {
     "id": "tiny-amazon",
     "label": "Tiny house en Amazonie",
-    "src": "/immersive/tiny-amazon.png",
-    "thumbnail": "/immersive/tiny-amazon.png"
+    "src": "/immersive/tiny-amazon-hd.png",
+    "thumbnail": "/immersive/tiny-amazon-hd.png"
   },
   {
     "id": "mars-base",
     "label": "Base sur Mars",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      0,
-      1
-    ]
+    "src": "/immersive/mars-base-hd.png",
+    "thumbnail": "/immersive/mars-base-hd.png"
   },
   {
     "id": "moon-base",
     "label": "Station sur la Lune",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      0,
-      2
-    ]
+    "src": "/immersive/moon-base-hd.png",
+    "thumbnail": "/immersive/moon-base-hd.png"
   },
   {
     "id": "space-universe",
