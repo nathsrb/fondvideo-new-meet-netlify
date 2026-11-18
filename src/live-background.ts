@@ -15,10 +15,32 @@ export const photoBackgrounds = [
   src: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&crop=entropy&w=1280&h=720&q=82`,
   thumbnail: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=320&h=180&q=65`,
 }));
+// Immersive destinations. These catalog entries can be replaced by the
+// user's exact generated artwork using the image selector in the meeting.
+// All fallback images are loaded only when selected, keeping join fast.
+export const immersiveBackgrounds = [
+  { id: 'tiny-amazon', label: 'Tiny house en Amazonie', photoId: 'photo-1441974231531-c6227db76b6e' },
+  { id: 'mars-base', label: 'Base sur Mars', photoId: 'photo-1614728263952-84ea256f9679' },
+  { id: 'moon-base', label: 'Station sur la Lune', photoId: 'photo-1446776811953-b23d57bd21aa' },
+  { id: 'space-universe', label: 'Au cœur de l’Univers', photoId: 'photo-1462331940025-496dfbfc7564' },
+  { id: 'ocean-storm', label: 'Tempête océanique', photoId: 'photo-1500375592092-40eb2168fd21' },
+  { id: 'savanna-cats', label: 'Savane · lions, guépards et léopards', photoId: 'photo-1549366021-9f761d450615' },
+  { id: 'amazon-anaconda-panther', label: 'Amazonie · anaconda et panthère noire', photoId: 'photo-1441974231531-c6227db76b6e' },
+  { id: 'ancient-cave-office', label: 'Bureau dans une grotte ancienne', photoId: 'photo-1504870712357-65ea720d6078' },
+  { id: 'dubai-penthouse', label: 'Appartement à Dubaï', photoId: 'photo-1512453979798-5ea266f8880c' },
+  { id: 'batcave', label: 'Batcave', photoId: 'photo-1519608487953-e999c86e7455' },
+  { id: 'secret-lab', label: 'Mon laboratoire', photoId: 'photo-1532187863486-abf9dbad1b69' },
+  { id: 'royal-palace', label: 'Palais royal', photoId: 'photo-1590490360182-c33d57733427' },
+].map(item => ({
+  ...item,
+  src: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=1280&h=720&q=82`,
+  thumbnail: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=320&h=180&q=65`,
+}));
 export const backgrounds = [
   ['original', 'Original'],
   ['blur', 'Flou'],
   ...photoBackgrounds.map(item => [item.id, item.label]),
+  ...immersiveBackgrounds.map(item => [item.id, item.label]),
   ['blue', 'Bleu'],
   ['violet', 'Violet'],
   ['custom', 'Mon image'],
