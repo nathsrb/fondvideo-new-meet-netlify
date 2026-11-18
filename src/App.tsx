@@ -2076,7 +2076,7 @@ function App() {
 
   function connectDrive() {
     if (driveConnecting) return;
-    if (!clientId.trim().match(/\\.apps\\.googleusercontent\\.com$/)) {
+    if (!clientId.trim().match(/\.apps\.googleusercontent\.com$/)) {
       setDriveAdvanced(true);
       toast('La connexion Google Drive n’est pas configurée. Vérifie l’identifiant OAuth de cette prévisualisation.');
       return;
