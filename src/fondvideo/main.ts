@@ -29,7 +29,12 @@ const captions = createCaptionStudio({
   getFile: () => state.file,
   getDuration: () => state.duration,
   getTime: () => (state.demo ? 1.5 : video.currentTime),
-  preview: () => draw(),
+  // A new transcription changes the caption hitboxes immediately, even when
+  // the video is paused or an earlier asynchronous canvas draw is in flight.
+  preview: () => {
+    void draw();
+    queueMicrotask(() => textEditor?.updateSurface());
+  },
 });
 const state = {
   file: null,
@@ -593,8 +598,15 @@ function compositeWithMask(target, mask) {
   renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
+// Never drop a caption redraw when an asynchronous background frame is busy.
+// Keep only one pending redraw; the latest caption state wins.
+let redrawPending = false;
 async function draw(target = canvas) {
-  if (state.rendering || state.exporting) return;
+  if (state.exporting) return;
+  if (state.rendering) {
+    if (target === canvas) redrawPending = true;
+    return;
+  }
   state.rendering = true;
   try {
     if (state.bg === 'original' || state.demo) {
@@ -610,7 +622,14 @@ async function draw(target = canvas) {
     compositeWithMask(target, mask);
   } finally {
     state.rendering = false;
-    if (target === canvas) textEditor.updateSurface();
+    if (target === canvas) {
+      textEditor.updateSurface();
+      if (redrawPending && !state.exporting) {
+        redrawPending = false;
+        // The next frame always uses the newest saved subtitle words.
+        queueMicrotask(() => { void draw(); });
+      }
+    }
   }
 }
 function frameLoop() {

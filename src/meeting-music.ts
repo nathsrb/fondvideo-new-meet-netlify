@@ -53,7 +53,7 @@ export class MeetingMusicMixer {
     this.output = context.createMediaStreamDestination();
     this.musicOnlyOutput = context.createMediaStreamDestination();
     this.musicGain = context.createGain();
-    this.musicGain.gain.value = 0.12; // quiet by default to protect phone speakers
+    this.musicGain.gain.value = 0; // setVolume() owns the gain when playback starts
     this.duckGain = context.createGain();
     this.duckGain.gain.value = 0.30;
     this.speechGain = context.createGain();
@@ -131,17 +131,20 @@ export class MeetingMusicMixer {
   get track(): MediaStreamTrack { return this.mixedStream.getAudioTracks()[0]; }
 
   setVolume(level: number) {
-    // 0–100% controls actual musical loudness. A 100% setting approaches
-    // source level; the voice-first sidechain and limiter manage peaks.
-    this.currentVolume = level;
-    const normalized = Math.max(0, Math.min(1, level / 100));
-    // Keep music well beneath voices. Full slider is deliberately capped:
-    // loud music through a phone speaker can re-enter its microphone.
-    const backgroundGain = 0.35 * Math.pow(normalized, 0.92);
-    this.musicGain.gain.setTargetAtTime(backgroundGain, this.context.currentTime, 0.04);
+    // 0 = silence, 100 = original file level, 200 = amplified up to 2x.
+    // The limiter still prevents hard clipping in the outbound voice mix.
+    this.currentVolume = Math.max(0, Math.min(200, level));
+    const normalized = this.currentVolume / 100;
+    const gain = normalized <= 1 ? Math.pow(normalized, 1.5) : normalized;
+    const now = this.context.currentTime;
+    this.musicGain.gain.cancelScheduledValues(now);
+    this.musicGain.gain.setTargetAtTime(this.audio.paused ? 0 : gain, now, 0.025);
   }
 
-  setVoicePriority(enabled: boolean) { this.voicePriority = enabled; }
+  setVoicePriority(enabled: boolean) {
+    this.voicePriority = enabled;
+    this.updateDucking();
+  }
 
   setLoop(enabled: boolean) { this.audio.loop = enabled; }
 

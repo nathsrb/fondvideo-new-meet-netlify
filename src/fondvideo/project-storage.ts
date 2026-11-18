@@ -13,7 +13,7 @@ export type StudioProjectRecord = {
 };
 
 const DB_NAME = 'scelyo-studio-projects';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -24,10 +24,42 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains('projects'))
-        db.createObjectStore('projects', { keyPath: 'id' });
-      if (!db.objectStoreNames.contains('media'))
-        db.createObjectStore('media');
+      const tx = request.transaction;
+      if (!tx) throw new Error('Migration du stockage impossible.');
+      const projects = db.objectStoreNames.contains('projects')
+        ? tx.objectStore('projects')
+        : db.createObjectStore('projects', { keyPath: 'id' });
+      const media = db.objectStoreNames.contains('media')
+        ? tx.objectStore('media')
+        : db.createObjectStore('media');
+
+      // Older SCELYO V15 stored the editable video directly in the project's
+      // record. Keep projects from that same preview origin when switching to
+      // V16's separate media store, atomically in the IndexedDB upgrade.
+      const cursorRequest = projects.openCursor();
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor) return;
+        const oldProject = cursor.value;
+        if (oldProject && !oldProject.videoName && oldProject.video instanceof Blob) {
+          const video = oldProject.video as Blob & { name?: string };
+          media.put(video, oldProject.id + ':video');
+          const metadata = { ...oldProject };
+          const legacyText = metadata.text;
+          delete metadata.video;
+          delete metadata.text;
+          cursor.update({
+            ...metadata,
+            videoName: video.name || metadata.name || 'video.mp4',
+            videoSize: video.size,
+            videoStored: true,
+            settings: metadata.settings || {},
+            captions: metadata.captions || {},
+            textLayers: Array.isArray(legacyText) ? legacyText : [],
+          });
+        }
+        cursor.continue();
+      };
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error('Stockage local indisponible.'));

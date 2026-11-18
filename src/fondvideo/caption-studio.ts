@@ -438,6 +438,9 @@ export function createCaptionStudio({
   preview,
 }) {
   let page=0;
+  // The on-video editor previews the draft without changing stored captions.
+  // Only committing the edit updates the real words (and thus MP4/SRT export).
+  let captionDraftWords = null;
   const pageSize=100;
   const state = initial(),
     report = text => {
@@ -722,6 +725,7 @@ export function createCaptionStudio({
       style: state.style, size: state.size, x: state.x, y: state.y, enabled: state.enabled,
     }),
     restoreState: snapshot => {
+      captionDraftWords = null;
       const data = snapshot && typeof snapshot === 'object' ? snapshot : {};
       const safeWords = Array.isArray(data.words) ? data.words.slice(0, 30000)
         .filter(word => word && typeof word.text === 'string' &&
@@ -748,7 +752,33 @@ export function createCaptionStudio({
       repaint();
       report(safeWords.length + ' mots restaurés. Tu peux les modifier à nouveau.');
     },
-    render: (ctx, time, w, h) => drawCaption(ctx, time, w, h, state),
+    render: (ctx, time, w, h) => drawCaption(ctx, time, w, h,
+      captionDraftWords ? { ...state, words: captionDraftWords } : state),
+    previewGroup: (begin, length, text) => {
+      const original = state.words.slice(begin, begin + length);
+      if (!original.length) return false;
+      const words = wordsOf(text);
+      if (!words.length) {
+        // An empty draft is not a valid caption; keep the original visible.
+        captionDraftWords = null;
+      } else {
+        const first = original[0].start;
+        const end = original.at(-1).end;
+        captionDraftWords = [
+          ...state.words.slice(0, begin),
+          ...distribute(text, first, end),
+          ...state.words.slice(begin + length),
+        ];
+      }
+      repaint();
+      return true;
+    },
+    clearGroupPreview: () => {
+      if (captionDraftWords) {
+        captionDraftWords = null;
+        repaint();
+      }
+    },
     activeGroup: time => {
       if (!state.enabled) return null;
       const index=state.words.findIndex(word=>time>=word.start && time<word.end);
@@ -762,10 +792,30 @@ export function createCaptionStudio({
         x:state.x??50,y:state.y,size:state.size,style:state.style
       };
     },
+    // Edit the real caption model on every keystroke, not a temporary draft.
+    // Keep the original number of timed word slots so the on-canvas editor
+    // stays attached to the same caption even while words are added/deleted.
+    updateGroupLive: (begin, length, text) => {
+      const group = state.words.slice(begin, begin + length);
+      if (!group.length) return false;
+      captionDraftWords = null;
+      const tokens = wordsOf(text);
+      group.forEach((word, index) => {
+        word.text = index === group.length - 1
+          ? tokens.slice(index).join(' ')
+          : (tokens[index] || '');
+      });
+      // Updating the timeline/word inputs is safe: it doesn't replace the
+      // on-video textarea, so the caret and keyboard remain stable.
+      refresh();
+      repaint();
+      return true;
+    },
     replaceGroup: (begin,length,text) => {
       const group=state.words.slice(begin,begin+length);
       if(!group.length || !text.trim())return false;
       const tokens=wordsOf(text);
+      captionDraftWords = null;
       if(tokens.length===group.length){
         group.forEach((word,index)=>word.text=tokens[index]);
       }else{
@@ -808,6 +858,7 @@ export function createCaptionStudio({
       return true;
     },
     reset: () => {
+      captionDraftWords = null;
       Object.assign(state, initial());page=0;
       byId('capText').value = '';
       byId('capEnabled').checked = true;

@@ -1,6 +1,6 @@
 {
-  "name": "SCELYO — Live, Studio & Vault",
-  "short_name": "SCELYO",
+  "name": "SCEYLLIO — Live, Studio & Vault",
+  "short_name": "SCEYLLIO",
   "description": "Le live devient création. Crée, réunis et capture.",
   "start_url": "./index.html#/meet",
   "scope": "/",

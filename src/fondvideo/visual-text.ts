@@ -111,6 +111,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
     pause();showControls(layer);listRefresh();updateSurface(true);redraw();
   };
   const closeCaption=()=>{
+    getCaption().clearGroupPreview();
     selectedCaption=null;
     if(mobileCaptionEditor){mobileCaptionEditor.remove();mobileCaptionEditor=null;}
     updateSurface(true);
@@ -152,12 +153,19 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       input.value=group.text;
       input.setAttribute('aria-label','Texte du sous-titre');
       input.placeholder='Modifie le sous-titre directement ici…';
+      // WYSIWYG: every keystroke updates the real caption words used by
+      // canvas preview, SRT export, MP4 export and project persistence.
+      // No Apply button, draft buffer or extra confirmation.
+      input.oninput=()=>{
+        getCaption().updateGroupLive(group.begin,group.length,input.value);
+        // Mobile editor lives outside #editor: notify the Studio autosaver.
+        stage.dispatchEvent(new Event('input',{bubbles:true}));
+      };
       const actions=document.createElement('div');
       actions.className='scelyo-caption-inline-actions';
-      const saveButton=document.createElement('button');
-      saveButton.type='button';saveButton.textContent='✓ Appliquer';
-      const cancelButton=document.createElement('button');
-      cancelButton.type='button';cancelButton.textContent='Fermer';
+      const closeButton=document.createElement('button');
+      closeButton.type='button';closeButton.textContent='Terminer';
+      closeButton.onclick=closeCaption;
       const dragButton=document.createElement('button');
       dragButton.type='button';dragButton.className='scelyo-caption-move-handle';
       dragButton.textContent='⠿ Déplacer';
@@ -194,16 +202,11 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       larger.setAttribute('aria-label','Agrandir la taille des sous-titres');
       larger.onclick=()=>applySize(Number(slider.value)+0.8);
       sizeRow.append(sizeCaption,smaller,slider,larger,sizeValue);
-      const save=()=>{
-        getCaption().replaceGroup(group.begin,group.length,input.value);
-        selectedCaption=null;redraw();updateSurface(true);
-      };
       input.onkeydown=e=>{
-        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();save()}
-        if(e.key==='Escape')closeCaption();
+        if(e.key==='Escape'||(e.key==='Enter'&&!e.shiftKey)){
+          e.preventDefault();closeCaption();
+        }
       };
-      saveButton.onclick=save;
-      cancelButton.onclick=closeCaption;
       const connectPointerDrag=(handle,kind)=>{
         let gesture=null;
         handle.onpointerdown=e=>{
@@ -244,7 +247,7 @@ export function createVisualTextEditor({stage, canvas, getTime, getDuration, get
       connectPointerDrag(headline,'move');
       connectPointerDrag(dragButton,'move');
       connectPointerDrag(resizeButton,'size');
-      actions.append(saveButton,dragButton,resizeButton,cancelButton);
+      actions.append(dragButton,resizeButton,closeButton);
       editor.append(headline,input,sizeRow,actions);
       if(window.matchMedia('(max-width: 700px)').matches){
         // A transformed video stage clips fixed-position editing controls on iPhone.

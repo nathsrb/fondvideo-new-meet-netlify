@@ -1,36 +1,152 @@
 // @ts-nocheck
 // Réutilisation du moteur de décors de FondVidéo pour les appels en direct.
+// Photographs from Unsplash, served on demand as browser-cached 1280x720
+// WebP/AVIF when supported. No images are fetched when simply joining a call.
+// Source attribution is included for clarity although not required by license.
+export const photoBackgrounds = [
+  { id: 'office', label: 'Bureau premium', photoId: 'photo-1497366811353-6870744d04b2' },
+  { id: 'studio', label: 'Bureau lumineux', photoId: 'photo-1497366754035-f200968a6e72' },
+  { id: 'tech', label: 'Espace créatif', photoId: 'photo-1497366858526-0766cadbe8fa' },
+  { id: 'warm', label: 'Salon chaleureux', photoId: 'photo-1600607687939-ce8a6c25118c' },
+  { id: 'nature', label: 'Lac & montagnes', photoId: 'photo-1470770841072-f978cf4d019e' },
+  { id: 'landscape', label: 'Nature', photoId: 'photo-1500534623283-312aade485b7' },
+].map(item => ({
+  ...item,
+  src: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&crop=entropy&w=1280&h=720&q=82`,
+  thumbnail: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=320&h=180&q=65`,
+}));
+// The 12 immersive backgrounds are first-party assets stored in /public/immersive.\n// Each scene is a separate full-frame file: never crop/upscale a contact sheet.
+export const immersiveBackgrounds = [
+  {
+    "id": "amazon-anaconda-panther",
+    "label": "Amazonie",
+    "src": "/immersive/amazon-anaconda-panther.webp",
+    "thumbnail": "/immersive/amazon-anaconda-panther.webp"
+  },
+  {
+    "id": "ancient-cave-office",
+    "label": "Grotte ancienne",
+    "src": "/immersive/ancient-cave-office.webp",
+    "thumbnail": "/immersive/ancient-cave-office.webp"
+  },
+  {
+    "id": "savanna-cats",
+    "label": "Savane",
+    "src": "/immersive/savanna-cats.webp",
+    "thumbnail": "/immersive/savanna-cats.webp"
+  },
+  {
+    "id": "dubai-penthouse",
+    "label": "Dubaï",
+    "src": "/immersive/dubai-penthouse.webp",
+    "thumbnail": "/immersive/dubai-penthouse.webp"
+  },
+  {
+    "id": "mars-base",
+    "label": "Mars",
+    "src": "/immersive/mars-base-hd.png",
+    "thumbnail": "/immersive/mars-base-hd.png"
+  },
+  {
+    "id": "moon-base",
+    "label": "Lune",
+    "src": "/immersive/moon-base-hd.png",
+    "thumbnail": "/immersive/moon-base-hd.png"
+  },
+  {
+    "id": "space-universe",
+    "label": "Vaisseau spatial",
+    "src": "/immersive/space-universe-hd.png",
+    "thumbnail": "/immersive/space-universe-hd.png"
+  },
+  {
+    "id": "ocean-storm",
+    "label": "Univers (galaxies)",
+    "src": "/immersive/galaxies-hd.png",
+    "thumbnail": "/immersive/galaxies-hd.png"
+  },
+  {
+    "id": "batcave",
+    "label": "Batcave",
+    "src": "/immersive/batcave-hd.png",
+    "thumbnail": "/immersive/batcave-hd.png"
+  },
+  {
+    "id": "secret-lab",
+    "label": "Centre de commandement",
+    "src": "/immersive/command-center-hd.png",
+    "thumbnail": "/immersive/command-center-hd.png"
+  },
+  {
+    "id": "royal-palace",
+    "label": "Salle du trône",
+    "src": "/immersive/royal-palace-hd.png",
+    "thumbnail": "/immersive/royal-palace-hd.png"
+  },
+  {
+    "id": "tiny-amazon",
+    "label": "Lodge Amazone",
+    "src": "/immersive/tiny-amazon-hd.png",
+    "thumbnail": "/immersive/tiny-amazon-hd.png"
+  },
+  {
+    "id": "grotte-secrete-hd",
+    "label": "Grotte secrète",
+    "src": "/immersive/grotte-secrete.webp",
+    "thumbnail": "/immersive/grotte-secrete.webp"
+  },
+  {
+    "id": "station-orbitale-hd",
+    "label": "Station orbitale",
+    "src": "/immersive/station-orbitale.webp",
+    "thumbnail": "/immersive/station-orbitale.webp"
+  },
+  {
+    "id": "savane-hd",
+    "label": "Savane dorée",
+    "src": "/immersive/savane.webp",
+    "thumbnail": "/immersive/savane.webp"
+  },
+  {
+    "id": "batcave-noire-hd",
+    "label": "Batcave noire",
+    "src": "/immersive/batcave.webp",
+    "thumbnail": "/immersive/batcave.webp"
+  },
+  {
+    "id": "jungle-panthere-hd",
+    "label": "Jungle panthère",
+    "src": "/immersive/jungle-panthere.webp",
+    "thumbnail": "/immersive/jungle-panthere.webp"
+  },
+  {
+    "id": "bureau-jungle-hd",
+    "label": "Bureau jungle",
+    "src": "/immersive/bureau-jungle.webp",
+    "thumbnail": "/immersive/bureau-jungle.webp"
+  },
+  {
+    "id": "base-martienne-hd",
+    "label": "Base martienne",
+    "src": "/immersive/base-martienne.webp",
+    "thumbnail": "/immersive/base-martienne.webp"
+  },
+  {
+    "id": "salon-dubai-hd",
+    "label": "Salon Dubaï",
+    "src": "/immersive/salon-dubai.webp",
+    "thumbnail": "/immersive/salon-dubai.webp"
+  }
+];
 export const backgrounds = [
   ['original', 'Original'],
   ['blur', 'Flou'],
-  ['studio', 'Studio'],
-  ['office', 'Bureau'],
-  ['tech', 'Tech'],
+  ...photoBackgrounds.map(item => [item.id, item.label]),
+  ...immersiveBackgrounds.map(item => [item.id, item.label]),
   ['blue', 'Bleu'],
   ['violet', 'Violet'],
-  ['warm', 'Beige'],
-  ['grotte-secrete', 'Grotte secrète'],
-  ['station-orbitale', 'Station orbitale'],
-  ['savane', 'Savane'],
-  ['batcave', 'Batcave'],
-  ['jungle-panthere', 'Jungle panthère'],
-  ['bureau-jungle', 'Bureau jungle'],
-  ['base-martienne', 'Base martienne'],
-  ['salon-dubai', 'Salon Dubaï'],
   ['custom', 'Mon image'],
 ];
-// The picker displays these source images as thumbnails; the compositor always
-// uses these same original-size WebP files rather than thumbnail bitmaps.
-export const decorBackgrounds = backgrounds.filter(([id]) =>
-  ['grotte-secrete', 'station-orbitale', 'savane', 'batcave', 'jungle-panthere', 'bureau-jungle', 'base-martienne', 'salon-dubai'].includes(id)
-);
-const decorImages = new Map<string, HTMLImageElement>();
-for (const [id] of decorBackgrounds) {
-  const image = new Image();
-  image.decoding = 'async';
-  image.src = `/backgrounds/${id}.webp`;
-  decorImages.set(id, image);
-}
 export const formats = [
   ['original', 'Original'],
   ['16:9', 'YouTube 16:9'],
@@ -89,17 +205,6 @@ function background(targetCtx, w, h, r) {
       dh = w / a;
     }
     targetCtx.drawImage(state.customImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    return;
-  }
-  const decor = decorImages.get(state.bg);
-  if (decor?.complete && decor.naturalWidth) {
-    const a = decor.naturalWidth / decor.naturalHeight;
-    const ta = w / h;
-    const dw = a > ta ? h * a : w;
-    const dh = a > ta ? h : w / a;
-    targetCtx.imageSmoothingEnabled = true;
-    targetCtx.imageSmoothingQuality = 'high';
-    targetCtx.drawImage(decor, (w - dw) / 2, (h - dh) / 2, dw, dh);
     return;
   }
   if (state.bg === 'studio') {
