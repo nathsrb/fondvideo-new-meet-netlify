@@ -1055,8 +1055,9 @@ function App() {
               // Seven backgrounds are separate regions of one locally hosted
               // scene sheet. Crop before giving the image to the camera mixer.
               // A user's own imported image always takes priority.
-              if (!preset.crop || sceneOverrides[preset.id]) return resolve(candidate);
-              const [row, col] = preset.crop;
+              const crop = 'crop' in preset && Array.isArray(preset.crop) ? preset.crop : null;
+              if (!crop || sceneOverrides[preset.id]) return resolve(candidate);
+              const [row, col] = crop;
               const tileWidth = candidate.naturalWidth / 4;
               const tileHeight = candidate.naturalHeight / 3;
               const cropCanvas = document.createElement('canvas');
