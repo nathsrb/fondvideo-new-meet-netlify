@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+
+const presetPhotoCache = new Map<string, HTMLImageElement>();
 import { api, ws } from './realtime-transport';
 import { MeetingMusicMixer } from './meeting-music';
 import { ClearVoiceProcessor, type VoiceProfile } from './clearvoice';
@@ -7,6 +9,7 @@ import {
   videoDimensions,
   formats,
   backgrounds,
+  photoBackgrounds,
 } from './live-background';
 import { saveRecording, listRecordings, deleteRecording, type SavedRecording } from './recording-library';
 import {
@@ -1024,20 +1027,40 @@ function App() {
     nextQuality: string,
     nextPhoto: HTMLImageElement | null = photo
   ) {
-    setBg(nextBg);
-    setFormat(nextFormat);
-    setQuality(nextQuality);
-    configRef.current = {
-      bg: nextBg,
-      format: nextFormat,
-      quality: nextQuality,
-      photo: nextPhoto,
-    };
-    if (!isJoinedRef.current || !rawRef.current) return;
     setEffectBusy(true);
+    let renderedBg = nextBg;
+    let renderedPhoto = nextPhoto;
     try {
+      const preset = photoBackgrounds.find(item => item.id === nextBg);
+      if (preset) {
+        // Load only selected photographs, cache them for subsequent changes.
+        // crossOrigin avoids tainting the camera canvas capture stream.
+        let image = presetPhotoCache.get(preset.id);
+        if (!image) {
+          image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const candidate = new Image();
+            candidate.crossOrigin = 'anonymous';
+            candidate.onload = () => resolve(candidate);
+            candidate.onerror = () => reject(new Error('La photo de ce décor est indisponible.'));
+            candidate.src = preset.src;
+          });
+          presetPhotoCache.set(preset.id, image);
+        }
+        renderedBg = 'custom';
+        renderedPhoto = image;
+      }
+      setBg(nextBg);
+      setFormat(nextFormat);
+      setQuality(nextQuality);
+      configRef.current = {
+        bg: renderedBg,
+        format: nextFormat,
+        quality: nextQuality,
+        photo: renderedPhoto,
+      };
+      if (!isJoinedRef.current || !rawRef.current) return;
       let stream = rawRef.current;
-      if (nextBg !== 'original' || nextFormat !== 'original') {
+      if (renderedBg !== 'original' || nextFormat !== 'original') {
         if (effectRef.current) effectRef.current.update(configRef.current);
         else
           effectRef.current = await processCamera(
@@ -1060,6 +1083,8 @@ function App() {
       }
     } catch (err) {
       toast('Décor indisponible : ' + readableError(err));
+      // If a photo fails to load, retain the last working camera effect.
+      if (photoBackgrounds.some(item => item.id === nextBg) && !presetPhotoCache.has(nextBg)) return;
       effectRef.current?.stop();
       effectRef.current = null;
       localRef.current = rawRef.current;
@@ -2504,6 +2529,16 @@ function App() {
                 {photo && <option value="custom">Mon image</option>}
               </select>
             </label>
+            <div className="scelyo-photo-background-gallery" role="group" aria-label="Fonds photographiques haute qualité">
+              {photoBackgrounds.map(item => (
+                <button key={item.id} type="button" className={'scelyo-photo-bg'+(bg === item.id ? ' selected' : '')}
+                  onClick={() => void changeCamera(item.id, format, quality)} disabled={effectBusy}
+                  aria-pressed={bg === item.id} title={'Choisir le décor '+item.label}>
+                  <img src={item.thumbnail} alt="" loading="lazy" decoding="async" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
             <label className="upload">
               + Image
               <input
