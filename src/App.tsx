@@ -824,17 +824,20 @@ function App() {
             : track;
         if (selected) {
           const sender = pc.addTrack(selected, source);
-          // A seven-person mesh can mean six outgoing copies of the camera.
-          // Cap each outgoing video to protect mobile uplinks and keep audio stable.
+          // Preserve detail in photographic backgrounds: 750 kb/s produced
+          // severe blur at 1080p, particularly in vegetation and fine textures.
+          // Keep a lower ceiling for large calls / handheld mobile uplinks.
           if (selected.kind === 'video') {
             videoSenders.current.set(id, sender);
             if (videoWantedByPeer.current.get(id) === false)
               void sender.replaceTrack(null).catch(() => {});
             try {
               const parameters = sender.getParameters();
+              const bitrate = pcs.current.size >= 5 ? 1_250_000
+                : quality === '720' ? 1_500_000 : 2_500_000;
               parameters.encodings = parameters.encodings?.length
-                ? parameters.encodings.map(encoding => ({ ...encoding, maxBitrate: 750_000 }))
-                : [{ maxBitrate: 750_000 }];
+                ? parameters.encodings.map(encoding => ({ ...encoding, maxBitrate: bitrate }))
+                : [{ maxBitrate: bitrate }];
               void sender.setParameters(parameters).catch(() => {
                 // Some Safari implementations reject bitrate constraints.
               });
