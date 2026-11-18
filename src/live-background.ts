@@ -15,9 +15,7 @@ export const photoBackgrounds = [
   src: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&crop=entropy&w=1280&h=720&q=82`,
   thumbnail: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=320&h=180&q=65`,
 }));
-// All 12 backgrounds are first-party local assets. Seven are individual
-// crops of our locally hosted scene sheet; the user's four exact uploads
-// are standalone WebP files. No external network request is required.
+// The 12 immersive backgrounds are first-party assets stored in /public/immersive.\n// Each scene is a separate full-frame file: never crop/upscale a contact sheet.
 export const immersiveBackgrounds = [
   {
     "id": "amazon-anaconda-panther",
@@ -58,47 +56,32 @@ export const immersiveBackgrounds = [
   {
     "id": "space-universe",
     "label": "Vaisseau spatial",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      0,
-      3
-    ]
+    "src": "/immersive/space-universe-hd.png",
+    "thumbnail": "/immersive/space-universe-hd.png"
   },
   {
     "id": "ocean-storm",
     "label": "Univers (galaxies)",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      1,
-      0
-    ]
+    "src": "/immersive/galaxies-hd.png",
+    "thumbnail": "/immersive/galaxies-hd.png"
   },
   {
     "id": "batcave",
     "label": "Batcave",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      2,
-      0
-    ]
+    "src": "/immersive/batcave-hd.png",
+    "thumbnail": "/immersive/batcave-hd.png"
   },
   {
     "id": "secret-lab",
     "label": "Centre de commandement",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      2,
-      1
-    ]
+    "src": "/immersive/command-center-hd.png",
+    "thumbnail": "/immersive/command-center-hd.png"
   },
   {
     "id": "royal-palace",
     "label": "Salle du trône",
-    "src": "/immersive/scene-collage.png",
-    "crop": [
-      2,
-      2
-    ]
+    "src": "/immersive/royal-palace-hd.png",
+    "thumbnail": "/immersive/royal-palace-hd.png"
   },
   {
     "id": "tiny-amazon",
