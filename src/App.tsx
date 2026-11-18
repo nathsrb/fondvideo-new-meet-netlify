@@ -1060,28 +1060,14 @@ function App() {
             const candidate = new Image();
             candidate.crossOrigin = 'anonymous';
             candidate.onload = () => {
-              // Seven backgrounds are separate regions of one locally hosted
-              // scene sheet. Crop before giving the image to the camera mixer.
-              // A user's own imported image always takes priority.
-              const crop = 'crop' in preset && Array.isArray(preset.crop) ? preset.crop : null;
-              if (!crop || sceneOverrides[preset.id]) return resolve(candidate);
-              const [row, col] = crop;
-              const tileWidth = candidate.naturalWidth / 4;
-              const tileHeight = candidate.naturalHeight / 3;
-              const cropCanvas = document.createElement('canvas');
-              cropCanvas.width = 1280;
-              cropCanvas.height = 720;
-              const ctx = cropCanvas.getContext('2d');
-              if (!ctx) return reject(new Error('Impossible de préparer ce décor.'));
-              ctx.imageSmoothingEnabled = true;
-              ctx.imageSmoothingQuality = 'high';
-              // Omit the sheet's bottom caption band.
-              ctx.drawImage(candidate, col * tileWidth + 3, row * tileHeight + 3,
-                tileWidth - 6, tileHeight * 0.75, 0, 0, 1280, 720);
-              const scene = new Image();
-              scene.onload = () => resolve(scene);
-              scene.onerror = () => reject(new Error('Impossible de décoder ce décor.'));
-              scene.src = cropCanvas.toDataURL('image/png'); // no additional JPEG softness
+              // Use the full-resolution first-party asset directly.
+              // Do not crop or upscale a collage: the camera mixer will
+              // cover the canvas at the selected meeting resolution.
+              if (candidate.naturalWidth < 1 || candidate.naturalHeight < 1) {
+                reject(new Error('Le décor est vide.'));
+              } else {
+                resolve(candidate);
+              }
             };
             candidate.onerror = () => reject(new Error('La photo de ce décor est indisponible.'));
             candidate.src = sceneOverrides[preset.id] || preset.src;
@@ -2666,14 +2652,10 @@ function App() {
                 <button key={item.id} type="button" className={'scelyo-photo-bg'+(bg === item.id ? ' selected' : '')}
                   onClick={() => void changeCamera(item.id, format, quality)} disabled={effectBusy}
                   aria-pressed={bg === item.id} title={'Décor immersif : '+item.label}>
-                  {item.crop && !sceneOverrides[item.id]
-                    ? <span className="scelyo-scene-collage-thumbnail" aria-hidden="true"
-                        style={{
-                          backgroundImage: `url("${item.src}")`,
-                          backgroundSize: '400% 390%',
-                          backgroundPosition: `${item.crop[1] / 3 * 100}% ${item.crop[0] / 2 * 100}%`,
-                        }}/>
-                    : <img src={sceneOverrides[item.id] || item.thumbnail || item.src} alt="" loading="lazy" decoding="async" />}
+                  <img src={sceneOverrides[item.id] || item.thumbnail || item.src}
+                    alt="" loading="lazy" decoding="async"
+                    onError={event => { event.currentTarget.style.opacity = '0.15'; }}
+                  />
                   <span>{item.label}</span>
                 </button>
               ))}
