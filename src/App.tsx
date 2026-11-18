@@ -226,6 +226,7 @@ function App() {
     configuredGoogleClientId || localStorage.getItem('nexa_google_client') || ''
   );
   const [driveConnected, setDriveConnected] = useState(false);
+  const [driveConnecting, setDriveConnecting] = useState(false);
   const [driveEmail, setDriveEmail] = useState('');
   const [driveStatus, setDriveStatus] = useState<'idle' | 'uploading' | 'saved' | 'failed'>('idle');
   const [driveAdvanced, setDriveAdvanced] = useState(false);
@@ -319,6 +320,10 @@ function App() {
   const micTestUrlRef = useRef('');
   const stopCaptureRef = useRef<(() => void) | null>(null);
   const tokenRef = useRef('');
+  const driveOAuthTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (driveOAuthTimerRef.current) clearTimeout(driveOAuthTimerRef.current);
+  }, []);
   const readyRef = useRef<Recording | null>(null);
   const alternateRef = useRef<Recording | null>(null);
   const handleRef = useRef<(msg: any) => void>(() => {});
@@ -2063,46 +2068,83 @@ function App() {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
   }
 
+  function finishDriveConnection() {
+    if (driveOAuthTimerRef.current) clearTimeout(driveOAuthTimerRef.current);
+    driveOAuthTimerRef.current = null;
+    setDriveConnecting(false);
+  }
+
   function connectDrive() {
-    if (!clientId.trim().match(/\.apps\.googleusercontent\.com$/)) {
+    if (driveConnecting) return;
+    if (!clientId.trim().match(/\\.apps\\.googleusercontent\\.com$/)) {
       setDriveAdvanced(true);
-      toast('Google Drive n’est pas encore configuré pour cette application. Une configuration initiale est nécessaire.');
+      toast('La connexion Google Drive n’est pas configurée. Vérifie l’identifiant OAuth de cette prévisualisation.');
       return;
     }
-    const google=(window as any).google;
-    if(!google?.accounts?.oauth2) {
-      toast('Connexion Google momentanément indisponible. Recharge la page puis réessaie.');
+    const google = (window as any).google;
+    if (!google?.accounts?.oauth2) {
+      toast('Google n’a pas terminé son chargement. Vérifie ta connexion puis réessaie.');
       return;
     }
+    setDriveConnecting(true);
+    // Every Netlify deploy-preview URL has a distinct JavaScript origin.
+    // Google Cloud must authorize the exact current origin, not just preview V15.
+    driveOAuthTimerRef.current = setTimeout(() => {
+      setDriveConnecting(false);
+      setDriveAdvanced(true);
+      toast('Google ne répond pas. Vérifie les fenêtres pop-up et l’origine OAuth autorisée : ' + location.origin);
+    }, 60000);
     try {
-      const oauthClient=google.accounts.oauth2.initTokenClient({
-        client_id:clientId.trim(),
-        scope:'https://www.googleapis.com/auth/drive.file',
-        callback:async (response:any)=>{
-          if(response.error || !response.access_token){
-            toast('Connexion Google annulée ou refusée : '+(response.error||'autorisation manquante'));
+      const oauthClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId.trim(),
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async (response: { access_token?: string; error?: string; expires_in?: number }) => {
+          finishDriveConnection();
+          if (response.error || !response.access_token) {
+            const code = response.error || 'autorisation manquante';
+            if (/origin_mismatch|unauthorized_client|invalid_client/i.test(code)) {
+              setDriveAdvanced(true);
+              toast('Origine Google non autorisée. Ajoute cette adresse dans Google Cloud : ' + location.origin);
+            } else {
+              toast('Connexion Google non terminée : ' + code);
+            }
             return;
           }
-          tokenRef.current=response.access_token;
+          tokenRef.current = response.access_token;
           setDriveConnected(true);
           setDriveStatus('idle');
           setDriveEmail('');
           try {
-            const about=await driveFetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress,displayName)');
-            setDriveEmail(about.user?.emailAddress||'');
+            const about = await driveFetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress,displayName)');
+            setDriveEmail(about.user?.emailAddress || '');
           } catch {
-            // An unreadable account profile does not block the Drive upload.
+            // The account name is optional; the token still permits manual uploads.
           }
-          toast('Google Drive connecté. Pour envoyer une capture, clique sur « Envoyer sur Drive » après l’enregistrement.');
-        }
+          toast('Google Drive connecté. Clique sur « Envoyer sur Drive » pour sauvegarder la vidéo choisie.');
+        },
+        error_callback: (error: { type?: string }) => {
+          finishDriveConnection();
+          if (error.type === 'popup_closed') {
+            toast('Connexion Google annulée.');
+          } else if (error.type === 'popup_failed_to_open') {
+            toast('Ton navigateur a bloqué la fenêtre Google. Autorise les fenêtres pop-up pour SCEYLLIO.');
+          } else {
+            setDriveAdvanced(true);
+            toast('Google n’a pas pu ouvrir la connexion. Vérifie l’origine autorisée : ' + location.origin);
+          }
+        },
       });
-      oauthClient.requestAccessToken({prompt:'consent'});
-    } catch(e) {
-      toast('Connexion impossible : '+readableError(e));
+      // Empty prompt reuses consent already granted on V15, instead of
+      // forcing the full consent screen on every new connection.
+      oauthClient.requestAccessToken({ prompt: '' });
+    } catch (error) {
+      finishDriveConnection();
+      toast('Connexion Google impossible : ' + readableError(error));
     }
   }
 
   function disconnectDrive() {
+    finishDriveConnection();
     tokenRef.current='';
     setDriveConnected(false);
     setDriveEmail('');
@@ -2120,6 +2162,12 @@ function App() {
       },
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        tokenRef.current = '';
+        setDriveConnected(false);
+        setShowSettings(true);
+        throw new Error('Session Google expirée. Reconnecte ton compte Drive pour continuer.');
+      }
       const detail = await response.text().catch(() => '');
       throw new Error(
         'Drive (' + response.status + ') : ' + detail.slice(0, 180)
@@ -3176,14 +3224,14 @@ function App() {
               </div>
             ) : (
               <>
-                <button className="btn primary wide google-connect-btn" onClick={connectDrive}>
+                <button className="btn primary wide google-connect-btn" onClick={connectDrive} disabled={driveConnecting} aria-busy={driveConnecting}>
                   <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true">
                     <path fill="#EA4335" d="M24 9.5c3.5 0 6.7 1.2 9.2 3.5l6.8-6.8C35.9 2.2 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.9 6.1C12.4 13.5 17.8 9.5 24 9.5z"/>
                     <path fill="#4285F4" d="M46.9 24.5c0-1.6-.2-3.1-.4-4.5H24v9h12.8c-.6 2.9-2.2 5.4-4.7 7.1l7.3 5.7c4.3-4 7.5-9.9 7.5-17.3z"/>
                     <path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.7 24c0-1.6.3-3.1.8-4.6l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.9-6.1z"/>
                     <path fill="#34A853" d="M24 48c6.4 0 11.8-2.1 15.7-5.8l-7.3-5.7c-2 1.3-4.8 2-8.4 2-6.2 0-11.6-4-13.5-9.5l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
                   </svg>
-                  Se connecter avec Google
+                  {driveConnecting ? 'Connexion Google en cours…' : 'Se connecter avec Google'}
                 </button>
                 <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCEYLLIO. Aucun mot de passe n’est demandé par SCEYLLIO.</p>
                 {!clientId.trim().endsWith('.apps.googleusercontent.com') && (
@@ -3203,6 +3251,8 @@ function App() {
                 <li>Crée un client OAuth 2.0 « Application Web » avec cette origine JavaScript autorisée :</li>
               </ol>
               <code className="drive-origin">{location.origin}</code>
+              <button type="button" className="btn subtle" onClick={() => { void navigator.clipboard.writeText(location.origin).then(() => toast('Origine OAuth copiée.')).catch(() => toast('Sélectionne et copie l’adresse ci-dessus.')); }}>Copier cette origine</button>
+              {location.hostname.startsWith('deploy-preview-') && <p className="settings-hint">Si Google affiche « Erreur 400 : origin_mismatch », ajoute exactement cette adresse dans « Origines JavaScript autorisées » du client OAuth Google Cloud. L’autorisation de la V15 ne couvre pas automatiquement cette prévisualisation.</p>}
               <label className="field-label" htmlFor="client-id">Identifiant public OAuth Google</label>
               <input
                 id="client-id"
