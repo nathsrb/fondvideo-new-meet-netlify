@@ -157,3 +157,16 @@
   background: #2d3448;
 }
 .scelyo-photo-bg span { padding: 6px 8px 7px; font-size: 11px; font-weight: 700; }
+
+
+.scelyo-photo-background-heading {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  padding: 8px 3px 1px;
+  min-width: 100%;
+}
+.scelyo-photo-background-heading strong { font-size: 13px; color:#f8f8ff; }
+.scelyo-photo-background-heading small { font-size: 11px; color:#adb4ca; }
+.scelyo-immersive-gallery .scelyo-photo-bg { flex-basis:155px; }
+.scelyo-immersive-gallery .scelyo-photo-bg img { height:88px; }
