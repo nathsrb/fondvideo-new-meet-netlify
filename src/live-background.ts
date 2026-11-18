@@ -88,6 +88,54 @@ export const immersiveBackgrounds = [
     "label": "Lodge Amazone",
     "src": "/immersive/tiny-amazon-hd.png",
     "thumbnail": "/immersive/tiny-amazon-hd.png"
+  },
+  {
+    "id": "grotte-secrete-hd",
+    "label": "Grotte secrète",
+    "src": "/immersive/grotte-secrete.webp",
+    "thumbnail": "/immersive/grotte-secrete.webp"
+  },
+  {
+    "id": "station-orbitale-hd",
+    "label": "Station orbitale",
+    "src": "/immersive/station-orbitale.webp",
+    "thumbnail": "/immersive/station-orbitale.webp"
+  },
+  {
+    "id": "savane-hd",
+    "label": "Savane dorée",
+    "src": "/immersive/savane.webp",
+    "thumbnail": "/immersive/savane.webp"
+  },
+  {
+    "id": "batcave-noire-hd",
+    "label": "Batcave noire",
+    "src": "/immersive/batcave.webp",
+    "thumbnail": "/immersive/batcave.webp"
+  },
+  {
+    "id": "jungle-panthere-hd",
+    "label": "Jungle panthère",
+    "src": "/immersive/jungle-panthere.webp",
+    "thumbnail": "/immersive/jungle-panthere.webp"
+  },
+  {
+    "id": "bureau-jungle-hd",
+    "label": "Bureau jungle",
+    "src": "/immersive/bureau-jungle.webp",
+    "thumbnail": "/immersive/bureau-jungle.webp"
+  },
+  {
+    "id": "base-martienne-hd",
+    "label": "Base martienne",
+    "src": "/immersive/base-martienne.webp",
+    "thumbnail": "/immersive/base-martienne.webp"
+  },
+  {
+    "id": "salon-dubai-hd",
+    "label": "Salon Dubaï",
+    "src": "/immersive/salon-dubai.webp",
+    "thumbnail": "/immersive/salon-dubai.webp"
   }
 ];
 export const backgrounds = [

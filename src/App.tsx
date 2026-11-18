@@ -2634,7 +2634,7 @@ function App() {
                 </button>
               ))}
             </div>
-            <div className="scelyo-photo-background-heading"><strong>Univers immersifs</strong><small>12 décors pour changer d’horizon</small></div>
+            <div className="scelyo-photo-background-heading"><strong>Univers immersifs</strong><small>20 décors HD pour changer d’horizon</small></div>
             <div className="scelyo-immersive-import">
               <span>Décors personnels : sélectionne un univers, puis importe son image haute qualité.</span>
               <label className="upload">
