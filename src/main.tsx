@@ -7,6 +7,7 @@ import './scelyo.css';
 import './scelyo-music.css';
 import './scelyo-clearvoice.css';
 import './scelyo-quality-fixes.css';
+import './scelyo-gold-universe.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
