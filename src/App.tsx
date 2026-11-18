@@ -1076,7 +1076,7 @@ function App() {
               const scene = new Image();
               scene.onload = () => resolve(scene);
               scene.onerror = () => reject(new Error('Impossible de décoder ce décor.'));
-              scene.src = cropCanvas.toDataURL('image/jpeg', 0.9);
+              scene.src = cropCanvas.toDataURL('image/png'); // no additional JPEG softness
             };
             candidate.onerror = () => reject(new Error('La photo de ce décor est indisponible.'));
             candidate.src = sceneOverrides[preset.id] || preset.src;
