@@ -1,0 +1,37 @@
+name: SCELYO preview — TypeScript and Vite build
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'fondvideo.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/scelyo-build.yml'
+  workflow_dispatch:
+jobs:
+  preview-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Build SCELYO preview
+        run: npm run build
+      - name: Prevent Live fallback to Netlify polling
+        run: |
+          if grep -q "from './netlify-transport'" src/App.tsx; then
+            echo "SCELYO Live must not import the Netlify polling adapter"
+            exit 1
+          fi
+          if grep -Eq "fetch\\(|/api/ws/events" src/realtime-transport.ts; then
+            echo "SCELYO Live realtime adapter must not fetch Netlify APIs"
+            exit 1
+          fi

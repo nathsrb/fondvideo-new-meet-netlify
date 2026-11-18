@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCELYO — Brand Board</title><meta name="theme-color" content="#090B12">
+<link rel="icon" type="image/svg+xml" href="./scelyo-mark.svg">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{font-family:"DM Sans",Arial,sans-serif;background:#090B12;color:#F5F7FF;font-synthesis:none}*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 76% 8%,#3d2b7138,transparent 33%),#090B12}
+a{color:inherit;text-decoration:none}
+header{padding:20px clamp(20px,6vw,90px);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff17;position:sticky;top:0;background:#090b12ec;backdrop-filter:blur(18px);z-index:10}
+.logo{display:flex;align-items:center;gap:12px;font:800 22px Manrope,sans-serif;letter-spacing:-.055em}.logo img{width:39px;height:39px}
+header>a:last-child{border:1px solid #8479ae7a;color:#d9cdff;border-radius:11px;padding:11px 14px;font-size:12px;font-weight:800}
+main{max-width:1350px;margin:auto;padding:0 clamp(20px,6vw,90px) 90px}
+.eyebrow{font-size:10px;font-weight:800;letter-spacing:.2em;color:#baabff}
+.hero{min-height:550px;display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:24px;padding:60px 0 50px;border-bottom:1px solid #ffffff18}
+h1,h2,h3,p{margin-top:0}h1{font:800 clamp(53px,7vw,95px)/1.02 Manrope,sans-serif;letter-spacing:-.075em;margin:20px 0}h1 em{font-style:normal;background:linear-gradient(100deg,#d4b1ff,#8b7cff 48%,#5bc6ff);background-clip:text;color:transparent}
+.hero p{max-width:540px;color:#AAB4CE;line-height:1.85;font-size:15px}
+.tag{display:inline-flex;padding:9px 13px;border:1px solid #8b7cff55;background:#8b7cff17;border-radius:50px;font-size:11px;font-weight:800;color:#cabfff}
+.logo-stage{height:350px;border:1px solid #a99af75b;border-radius:26px;background:radial-gradient(circle at 50% 55%,#5140a4a9,transparent 52%),linear-gradient(120deg,#171b36,#0c1424);display:grid;place-items:center;position:relative;overflow:hidden}
+.logo-stage:before,.logo-stage:after{content:"";position:absolute;border:1px solid #a694fc59;border-radius:50%;width:410px;height:410px;transform:rotate(40deg) scaleY(.55)}
+.logo-stage:after{width:560px;height:560px;transform:rotate(-30deg) scaleY(.45);border-color:#75cfff33}
+.logo-stage img{width:150px;filter:drop-shadow(0 20px 40px #0007);position:relative;z-index:1}
+.logo-stage span{position:absolute;bottom:22px;left:25px;color:#ada7d5;letter-spacing:.15em;font-size:10px;font-weight:800}
+section{padding-top:66px}
+.section-head{display:flex;gap:20px;justify-content:space-between;align-items:end;margin-bottom:24px}h2{font:800 clamp(27px,3vw,40px) Manrope,sans-serif;letter-spacing:-.055em;margin:8px 0 0}
+.sub{color:#9aa8bf;max-width:470px;font-size:13px;line-height:1.65}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.card{border:1px solid #ffffff25;border-radius:21px;background:linear-gradient(145deg,#1b2135,#131a2a);padding:23px}
+.card small,.card .number{font-size:10px;color:#af9ffb;letter-spacing:.15em;font-weight:800}.card h3{font:800 23px Manrope,sans-serif;letter-spacing:-.04em;margin:18px 0 7px}.card p{font-size:12px;line-height:1.75;color:#9faac2;margin:0}
+.card.live{background:linear-gradient(135deg,#442877,#1a1a35)}.card.studio{background:linear-gradient(135deg,#1b4b6c,#132437)}.card.vault{background:linear-gradient(135deg,#322d4d,#1b1c32)}
+.colors{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.swatch{min-width:0}.swatch>div{height:105px;border-radius:14px;border:1px solid #ffffff23}.swatch b{font-size:11px;display:block;margin-top:12px}.swatch small{color:#8f9db5;font-size:10px}
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.type-sample{padding:30px;border-radius:20px;background:#161e30;border:1px solid #ffffff21}
+.type-sample h3{font-size:48px;letter-spacing:-.06em;margin:20px 0 10px}.type-sample p{color:#A4B1C8;font-size:13px;line-height:1.6}
+.token-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}.button{display:inline-flex;padding:14px 18px;border-radius:12px;font-size:12px;font-weight:800;border:1px solid #ffffff24}.button.primary{color:#15172e;background:linear-gradient(115deg,#c28eff,#8b7cff,#5bc6ff);border:0}.button.secondary{background:#202942}.button.ghost{background:transparent}
+.input-preview{min-width:210px;background:#101827;border:1px solid #6d7295;color:#AAB6CE;padding:14px;border-radius:12px;font-size:12px}
+.rules{display:grid;grid-template-columns:1fr 1fr;gap:14px}.rule{padding:23px;background:#141b2d;border:1px solid #ffffff20;border-radius:18px}.rule strong{font-size:14px}.rule ul{padding-left:20px;font-size:12px;color:#a7b3ca;line-height:2}
+footer{border-top:1px solid #ffffff1b;margin-top:80px;padding:30px 0;color:#8b98b0;font-size:12px;display:flex;justify-content:space-between;gap:15px}
+@media(max-width:800px){.hero{grid-template-columns:1fr;min-height:auto;padding:42px 0}.logo-stage{height:250px}.grid{grid-template-columns:1fr}.colors{grid-template-columns:repeat(3,minmax(0,1fr))}.type-grid,.rules{grid-template-columns:1fr}.section-head{display:block}section{padding-top:49px}}
+@media(max-width:410px){.colors{grid-template-columns:repeat(2,minmax(0,1fr))}.type-sample h3{font-size:37px}header{padding:13px 18px}.logo{font-size:18px}}
+</style></head>
+<body>
+<header><a class="logo" href="./index.html#/meet"><img src="./scelyo-mark.svg" alt="">SCELYO</a><a href="./index.html#/meet">Ouvrir l'application ↗</a></header>
+<main>
+<div class="hero">
+ <div><span class="tag">IDENTITÉ DE MARQUE · V1.0</span><h1>Le live devient<br><em>création.</em></h1><p>SCELYO est l’espace où l’on se rencontre, se met en scène et capture ses idées. Une identité audiovisuelle premium, expressive et accessible — sans sacrifier la simplicité.</p><span class="eyebrow">CRÉE. RÉUNIS. CAPTURE.</span></div>
+ <div class="logo-stage"><img src="./scelyo-mark.svg" alt="Monogramme SCELYO"><span>LE CADRE + LE MOUVEMENT + LA SCÈNE</span></div>
+</div>
+<section><div class="section-head"><div><span class="eyebrow">01 / POSITIONNEMENT</span><h2>Un univers. Trois espaces.</h2></div><p class="sub">Une architecture claire qui couvre les fonctions actuelles, sans prétendre proposer des fonctionnalités payantes ou des statistiques fictives.</p></div><div class="grid">
+ <article class="card live"><small>01 / SE CONNECTER</small><h3>SCELYO Live</h3><p>Sessions vidéo, échanges, partage d’écran, mise en scène de la caméra et captures.</p></article>
+ <article class="card studio"><small>02 / CRÉER</small><h3>SCELYO Studio</h3><p>Import vidéo, décors, formats, ajustements, sous-titres et export.</p></article>
+ <article class="card vault"><small>03 / RETROUVER</small><h3>SCELYO Vault</h3><p>Bibliothèque des enregistrements locaux, avec consultation, partage et téléchargement.</p></article>
+</div></section>
+<section><div class="section-head"><div><span class="eyebrow">02 / COULEURS</span><h2>Obsidienne & lumière.</h2></div><p class="sub">Le violet incarne la créativité ; le cyan marque la clarté et le mouvement. Les fonds sobres laissent la vidéo au centre.</p></div>
+<div class="colors">
+ <div class="swatch"><div style="background:#090B12"></div><b>Obsidian</b><small>#090B12</small></div>
+ <div class="swatch"><div style="background:#111827"></div><b>Midnight</b><small>#111827</small></div>
+ <div class="swatch"><div style="background:#8B7CFF"></div><b>Scelyo Violet</b><small>#8B7CFF</small></div>
+ <div class="swatch"><div style="background:#5BC6FF"></div><b>Aurora Blue</b><small>#5BC6FF</small></div>
+ <div class="swatch"><div style="background:#F5F7FF"></div><b>Soft White</b><small>#F5F7FF</small></div>
+ <div class="swatch"><div style="background:#9CA8BE"></div><b>Mist Gray</b><small>#9CA8BE</small></div>
+</div></section>
+<section><div class="section-head"><div><span class="eyebrow">03 / TYPOGRAPHIE</span><h2>Précise, mais vivante.</h2></div></div><div class="type-grid">
+ <div class="type-sample"><small class="eyebrow">TITRES / MANROPE 800</small><h3 style="font-family:Manrope">Crée sans limites.</h3><p>Une géométrie forte et des titres resserrés pour une présence distinctive.</p></div>
+ <div class="type-sample"><small class="eyebrow">INTERFACE / DM SANS 500–700</small><h3 style="font-family:'DM Sans'">Ta scène t’attend.</h3><p>Une lecture confortable pour les commandes, les formulaires et les détails techniques.</p></div>
+</div></section>
+<section><div class="section-head"><div><span class="eyebrow">04 / COMPOSANTS</span><h2>Une interface qui accompagne.</h2></div><p class="sub">Contrôles à fort contraste, grandes zones tactiles, états visibles et mouvements subtils.</p></div>
+<div class="card"><div class="token-row"><span class="button primary">Lancer une session ↗</span><span class="button secondary">Ouvrir le Studio</span><span class="button ghost">SCELYO Vault</span><span class="input-preview">Code de session · 12 caractères</span></div></div></section>
+<section><div class="section-head"><div><span class="eyebrow">05 / TON DE MARQUE</span><h2>Simple. Créatif. Direct.</h2></div></div><div class="rules">
+ <div class="rule"><strong>Nous privilégions</strong><ul><li>« Lancer une session »</li><li>« Mets ta vidéo en scène »</li><li>« Retrouve tes captures »</li><li>Des messages clairs sur le stockage local</li></ul></div>
+ <div class="rule"><strong>Nous évitons</strong><ul><li>Les promesses d’IA non disponibles</li><li>Les statistiques ou offres inventées</li><li>Les effets qui compliquent la lecture</li><li>Les éléments qui copient Google Meet ou Zoom</li></ul></div>
+</div></section>
+<footer><span>SCELYO — Charte créative, version prévisualisation</span><span>Live · Studio · Vault</span></footer>
+</main></body></html>

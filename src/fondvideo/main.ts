@@ -14,6 +14,12 @@ import {
 } from 'mediabunny';
 import { registerAacEncoder } from '@mediabunny/aac-encoder';
 import { createCaptionStudio } from './caption-studio';
+import { createStudioAudioProcessor } from './audio-enhancement';
+import { createVisualTextEditor } from './visual-text';
+import {
+  listStudioProjects, saveStudioProject, saveStudioVideo, getStudioVideo,
+  saveStudioBackground, getStudioBackground, deleteStudioProject,
+} from './project-storage';
 
 const $ = id => document.getElementById(id);
 const video = $('video');
@@ -52,10 +58,192 @@ const state = {
   exportObjectUrl: '',
   aacFallbackRegistered: false,
   exportProfile: 'balanced',
+  audioNoiseReduction: true,
+  audioVoiceEnhancement: true,
+  audioProfile: 'balanced',
   maskWorkA: null,
   maskWorkB: null,
   maskRefined: null,
 };
+const textEditor = createVisualTextEditor({
+  stage: $('stage'),
+  canvas,
+  getTime: () => state.demo ? 1.5 : video.currentTime,
+  getDuration: () => state.duration,
+  getCaption: () => captions,
+  redraw: () => draw(),
+  pause: () => { video.pause(); $('play').textContent = '▶'; },
+});
+
+let activeProjectId = null;
+let mediaSavedLocally = false;
+let projectRestoreBusy = false;
+let projectSaving = false;
+let projectSaveQueued = false;
+let lastProjectSnapshot = '';
+
+function projectSaveMessage(message, error = false) {
+  const element = $('studioSaveStatus');
+  if (element) {
+    element.textContent = message;
+    element.style.color = error ? '#ffb8af' : '#9bd8bc';
+  }
+}
+function readStudioSettings() {
+  const controls = ['softness', 'smoothing', 'antiHalo', 'holeRepair', 'stability'];
+  return {
+    bg: state.bg, format: state.format, crop: state.crop,
+    exportSize: state.exportSize, exportProfile: state.exportProfile,
+    audioNoiseReduction: state.audioNoiseReduction,
+    audioVoiceEnhancement: state.audioVoiceEnhancement, audioProfile: state.audioProfile,
+    controls: Object.fromEntries(controls.map(id => [id, $(id)?.value])),
+  };
+}
+async function saveCurrentProject(force = false) {
+  if (!activeProjectId || projectRestoreBusy || !state.file || state.demo) return true;
+  const name = $('studioProjectName').value.trim().slice(0, 90)
+    || state.file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
+  const project = {
+    id: activeProjectId, name, videoName: state.file.name,
+    videoSize: state.file.size, videoStored: mediaSavedLocally, updatedAt: Date.now(),
+    settings: readStudioSettings(),
+    captions: captions.exportState(),
+    textLayers: textEditor.exportState(),
+  };
+  const signature = JSON.stringify([project.name, project.settings, project.captions, project.textLayers]);
+  if (!force && signature === lastProjectSnapshot) return true;
+  if (projectSaving) { projectSaveQueued = true; return false; }
+  projectSaving = true;
+  projectSaveMessage('Enregistrement local…');
+  try {
+    await saveStudioProject(project);
+    lastProjectSnapshot = signature;
+    projectSaveMessage(mediaSavedLocally
+      ? '✓ Projet enregistré sur cet appareil · ' + new Date().toLocaleTimeString('fr-FR')
+      : '✓ Modifications sauvegardées · vidéo à relier pour rouvrir ce projet.', !mediaSavedLocally);
+    return true;
+  } catch (error) {
+    console.error('Studio project save:', error);
+    projectSaveMessage('Sauvegarde impossible : espace local insuffisant ou navigateur privé.', true);
+    return false;
+  } finally {
+    projectSaving = false;
+    if (projectSaveQueued) {
+      projectSaveQueued = false;
+      void saveCurrentProject();
+    }
+  }
+}
+async function listSavedProjects() {
+  const list = $('savedProjectsList');
+  if (!list) return;
+  list.replaceChildren();
+  let projects = [];
+  try { projects = await listStudioProjects(); }
+  catch (error) {
+    $('savedProjectsEmpty').textContent = 'Stockage local indisponible : ' + (error.message || error);
+    return;
+  }
+  $('savedProjectsEmpty').hidden = projects.length > 0;
+  for (const project of projects) {
+    const item = document.createElement('article');
+    item.className = 'scelyo-saved-item';
+    const name = document.createElement('strong'); name.textContent = project.name || 'Mon projet';
+    const meta = document.createElement('small');
+    meta.textContent = (project.captions?.words?.length || 0) + ' mots de sous-titres · ' +
+      new Date(project.updatedAt || Date.now()).toLocaleString('fr-FR');
+    const actions = document.createElement('div'); actions.className = 'scelyo-saved-actions';
+    const open = document.createElement('button'); open.type = 'button'; open.className = 'primary'; open.textContent = 'Reprendre l’édition';
+    if (project.videoStored === false) open.textContent = 'Reprendre (vidéo à relier)';
+    open.onclick = async () => {
+      open.disabled = true; open.textContent = 'Ouverture…';
+      try {
+        let file = await getStudioVideo(project.id);
+        let reattachVideo = false;
+        if (!file) {
+          reattachVideo = true;
+          projectSaveMessage('Vidéo à relier : sélectionne le fichier source.');
+          file = await new Promise((resolve, reject) => {
+            const picker = document.createElement('input');
+            picker.type = 'file'; picker.accept = 'video/*'; picker.style.display = 'none';
+            document.body.append(picker);
+            picker.onchange = () => {
+              const selected = picker.files?.[0] || null;
+              picker.remove();
+              if (!selected) { reject(new Error('Vidéo non sélectionnée.')); return; }
+              if (project.videoSize && project.videoSize !== selected.size) {
+                reject(new Error('La taille ne correspond pas à la vidéo source de ce projet.'));
+                return;
+              }
+              resolve(selected);
+            };
+            picker.click();
+          });
+        }
+        const videoFile = file instanceof File
+          ? file : new File([file], project.videoName || 'video.mp4', { type: file.type || 'video/mp4' });
+        await loadFile(videoFile, { project, reattachVideo });
+      } catch (error) {
+        alert('Impossible de rouvrir ce projet : ' + (error.message || error));
+        open.disabled = false; open.textContent = 'Reprendre l’édition';
+      }
+    };
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'ghost'; remove.textContent = 'Supprimer';
+    remove.setAttribute('aria-label', 'Supprimer le projet ' + (project.name || 'Mon projet'));
+    remove.onclick = async () => {
+      if (!confirm('Supprimer ce projet et sa vidéo sauvegardée sur cet appareil ?')) return;
+      try { await deleteStudioProject(project.id); await listSavedProjects(); }
+      catch (error) { alert('Suppression impossible : ' + (error.message || error)); }
+    };
+    actions.append(open, remove);
+    item.append(name, meta, actions);
+    list.append(item);
+  }
+}
+async function restoreStudioProject(project) {
+  const saved = project?.settings || {};
+  for (const key of ['bg', 'format', 'crop', 'exportSize', 'exportProfile', 'audioProfile']) {
+    if (typeof saved[key] === 'string') state[key] = saved[key];
+  }
+  state.audioNoiseReduction = saved.audioNoiseReduction !== false;
+  state.audioVoiceEnhancement = saved.audioVoiceEnhancement !== false;
+  $('audioNoiseReduction').checked = state.audioNoiseReduction;
+  $('audioVoiceEnhancement').checked = state.audioVoiceEnhancement;
+  $('audioProfile').value = state.audioProfile;
+  for (const [id, value] of Object.entries(saved.controls || {})) {
+    if ($(id) && value !== undefined && value !== null) $(id).value = String(value);
+  }
+  if (state.bg === 'custom') {
+    const background = await getStudioBackground(project.id).catch(() => null);
+    if (background) {
+      state.customUrl = URL.createObjectURL(background);
+      const image = new Image();
+      image.src = state.customUrl;
+      await image.decode();
+      state.customImage = image;
+    } else state.bg = 'original';
+  }
+  document.querySelectorAll('.bg').forEach(button =>
+    button.classList.toggle('selected', button.dataset.bg === state.bg));
+  document.querySelectorAll('.fmt').forEach(button =>
+    button.classList.toggle('selected', button.dataset.format === state.format));
+  document.querySelectorAll('.size').forEach(button =>
+    button.classList.toggle('selected', button.dataset.size === state.exportSize));
+  document.querySelectorAll('.profile').forEach(button =>
+    button.classList.toggle('selected', button.dataset.profile === state.exportProfile));
+  $('fit').classList.toggle('selected', state.crop === 'fit');
+  $('fill').classList.toggle('selected', state.crop === 'fill');
+  captions.restoreState(project.captions);
+  textEditor.restoreState(project.textLayers);
+  resizeCanvas();
+  if (state.bg !== 'original') void initSegmenter().then(() => draw()).catch(() => {});
+  else drawOriginal();
+}
+
+function renderOverlays(ctx, time, width, height) {
+  captions.render(ctx, time, width, height);
+  textEditor.render(ctx, time, width, height);
+}
 const show = (id, yes = true) => $(id).classList.toggle('hidden', !yes);
 const fmtTime = s =>
   Number.isFinite(s)
@@ -265,7 +453,7 @@ function drawOriginal(target = canvas) {
   c.clearRect(0, 0, target.width, target.height);
   if (state.demo) {
     drawDemo(target);
-    captions.render(c, 1.5, target.width, target.height);
+    renderOverlays(c, 1.5, target.width, target.height);
     return;
   }
   if (!state.file || video.readyState < 2) return;
@@ -273,7 +461,7 @@ function drawOriginal(target = canvas) {
   c.fillRect(0, 0, target.width, target.height);
   const r = rect(target.width, target.height);
   c.drawImage(video, r.x, r.y, r.w, r.h);
-  captions.render(c, video.currentTime, target.width, target.height);
+  renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
 async function initSegmenter() {
@@ -402,7 +590,7 @@ function compositeWithMask(target, mask) {
   s.filter = 'none';
   s.globalCompositeOperation = 'source-over';
   c.drawImage(subject, 0, 0);
-  captions.render(c, video.currentTime, target.width, target.height);
+  renderOverlays(c, video.currentTime, target.width, target.height);
 }
 
 async function draw(target = canvas) {
@@ -422,6 +610,7 @@ async function draw(target = canvas) {
     compositeWithMask(target, mask);
   } finally {
     state.rendering = false;
+    if (target === canvas) textEditor.updateSurface();
   }
 }
 function frameLoop() {
@@ -433,8 +622,20 @@ function frameLoop() {
   });
 }
 
-async function loadFile(file) {
+async function loadFile(file, options = {}) {
+  const savedPrevious = await saveCurrentProject(true);
+  if (savedPrevious === false) {
+    alert('Les dernières modifications ne sont pas encore enregistrées. Réessaie avant de changer de projet.');
+    return;
+  }
   reset(false);
+  activeProjectId = options.project?.id || crypto.randomUUID();
+  projectRestoreBusy = Boolean(options.project);
+  mediaSavedLocally = Boolean(options.project?.videoStored);
+  lastProjectSnapshot = '';
+  $('studioProjectName').value = options.project?.name ||
+    file.name.replace(/\.[^.]+$/, '').slice(0, 90) || 'Mon projet';
+  projectSaveMessage(options.project ? 'Restauration de ton projet…' : 'Préparation de la sauvegarde locale…');
   state.file = file;
   state.url = URL.createObjectURL(file);
   video.src = state.url;
@@ -443,6 +644,7 @@ async function loadFile(file) {
   show('landing', false);
   show('editor');
   show('newProject');
+  show('studioBackToProjects');
   show('overlay');
   $('overlayTitle').textContent = 'Ouverture de ta vidéo…';
   $('overlayText').textContent = 'Aucun upload cloud.';
@@ -459,6 +661,29 @@ async function loadFile(file) {
     resizeCanvas();
     if (video.readyState < 2) await wait(video, 'loadeddata');
     drawOriginal();
+    if (options.project) {
+      if (options.reattachVideo) {
+        try { await saveStudioVideo(activeProjectId, file); mediaSavedLocally = true; }
+        catch (error) { mediaSavedLocally = false; console.warn('Video reattachment not stored:', error); }
+      }
+      try {
+        await restoreStudioProject(options.project);
+        projectSaveMessage('✓ Projet restauré, sous-titres modifiables.');
+      } catch (error) {
+        console.error('Restore Studio project:', error);
+        projectSaveMessage('Restauration partielle : ' + (error.message || error), true);
+      }
+    } else {
+      try {
+        await saveStudioVideo(activeProjectId, file);
+        mediaSavedLocally = true;
+      } catch (error) {
+        mediaSavedLocally = false;
+        projectSaveMessage('Vidéo non sauvegardée : stockage local insuffisant. Exporte ton travail avant de quitter.', true);
+      }
+    }
+    projectRestoreBusy = false;
+    if (mediaSavedLocally) await saveCurrentProject(true);
     show('overlay', false);
     initSegmenter().catch(() => {});
   } catch (e) {
@@ -468,6 +693,22 @@ async function loadFile(file) {
       'Le codec de ce fichier n’est pas pris en charge par ce navigateur. Essaie Safari sur iPhone ou un MP4 H.264.';
   }
 }
+// Direct preview editing is handled by the interactive layer mounted on #visualLayer.
+$('quickAddText').addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(button=>button.classList.toggle('active',button.dataset.panel==='text'));
+  document.querySelectorAll('.panel').forEach(panel=>panel.classList.toggle('activePanel',panel.id==='text'));
+  $('textAdd').click();
+});
+
+$('audioNoiseReduction').addEventListener('change',event => {
+  state.audioNoiseReduction = event.target.checked;
+});
+$('audioVoiceEnhancement').addEventListener('change',event => {
+  state.audioVoiceEnhancement = event.target.checked;
+});
+$('audioProfile').addEventListener('change',event => {
+  state.audioProfile = event.target.value;
+});
 $('videoInput').addEventListener('change', e => {
   const f = e.target.files?.[0];
   if (f) loadFile(f);
@@ -484,10 +725,52 @@ $('demoBtn').addEventListener('click', () => {
   show('landing', false);
   show('editor');
   show('newProject');
+  show('studioBackToProjects');
+  $('studioProjectName').value = 'Mode démo';
+  projectSaveMessage('Mode démo : importe une vidéo pour enregistrer un projet.');
   resizeCanvas();
   setStatus('Mode démo', 'success');
 });
-$('newProject').addEventListener('click', () => reset(true));
+async function returnToStudioProjects() {
+  const saved = await saveCurrentProject(true);
+  if (saved === false) {
+    alert('Les modifications ne sont pas encore enregistrées. Réessaie avant de quitter le projet.');
+    return;
+  }
+  reset(true);
+  await listSavedProjects();
+}
+$('newProject').addEventListener('click', () => void returnToStudioProjects());
+$('studioBackToProjects').addEventListener('click', () => void returnToStudioProjects());
+$('refreshSavedProjects').addEventListener('click', () => void listSavedProjects());
+$('studioSaveProject').addEventListener('click', () => void saveCurrentProject(true));
+let studioAutosaveTimer = null;
+function queueStudioAutosave() {
+  if (!activeProjectId || projectRestoreBusy || !state.file || state.demo) return;
+  projectSaveMessage('Modifications en attente de sauvegarde…');
+  if (studioAutosaveTimer) clearTimeout(studioAutosaveTimer);
+  studioAutosaveTimer = setTimeout(() => {
+    studioAutosaveTimer = null;
+    void saveCurrentProject();
+  }, 900);
+}
+// Word correction, timeline adjustment, style selection and project naming
+// all trigger the same browser-only save. No Netlify request is involved.
+for (const eventName of ['input', 'change', 'click', 'pointerup']) {
+  $('editor').addEventListener(eventName, event => {
+    const target = event.target;
+    if (!target || !target.closest) return;
+    if (target.closest('#studioSaveProject, #studioBackToProjects, #newProject, #play, #timeline, #quickAddText') &&
+        eventName === 'click') return;
+    queueStudioAutosave();
+  });
+}
+window.setInterval(() => { if (!state.exporting) void saveCurrentProject(); }, 2500);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) void saveCurrentProject();
+});
+window.addEventListener('pagehide', () => { void saveCurrentProject(); });
+void listSavedProjects();
 $('play').addEventListener('click', async () => {
   if (state.demo) return;
   if (!state.file) return;
@@ -508,6 +791,7 @@ video.addEventListener('timeupdate', () => {
   );
   $('current').textContent = fmtTime(video.currentTime);
   if (video.paused) draw();
+  textEditor.updateSurface();
 });
 video.addEventListener('ended', () => ($('play').textContent = '▶'));
 $('timeline').addEventListener('input', () => {
@@ -558,6 +842,10 @@ $('imageInput').addEventListener('change', async e => {
   await img.decode();
   state.customImage = img;
   state.bg = 'custom';
+  if (activeProjectId && mediaSavedLocally) {
+    saveStudioBackground(activeProjectId, f)
+      .catch(error => projectSaveMessage('Fond personnalisé non sauvegardé : ' + (error.message || error), true));
+  }
   document.querySelectorAll('.bg').forEach(x => x.classList.remove('selected'));
   document.querySelector('label[for="imageInput"]')?.classList.add('selected');
   if (!state.demo) await initSegmenter();
@@ -829,7 +1117,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
     c.fillStyle = '#050608';
     c.fillRect(0, 0, target.width, target.height);
     sample.draw(c, r.x, r.y, r.w, r.h);
-    captions.render(
+    renderOverlays(
       c,
       Number(sample.timestamp) || 0,
       target.width,
@@ -849,7 +1137,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
   }
   if (!mask) {
     sample.draw(c, r.x, r.y, r.w, r.h);
-    captions.render(
+    renderOverlays(
       c,
       Number(sample.timestamp) || 0,
       target.width,
@@ -872,7 +1160,7 @@ function renderExportSample(sample, target, mask, staticBackground = null) {
   s.filter = 'none';
   s.globalCompositeOperation = 'source-over';
   c.drawImage(subject, 0, 0);
-  captions.render(
+  renderOverlays(
     c,
     Number(sample.timestamp) || 0,
     target.width,
@@ -965,6 +1253,17 @@ $('exportBtn').addEventListener('click', async () => {
       input,
       output,
       tracks: 'primary',
+      audio: (state.audioVoiceEnhancement || state.audioNoiseReduction)
+        ? {
+          codec: 'aac',
+          quality: new Quality('high'),
+          forceTranscode: true,
+          process: createStudioAudioProcessor({
+            noiseReduction: state.audioNoiseReduction,
+            enhanceVoice: state.audioVoiceEnhancement,
+            profile: state.audioProfile,
+          }),
+        } : undefined,
       video: {
         codec: 'avc',
         quality: new Quality('very-high'),
@@ -1121,7 +1420,7 @@ $('savePhotos').addEventListener('click', async () => {
       !navigator.canShare?.({ files: [state.exportFile] })
     )
       throw new Error('file sharing unavailable');
-    await navigator.share({ files: [state.exportFile], title: 'FondVidéo' });
+    await navigator.share({ files: [state.exportFile], title: 'SCELYO Studio' });
     $('exportInfo').textContent =
       'Dans le menu iPhone, choisis « Enregistrer la vidéo » pour l’ajouter à Photos.';
   } catch (e) {
@@ -1132,12 +1431,22 @@ $('savePhotos').addEventListener('click', async () => {
   }
 });
 function reset(landing = true) {
+  if (studioAutosaveTimer) {
+    clearTimeout(studioAutosaveTimer);
+    studioAutosaveTimer = null;
+  }
   try {
     video.pause();
   } catch {}
   if (state.url) URL.revokeObjectURL(state.url);
   if (state.customUrl) URL.revokeObjectURL(state.customUrl);
   captions.reset();
+  textEditor.reset();
+  activeProjectId = null;
+  mediaSavedLocally = false;
+  projectRestoreBusy = false;
+  lastProjectSnapshot = '';
+  $('studioProjectName').value = '';
   state.file = null;
   state.url = '';
   state.width = 0;
@@ -1158,6 +1467,7 @@ function reset(landing = true) {
   video.load();
   show('editor', false);
   show('newProject', false);
+  show('studioBackToProjects', false);
   show('download', false);
   show('savePhotos', false);
   if (landing) show('landing');
