@@ -9,8 +9,28 @@ export const backgrounds = [
   ['blue', 'Bleu'],
   ['violet', 'Violet'],
   ['warm', 'Beige'],
+  ['grotte-secrete', 'Grotte secrète'],
+  ['station-orbitale', 'Station orbitale'],
+  ['savane', 'Savane'],
+  ['batcave', 'Batcave'],
+  ['jungle-panthere', 'Jungle panthère'],
+  ['bureau-jungle', 'Bureau jungle'],
+  ['base-martienne', 'Base martienne'],
+  ['salon-dubai', 'Salon Dubaï'],
   ['custom', 'Mon image'],
 ];
+// The picker displays these source images as thumbnails; the compositor always
+// uses these same original-size WebP files rather than thumbnail bitmaps.
+export const decorBackgrounds = backgrounds.filter(([id]) =>
+  ['grotte-secrete', 'station-orbitale', 'savane', 'batcave', 'jungle-panthere', 'bureau-jungle', 'base-martienne', 'salon-dubai'].includes(id)
+);
+const decorImages = new Map<string, HTMLImageElement>();
+for (const [id] of decorBackgrounds) {
+  const image = new Image();
+  image.decoding = 'async';
+  image.src = `/backgrounds/${id}.webp`;
+  decorImages.set(id, image);
+}
 export const formats = [
   ['original', 'Original'],
   ['16:9', 'YouTube 16:9'],
@@ -69,6 +89,17 @@ function background(targetCtx, w, h, r) {
       dh = w / a;
     }
     targetCtx.drawImage(state.customImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    return;
+  }
+  const decor = decorImages.get(state.bg);
+  if (decor?.complete && decor.naturalWidth) {
+    const a = decor.naturalWidth / decor.naturalHeight;
+    const ta = w / h;
+    const dw = a > ta ? h * a : w;
+    const dh = a > ta ? h : w / a;
+    targetCtx.imageSmoothingEnabled = true;
+    targetCtx.imageSmoothingQuality = 'high';
+    targetCtx.drawImage(decor, (w - dw) / 2, (h - dh) / 2, dw, dh);
     return;
   }
   if (state.bg === 'studio') {
