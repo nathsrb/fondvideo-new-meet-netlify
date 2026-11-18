@@ -1,0 +1,156 @@
+/* SCEYLLIO STUDIO — Obsidian & Gold / complete UI layer for V15 */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
+:root {
+  color-scheme:dark; --sc-bg:#0b0c12; --sc-surface:#161820; --sc-raised:#22232a;
+  --sc-primary:#ecc36e; --sc-secondary:#d69c43; --sc-white:#faf8f2;
+  --sc-muted:#afb0bd; --sc-border:#ffffff25;
+  --fv-ink:#0d0e14; --fv-surface:#181921; --fv-raised:#26252b;
+  --fv-line:#ffffff27; --fv-white:#faf8f2; --fv-muted:#b9b7b6;
+  --fv-violet:#e9bc63; --fv-blue:#b58b50; --fv-gradient:linear-gradient(125deg,#ffdc86,#e5aa4e);
+  accent-color:#e8b65e;
+}
+html, body { background:#0d0e14!important; color:#f5f3ee; }
+body, button, input, textarea, select { font-family:'DM Sans',Arial,sans-serif; }
+::selection{background:#e5ac4c66;color:#fff}
+:focus-visible{outline:2px solid #f0c76f!important;outline-offset:3px}
+body :is(input[type="checkbox"],input[type="radio"],input[type="range"]){accent-color:#e6b45e}
+body :is(select,input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),textarea){color-scheme:dark}
+.app-shell{background:radial-gradient(ellipse at 78% 0%,#64502e21,transparent 47%),#0d0e14!important;color:#f6f3ed!important}
+.scelyo-header{background:#12131aef!important;border-bottom:1px solid #ffffff1b!important;box-shadow:0 10px 38px #0004}
+.scelyo-brand-name,.scelyo-studio-brand>span{color:#f8f5ee}
+.scelyo-brand-descriptor,.scelyo-studio-brand small{color:#efc46d!important}
+.scelyo-header-nav,.scelyo-studio-nav{background:#ffffff07!important;border-color:#ffffff1e!important}
+.scelyo-header-nav .scelyo-nav-item,.scelyo-studio-nav :is(a,span){color:#c5c3c3!important}
+.scelyo-header-nav .scelyo-nav-item.selected,.scelyo-header-nav .scelyo-nav-item:hover,
+.scelyo-studio-nav .active,.scelyo-studio-nav a:hover{background:linear-gradient(135deg,#f7cf7740,#b87f3023)!important;color:#ffdc8a!important;box-shadow:inset 0 0 0 1px #f5c96b82!important}
+.scelyo-drive-btn,.scelyo-menu-toggle{background:#242128!important;color:#f8eee1!important;border-color:#b99e6d61!important}
+.scelyo-drive-btn.connected{background:#283528!important;color:#d8efcc!important;border-color:#92b1806c!important}
+.fv-dashboard{background:transparent!important}
+.fv-dashboard .fv-sidebar{background:linear-gradient(180deg,#14151b,#0d0e14 78%)!important;border-right-color:#ffffff20}
+.fv-sidebar-label,.fv-dashboard-topline,.fv-kicker{color:#e1b769!important}
+.fv-sidebar :is(a,button){color:#bbb8b7!important}
+.fv-sidebar :is(a,button):hover{background:#f6c86c19!important;color:#f6daac!important}
+.fv-sidebar .fv-sidebar-active{background:linear-gradient(110deg,#fac45c3b,#ad7a2822)!important;color:#ffdb8b!important;border-color:#e0ac5570!important}
+.fv-sidebar-bottom{background:linear-gradient(135deg,#3b2c18,#18181d)!important;border-color:#e5b65b65!important}
+.fv-sidebar-orb,.fv-online-dot,.fv-metric-dot{background:#e4b45a!important;box-shadow:0 0 0 4px #e4b45a21!important}
+.fv-feature-hero{background:radial-gradient(ellipse at 75% 35%,#b78b3d24,transparent 50%),linear-gradient(120deg,#211c19,#151720)!important;border-color:#bba06f5c!important}
+.fv-feature-content h1 em,.hero-copy h1 em{background:linear-gradient(100deg,#fff0b5,#efbc66,#b7843d)!important;background-clip:text!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important}
+.fv-hero-primary,.fv-action-card .fv-action-bottom :is(button,a),.btn.primary,.scelyo-studio-actions .primary,body:has(#app) .primary{background:linear-gradient(125deg,#ffe394,#e4ad51)!important;color:#21180c!important;border-color:#f7d48a!important;box-shadow:0 12px 28px #be8e3c40!important}
+.fv-action-meet,.fv-action-studio,.fv-action-library{background:linear-gradient(145deg,#2e291f,#171920)!important;border-color:#d6aa5855!important}
+.fv-showcase-glow,.scelyo-art-halo{background:#ca944141!important}
+.fv-glass-frame{border-color:#d4ab637a!important;box-shadow:0 24px 70px #0009,0 0 45px #b58b2d28!important}
+.fv-action-card:focus-visible{outline-color:#ffda89!important}
+.fv-section-heading h2,.prejoin h2,.meeting h2{color:#f8f5ec}
+.eyebrow,.small-purple,.live-dot{color:#efc46b!important}
+.live-dot{background:#f5c76a!important;box-shadow:0 0 0 4px #e8b65a27!important}
+.prejoin-card,.prejoin-visual,.join-form,.preview-art,.meeting-videos,.chat-panel,
+.settings-panel,.local-recordings-panel,.scelyo-rec-setup,.scelyo-host-security,
+.drive-connect-intro,.drive-automation,.drive-account,.scelyo-music-panel{
+  background:#181920!important;border-color:#ffffff29!important;color:#f8f4eb!important;
+  box-shadow:0 20px 50px #0004!important}
+.prejoin .btn.primary,.scelyo-rec-start,.drive-header-action,.scelyo-start-recording{
+  background:linear-gradient(135deg,#ffe296,#d99e44)!important;color:#211b12!important;
+  border:1px solid #eac374!important}
+.meeting-header,.meeting-meta,.meeting-toolbar,.live-tools,.moderation-panel,
+.moderation-row,.program-actions,.record-links,.secondary-actions,.recording-item,
+.local-recordings-hint,.recordings-destinations,.chat-heading,.chat-entry{
+  border-color:#ffffff22!important;
+}
+.live-tools,.moderation-panel,.program-heading,.meeting-toolbar,.secondary-actions,
+.scelyo-music-panel,.scelyo-record-music-choice{background:#171920!important;color:#f4f0ea!important}
+.program-stage,.program-screen,.video-tile,.program-thumb{background:#101115!important;border-color:#ffffff24!important}
+.program-thumb.pinned,.scelyo-photo-bg.selected,.scelyo-scene-selected{border-color:#edbd68!important;box-shadow:0 0 0 2px #d3a54c4b!important}
+.tool-btn.active-tool,.scelyo-photo-bg:hover,.program-actions button:hover{background:#e9bc6438!important;color:#ffe4a1!important}
+.scelyo-photo-background-heading strong,.scelyo-immersive-heading strong{color:#f6e9d2}
+.scelyo-photo-background-gallery .scelyo-photo-bg{background:#222127!important;border-color:#ffffff23!important}
+.scelyo-photo-background-gallery .scelyo-photo-bg.selected{background:#393020!important}
+:is(.local-recordings-panel,.settings-panel,.scelyo-rec-setup) :is(button,select,input,textarea){accent-color:#e7b765}
+.recording-kind,.drive-icon,.drive-account-icon,.scelyo-rec-setup-icon{background:#c3914129!important;color:#f0cb7a!important}
+.recording-item-actions button,.record-links button,.record-links a,.secondary-actions button{border-color:#bc9c6355!important;color:#f0d8a8!important;background:#242128!important}
+.modal-backdrop{background:#050608c7!important;backdrop-filter:blur(10px)}
+.settings-panel :is(input,textarea,select),.prejoin-card :is(input,select),.chat-entry input,.live-tools select{
+ background:#101116!important;color:#f5f1e8!important;border:1px solid #ffffff38!important}
+.scelyo-rec-music-options label.selected,.scelyo-download-variants label.selected{background:#4b3a2138!important;border-color:#e8b45e!important}
+.scelyo-rec-music-options label,.scelyo-download-variants label,.scelyo-host-security{background:#211f25!important;border-color:#ffffff27!important}
+.scelyo-fullscreen-exit{background:#242027ed!important;color:#fff5e3!important;border-color:#f0c66b!important}
+.scelyo-photo-bg:focus-visible{outline-color:#f5cf7f!important}
+/* Studio page — same system applies to video editor, subtitles, music, export and project lists */
+body:has(#app){--bg:#0d0e14;--panel:#181920;--accent:#f0c66f;--accent2:#dba752;
+ --text:#f6f4ee;--muted:#afadad;--border:#ffffff29;
+ background:radial-gradient(ellipse at 80% 0%,#bb8d3a1f,transparent 46%),#0d0e14!important}
+body:has(#app) .topbar.scelyo-studio-header{background:#111217ef!important;border-bottom:1px solid #ffffff22!important}
+body:has(#app) .scelyo-studio-brand small{color:#f3c66d!important}
+body:has(#app) .scelyo-studio-nav :is(a:hover,.active){background:#f2c76c28!important;color:#ffdb86!important}
+body:has(#app) :is(.editor,.controlsColumn,.panel,.scelyo-saved-projects,.scelyo-art-device,
+ .scelyo-studio-card,.scelyo-studio-features,.stage,.editorHead,.editorWorkspace,.cap-auto,
+ .cap-manual,.cap-words,.cap-timeline,.quality){border-color:#ffffff2b!important}
+body:has(#app) :is(.controlsColumn,.scelyo-art-device,.scelyo-studio-card,.cap-auto,.cap-manual,
+ .scelyo-saved-projects){background:#181920!important;color:#f7f4ea!important}
+body:has(#app) .landing.scelyo-studio-landing h1 span{background:linear-gradient(95deg,#ffe9a7,#eec26d,#c28a3b)!important;background-clip:text!important;-webkit-background-clip:text!important;-webkit-text-fill-color:transparent!important}
+body:has(#app) .scelyo-studio-overline,body:has(#app) .scelyo-studio-pill{color:#e9bc6b!important;border-color:#c49d5766!important}
+body:has(#app) .scelyo-studio-actions .secondary{background:#24232a!important;border-color:#ffffff36!important}
+body:has(#app) :is(.tab.active,.bg.selected,.fmt.selected,.size.selected,.profile.selected,
+ .small.selected,.choices .selected,.cap-style.active){background:#e9b85a30!important;color:#ffe3a4!important;border-color:#e2ab58!important}
+body:has(#app) :is(.tab,.bg,.fmt,.size,.profile,.choices button,.small,.ghost,.secondary){
+ border-color:#ffffff2f!important;color:#e8e2d5}
+body:has(#app) :is(.tab:hover,.bg:hover,.fmt:hover,.size:hover,.profile:hover,.small:hover){
+ background:#c39a4f29!important;color:#f6d999!important}
+body:has(#app) :is(input,select,textarea){accent-color:#e6b65d;color-scheme:dark}
+body:has(#app) :is(.panel,.editorHead,.tabs){background:#181920!important}
+body:has(#app) .scelyo-art-screen{background:radial-gradient(circle at 55% 20%,#b3864b77,transparent 52%),linear-gradient(140deg,#3d3028,#14171e)!important}
+body:has(#app) :is(.scelyo-art-light,.scelyo-art-halo){background:#e1ab6142!important}
+body:has(#app) :is(.status,.meta,.hint,.cap-status){color:#bdb6a8}
+body:has(#app) .transport button:hover,body:has(#app) .tab:hover{color:#eac579!important}
+/* Complete immersive gallery — tuned to reference image */
+.scelyo-universe-screen{position:fixed;inset:0;display:flex;flex-direction:column;z-index:61000;
+ background:radial-gradient(circle at 70% -10%,#2a2422 0,transparent 36%),#101117;
+ color:#f7f6f2;font-family:'DM Sans',Arial,sans-serif;overflow:auto}
+.scelyo-universe-topbar{height:77px;min-height:77px;display:flex;align-items:center;gap:28px;
+ padding:0 clamp(15px,2.2vw,40px);border-bottom:1px solid #ffffff25;background:#111218;
+ position:sticky;top:0;z-index:5}
+.scelyo-universe-brand{display:flex;align-items:center;gap:11px;white-space:nowrap;min-width:195px}
+.scelyo-universe-brand img{width:43px;height:43px;object-fit:contain}
+.scelyo-universe-brand>span{font:800 clamp(16px,1.6vw,25px)/1 Manrope,Arial,sans-serif;letter-spacing:-.06em}
+.scelyo-universe-brand small{display:block;font:750 10px/1.7 'DM Sans',sans-serif;letter-spacing:.29em;color:#f1c66b}
+.scelyo-universe-topbar nav{flex:1;display:flex;align-items:center;justify-content:center;gap:clamp(6px,1.2vw,22px)}
+.scelyo-universe-topbar nav :is(a,button,span){display:flex;align-items:center;justify-content:center;gap:10px;
+ padding:12px 16px;white-space:nowrap;border:1px solid transparent;border-radius:17px;
+ background:transparent;color:#e7e5e8;font-size:13px;font-weight:700;text-decoration:none}
+.scelyo-universe-topbar nav .scelyo-universe-current{background:linear-gradient(130deg,#403016,#78562550)!important;border-color:#dfb058!important;color:#ffd782!important;box-shadow:inset 0 0 19px #f2b64d28}
+.scelyo-universe-close{width:43px;height:43px;background:#25252c;color:#f3e1b7;border:1px solid #ffffff23;border-radius:13px;display:grid;place-items:center}
+.scelyo-universe-layout{display:grid;grid-template-columns:232px minmax(0,1fr);flex:1;min-height:0}
+.scelyo-universe-sidebar{display:flex;flex-direction:column;gap:9px;background:#101116;border-right:1px solid #ffffff21;padding:30px 8px}
+.scelyo-universe-sidebar :is(a,button,span){display:flex;align-items:center;gap:15px;padding:16px 15px;color:#dedee4;background:transparent;border:0;border-radius:12px;font-size:13px;text-align:left;text-decoration:none;min-height:49px;cursor:pointer}
+.scelyo-universe-sidebar :is(a,button):hover{background:#ffffff13}
+.scelyo-universe-sidebar .selected{background:linear-gradient(100deg,#72501d,#3c301f);color:#fcd67a;border:1px solid #be8b3e}
+.scelyo-universe-sidebar-bottom{margin-top:auto;border-top:1px solid #ffffff26;padding-top:16px}
+.scelyo-universe-main{padding:21px clamp(17px,1.6vw,29px);max-width:1690px;width:100%;margin:auto}
+.scelyo-universe-heading{display:flex;align-items:center;gap:20px;margin-bottom:24px}
+.scelyo-universe-heading>svg{color:#ebe9e6}
+.scelyo-universe-heading h2{font:800 clamp(27px,2.3vw,39px)/1.15 Manrope,Arial,sans-serif;margin:0 0 9px;letter-spacing:-.045em}
+.scelyo-universe-heading p{margin:0;font-size:13px;color:#adaab0}
+.scelyo-universe-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.scelyo-universe-card{position:relative;overflow:hidden;aspect-ratio:1.72;border:1px solid #77757b;border-radius:16px;
+ padding:0;background:#1c1e23;min-height:130px;text-align:left;isolation:isolate}
+.scelyo-universe-card>img,.scelyo-universe-card-crop{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s}
+.scelyo-universe-card:hover>img,.scelyo-universe-card:hover>.scelyo-universe-card-crop{transform:scale(1.04)}
+.scelyo-universe-card-shade{position:absolute;inset:0;background:linear-gradient(0deg,#050509b7,transparent 48%);z-index:1}
+.scelyo-universe-card strong{position:absolute;left:17px;bottom:16px;z-index:2;color:white;font-size:14px;font-weight:800;text-shadow:0 2px 8px #0009}
+.scelyo-universe-card.active{outline:2px solid #f0be57;outline-offset:0;border-color:#ffdc76;box-shadow:0 0 0 2px #e7b65b38}
+.scelyo-universe-check{position:absolute;right:10px;top:9px;background:#f3cb74;color:#242016;
+ z-index:2;border-radius:50%;width:33px;height:33px;display:grid;place-items:center}
+.scelyo-universe-bottom{min-height:93px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+ border-top:1px solid #ffffff24;background:#13141b;padding:16px 24px;position:sticky;bottom:0}
+.scelyo-universe-bottom>div{display:flex;gap:12px}
+.scelyo-universe-upload,.scelyo-universe-ghost,.scelyo-universe-primary,.scelyo-open-universe-gallery{display:flex;align-items:center;justify-content:center;gap:11px;
+ min-height:49px;border:1px solid #66636a;background:#1a1a21;border-radius:13px;color:#f3eee7;padding:12px 20px;cursor:pointer;font-size:13px;font-weight:800}
+.scelyo-universe-primary{background:linear-gradient(130deg,#fbe397,#dba148);border-color:#f0c66e;color:#1c140a}
+.scelyo-open-universe-gallery{margin:13px 0;background:#f0c56e20;border-color:#f0c56e9b;color:#f7dca1}
+.scelyo-universe-preview{position:fixed;inset:0;background:#000d;z-index:20;display:grid;place-items:center;padding:25px}
+.scelyo-universe-preview-inner{width:min(1180px,95vw);position:relative;padding:10px;background:#22232b;border:1px solid #caa45c;border-radius:18px;box-shadow:0 25px 80px #000d}
+.scelyo-universe-preview-inner>img,.scelyo-universe-preview-crop{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:#222}
+.scelyo-universe-preview-inner>strong{display:block;margin:10px;font-size:17px}
+.scelyo-universe-preview-inner>button{position:absolute;top:24px;right:24px;z-index:3;width:45px;height:45px;border-radius:50%;border:1px solid #fff8;color:#fff;background:#171720}
+@media(max-width:1160px){.scelyo-universe-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.scelyo-universe-topbar nav{gap:2px}.scelyo-universe-topbar nav :is(a,button,span){padding:9px;font-size:11px}}
+@media(max-width:780px){.scelyo-universe-topbar{height:auto;min-height:65px;gap:12px;padding:12px}.scelyo-universe-brand{min-width:auto}.scelyo-universe-brand img{width:35px;height:35px}.scelyo-universe-topbar nav{justify-content:flex-end;overflow:auto}.scelyo-universe-topbar nav :is(a,button,span){font-size:0;min-width:40px;padding:10px}.scelyo-universe-layout{display:block}.scelyo-universe-sidebar{display:none}.scelyo-universe-main{padding:20px 14px}.scelyo-universe-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.scelyo-universe-card{border-radius:11px;min-height:104px}.scelyo-universe-card strong{font-size:11px;left:10px;bottom:10px}.scelyo-universe-bottom{padding:12px;flex-wrap:wrap}.scelyo-universe-bottom>div{flex:1}.scelyo-universe-bottom :is(.scelyo-universe-primary,.scelyo-universe-ghost){flex:1;padding:10px;font-size:11px}}
+@media(max-width:440px){.scelyo-universe-brand>span{font-size:15px}.scelyo-universe-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.scelyo-universe-card{min-height:98px}.scelyo-universe-card strong{font-size:10px}.scelyo-universe-topbar nav :is(a,button,span){min-width:34px;padding:7px}.scelyo-universe-bottom>.scelyo-universe-upload{width:100%}}
