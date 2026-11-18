@@ -1036,7 +1036,7 @@ function App() {
             : 'm4a'
           : 'webm';
         const filename =
-          'FondVideo-New-Meet-' +
+          'SCELYO-' +
           roomRef.current +
           '-' +
           new Date().toISOString().replace(/[:.]/g, '-') +
@@ -1163,7 +1163,7 @@ function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              name: 'FondVidéo Meet - Enregistrements',
+              name: 'SCELYO - Enregistrements',
               mimeType: 'application/vnd.google-apps.folder',
             }),
           }
@@ -1285,7 +1285,7 @@ function App() {
               <em>méritent de se rencontrer.</em>
             </h1>
             <p>
-              Ton studio FondVidéo et ta visioconférence réunis. Fonds en
+              Ton studio SCELYO STUDIO et ta visioconférence réunis. Fonds en
               direct, formats sociaux, enregistrements et partage d’écran.
             </p>
             <div className="launch-actions">
@@ -1295,7 +1295,7 @@ function App() {
               >
                 <Plus size={20} /> Nouvelle réunion
               </button>
-              <a className="btn subtle large" href="./fondvideo.html"><Camera size={18}/> Ouvrir FondVidéo</a>
+              <a className="btn subtle large" href="./fondvideo.html"><Camera size={18}/> Ouvrir SCELYO STUDIO</a>
               <button className="btn subtle large" onClick={()=>setLibraryOpen(true)}><Library size={18}/> Mes enregistrements</button>
               <div className="join-form">
                 <Link2 size={18} />
@@ -1503,7 +1503,7 @@ function App() {
             <div>
               <div className="eyebrow">RÉUNION EN DIRECT</div>
               <h2>
-                FondVidéo Meet <span className="meeting-id">#{room}</span>
+                SCELYO <span className="meeting-id">#{room}</span>
               </h2>
             </div>
             <div className="meeting-meta">
@@ -1804,14 +1804,14 @@ function App() {
               </div>}
             <div className="recordings-destinations">
               <strong>Vers Google Drive, Photos ou YouTube</strong>
-              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire dans FondVidéo.</p>
+              <p>Sur iPhone, utilise « Partager » pour ouvrir les applications compatibles. Sur PC, télécharge puis importe le fichier sur le service souhaité. Aucune connexion OAuth n’est nécessaire dans SCELYO STUDIO.</p>
               <div><a href="https://drive.google.com/drive/u/0/my-drive" target="_blank" rel="noreferrer">Ouvrir Drive <ExternalLink size={13}/></a><a href="https://studio.youtube.com/" target="_blank" rel="noreferrer">Ouvrir YouTube Studio <ExternalLink size={13}/></a></div>
             </div>
           </section>
         </div>
       )}
       <footer className="footer">
-        <span>© FondVidéo New Meet · Prévisualisation AppDeploy</span>
+        <span>© SCELYO STUDIO · Prévisualisation AppDeploy</span>
         <span>Appels WebRTC · Vos enregistrements vous appartiennent</span>
       </footer>
 
@@ -1844,7 +1844,7 @@ function App() {
               <div className="drive-icon"><CloudUpload size={30}/></div>
               <div>
                 <strong>Enregistrements automatiquement sauvegardés</strong>
-                <p>Après connexion, chaque audio et chaque vidéo rejoint ton dossier <b>FondVidéo Meet - Enregistrements</b> sur Google Drive à la fin de l'enregistrement.</p>
+                <p>Après connexion, chaque audio et chaque vidéo rejoint ton dossier <b>SCELYO - Enregistrements</b> sur Google Drive à la fin de l'enregistrement.</p>
               </div>
             </div>
             {driveConnected ? (
@@ -1864,7 +1864,7 @@ function App() {
                   </svg>
                   Se connecter avec Google
                 </button>
-                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans FondVidéo. Aucun mot de passe n'est demandé par notre application.</p>
+                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCELYO STUDIO. Aucun mot de passe n'est demandé par notre application.</p>
                 {!clientId.trim().endsWith('.apps.googleusercontent.com') && (
                   <p className="drive-needs-setup">La connexion Google doit être configurée une seule fois pour cette prévisualisation. Le bouton sera fonctionnel dès que cette configuration aura été ajoutée.</p>
                 )}
