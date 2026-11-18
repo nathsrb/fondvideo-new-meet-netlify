@@ -1175,6 +1175,41 @@ function App() {
     img.src = url;
   }
 
+  function importImmersiveScenes(files: FileList | null) {
+    if (!files?.length) return;
+    const list=Array.from(files);
+    let completed=0, imported=0;
+    for (const file of list) {
+      const index=Number(file.name.match(/^(\d{1,2})[-_. ]/)?.[1] || 0)-1;
+      const scene=immersiveBackgrounds[index];
+      if (!file.type.startsWith('image/') || !scene) {completed++;continue;}
+      const url=URL.createObjectURL(file);
+      const image=new Image();
+      image.onload=()=>{
+        URL.revokeObjectURL(url);
+        const canvas=document.createElement('canvas');
+        canvas.width=1280;canvas.height=720;
+        const ctx=canvas.getContext('2d');
+        if(ctx){
+          const scale=Math.max(1280/image.naturalWidth,720/image.naturalHeight);
+          const w=image.naturalWidth*scale,h=image.naturalHeight*scale;
+          ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+          ctx.drawImage(image,(1280-w)/2,(720-h)/2,w,h);
+          const encoded=canvas.toDataURL('image/webp',.73);
+          try {localStorage.setItem('sceyllio-scene-'+scene.id,encoded);}
+          catch { /* The full resolution remains active for this session. */ }
+          presetPhotoCache.set(scene.id,image);
+          setSceneOverrides(previous=>({...previous,[scene.id]:encoded}));
+          imported++;
+        }
+        completed++;
+        if(completed===list.length)toast(imported+' décors importés dans ce navigateur.');
+      };
+      image.onerror=()=>{URL.revokeObjectURL(url);completed++;if(completed===list.length)toast(imported+' décors importés.');};
+      image.src=url;
+    }
+  }
+
   async function joinMeeting() {
     if (busy) return;
     const name = displayName.trim();
@@ -3175,7 +3210,7 @@ function App() {
               </div>
             </div>
           </div>
-          <footer className="scelyo-universe-bottom"><label className="scelyo-universe-upload"><CloudUpload size={18}/> Importer un décor personnalisé<input type="file" hidden accept="image/*" onChange={e => {choosePhoto(e.target.files?.[0] || null);setImmersiveGalleryOpen(false);}}/></label><div><button className="scelyo-universe-ghost" onClick={() => setImmersivePreviewOpen(true)}><PlayCircle size={18}/> Aperçu</button><button className="scelyo-universe-primary" onClick={() => {setImmersiveGalleryOpen(false);setImmersivePreviewOpen(false);if(!room&&!joined)openRoom(newCode())}}><Video size={18}/> {joined?'Retour à la réunion':'Démarrer la réunion'}</button></div></footer>
+          <footer className="scelyo-universe-bottom"><label className="scelyo-universe-upload"><CloudUpload size={18}/> Importer les 12 décors HD<input type="file" hidden accept="image/*" multiple onChange={e => {importImmersiveScenes(e.target.files);e.target.value='';}}/></label><div><button className="scelyo-universe-ghost" onClick={() => setImmersivePreviewOpen(true)}><PlayCircle size={18}/> Aperçu</button><button className="scelyo-universe-primary" onClick={() => {setImmersiveGalleryOpen(false);setImmersivePreviewOpen(false);if(!room&&!joined)openRoom(newCode())}}><Video size={18}/> {joined?'Retour à la réunion':'Démarrer la réunion'}</button></div></footer>
           {immersivePreviewOpen && <div className="scelyo-universe-preview" onClick={() => setImmersivePreviewOpen(false)} role="presentation"><div className="scelyo-universe-preview-inner" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Aperçu du décor"><button onClick={() => setImmersivePreviewOpen(false)} aria-label="Fermer"><X size={20}/></button>{selectedImmersiveScene.crop && !sceneOverrides[selectedImmersiveScene.id] ? <div className="scelyo-universe-preview-crop" style={{backgroundImage:'url("'+selectedImmersiveScene.src+'")',backgroundSize:'400% 390%',backgroundPosition:selectedImmersiveScene.crop[1]/3*100+'% '+selectedImmersiveScene.crop[0]/2*100+'%'}}/> : <img src={sceneOverrides[selectedImmersiveScene.id] || selectedImmersiveScene.src} alt={selectedImmersiveScene.label}/>}<strong>{selectedImmersiveScene.label}</strong></div></div>}
         </section>
       )}
