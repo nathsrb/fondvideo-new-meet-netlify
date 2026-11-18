@@ -10,6 +10,7 @@ import {
   formats,
   backgrounds,
   photoBackgrounds,
+  immersiveBackgrounds,
 } from './live-background';
 import { saveRecording, listRecordings, deleteRecording, type SavedRecording } from './recording-library';
 import {
@@ -258,7 +259,7 @@ function App() {
   const [clearVoiceReady, setClearVoiceReady] = useState(false);
   const [clearVoiceGateReady, setClearVoiceGateReady] = useState(false);
 
-  // Deep-link Vault from SCELYO Studio without changing meeting routing.
+  // Deep-link Vault from SCEYLLIO Studio without changing meeting routing.
   useEffect(() => {
     const openVaultRoute = () => {
       if (location.hash === '#/vault') setLibraryOpen(true);
@@ -362,7 +363,7 @@ function App() {
   }, [recording]);
   useEffect(() => {
     if (!joined) return;
-    // Keep the display awake while SCELYO is visible where Wake Lock exists.
+    // Keep the display awake while SCEYLLIO is visible where Wake Lock exists.
     // This does not grant background camera/microphone access on iOS.
     let cancelled=false;
     let lock: {release:()=>Promise<void>} | null=null;
@@ -492,7 +493,7 @@ function App() {
     try {
       const item=await saveRecording(blob,name);
       setSavedItems(previous=>[item,...previous.filter(x=>x.id!==item.id)]);
-      toast('Capture enregistrée dans SCELYO Vault sur cet appareil.');
+      toast('Capture enregistrée dans SCEYLLIO Vault sur cet appareil.');
     } catch(err) {
       toast('Stockage insuffisant ou inaccessible : '+readableError(err)+'. Télécharge la vidéo avant de quitter.');
     } finally {
@@ -681,7 +682,7 @@ function App() {
   function openDriveMusic(){
     if(!clientId.trim().endsWith('.apps.googleusercontent.com')){toast('Configure d’abord la connexion Google dans les paramètres.');setShowSettings(true);return;}
     const google=(window as any).google;
-    if(!google?.accounts?.oauth2){toast('Google est indisponible. Recharge SCELYO.');return;}
+    if(!google?.accounts?.oauth2){toast('Google est indisponible. Recharge SCEYLLIO.');return;}
     if(driveMusicTokenRef.current){void listDriveMusic(driveMusicTokenRef.current);return;}
     const oauth=google.accounts.oauth2.initTokenClient({
       client_id:clientId.trim(),
@@ -712,7 +713,7 @@ function App() {
   async function loadMusic(file: File | null) {
     if (!file) return;
     if (hostId !== peerId.current) {
-      toast('Seul l’organisateur peut diffuser une musique dans SCELYO Live.');
+      toast('Seul l’organisateur peut diffuser une musique dans SCEYLLIO Studio.');
       return;
     }
     if (!/\.(mp3|wav|m4a|aac)$/i.test(file.name)) {
@@ -1031,7 +1032,7 @@ function App() {
     let renderedBg = nextBg;
     let renderedPhoto = nextPhoto;
     try {
-      const preset = photoBackgrounds.find(item => item.id === nextBg);
+      const preset = [...photoBackgrounds, ...immersiveBackgrounds].find(item => item.id === nextBg);
       if (preset) {
         // Load only selected photographs, cache them for subsequent changes.
         // crossOrigin avoids tainting the camera canvas capture stream.
@@ -1084,7 +1085,7 @@ function App() {
     } catch (err) {
       toast('Décor indisponible : ' + readableError(err));
       // If a photo fails to load, retain the last working camera effect.
-      if (photoBackgrounds.some(item => item.id === nextBg) && !presetPhotoCache.has(nextBg)) return;
+      if ([...photoBackgrounds, ...immersiveBackgrounds].some(item => item.id === nextBg) && !presetPhotoCache.has(nextBg)) return;
       effectRef.current?.stop();
       effectRef.current = null;
       localRef.current = rawRef.current;
@@ -1757,7 +1758,7 @@ function App() {
         const url=URL.createObjectURL(file);
         micTestUrlRef.current=url;
         setMicTestUrl(url);
-        toast('Test prêt : écoute ta voix, puis compare avec l’enregistrement SCELYO.');
+        toast('Test prêt : écoute ta voix, puis compare avec l’enregistrement SCEYLLIO.');
       };
       activeRecorder.start();
       window.setTimeout(()=>{
@@ -1835,7 +1836,7 @@ function App() {
         }
       }
       recorder.onerror=event=>{
-        console.warn('SCELYO recorder error',event);
+        console.warn('SCEYLLIO recorder error',event);
         toast('La capture a été interrompue par le navigateur. Essaie en 720p sans musique.');
         if(recorder?.state==='recording'){try{recorder.stop()}catch{/* already stopped */}}
       };
@@ -1879,7 +1880,7 @@ function App() {
         const elapsed=Date.now()-captureStartedAt;
         if(elapsed>20000 && Date.now()-lastChunkAt>18000 && !captureWarning){
           captureWarning=true;
-          toast('Attention : le navigateur ne fournit plus de données vidéo. Garde SCELYO au premier plan et l’écran allumé.');
+          toast('Attention : le navigateur ne fournit plus de données vidéo. Garde SCEYLLIO au premier plan et l’écran allumé.');
         }
       },5000);
       recorder.ondataavailable = e => {
@@ -1890,7 +1891,7 @@ function App() {
           captureWarning=false;
         }
       };
-      recorder.addEventListener('pause',()=>toast('L’enregistrement a été mis en pause par le navigateur. Reste sur SCELYO pour conserver la vidéo.'));
+      recorder.addEventListener('pause',()=>toast('L’enregistrement a été mis en pause par le navigateur. Reste sur SCEYLLIO pour conserver la vidéo.'));
       recorder.addEventListener('resume',()=>toast('Enregistrement repris.'));
       stream.getTracks().forEach(track=>{
         track.addEventListener('ended',()=>{
@@ -1928,7 +1929,7 @@ function App() {
             : 'm4a'
           : 'webm';
         const baseName =
-          'SCELYO-Live-' + roomRef.current + '-' +
+          'SCEYLLIO-Live-' + roomRef.current + '-' +
           new Date().toISOString().replace(/[:.]/g, '-');
         const filename = baseName + (selectedWithMusic ? '-avec-musique' : '-sans-musique') + '.' + ext;
         const item = { blob, name: filename, url: URL.createObjectURL(blob) };
@@ -2168,13 +2169,13 @@ function App() {
           <section className="scelyo-rec-setup" role="dialog" aria-modal="true" aria-labelledby="scelyo-rec-title">
             <div className="scelyo-rec-setup-head">
               <span className="scelyo-rec-setup-icon">{pendingRecordMode==='audio'?<Headphones size={26}/>:<Video size={26}/>}</span>
-              <div><span>SCELYO LIVE / CAPTURE</span><h2 id="scelyo-rec-title">Avant d’enregistrer</h2></div>
+              <div><span>SCEYLLIO STUDIO / CAPTURE</span><h2 id="scelyo-rec-title">Avant d’enregistrer</h2></div>
               <button type="button" onClick={()=>setPendingRecordMode(null)} aria-label="Annuler l'enregistrement"><X size={22}/></button>
             </div>
             <p>Choisis ce que le fichier final doit contenir. Le micro naturel est privilégié pour la capture, sans effet vocal supplémentaire. Rien ne sera téléchargé ni envoyé sur Drive sans ton accord.</p>
             {/iPhone|iPad|iPod/i.test(navigator.userAgent) && (
               <p className="scelyo-ios-background-note">
-                Sur iPhone, garde SCELYO au premier plan et l’écran allumé pendant la vidéo :
+                Sur iPhone, garde SCEYLLIO au premier plan et l’écran allumé pendant la vidéo :
                 iOS peut suspendre la caméra, le micro et l’enregistrement quand tu verrouilles
                 le téléphone ou quittes le navigateur. Le maintien de l’écran éveillé est
                 demandé automatiquement lorsque le navigateur le permet.
@@ -2215,7 +2216,7 @@ function App() {
             </fieldset>
             <p className="scelyo-rec-setup-footnote">
               {pendingRecordMode==='audio' && musicName
-                ? 'Pour préserver le son des voix, SCELYO enregistre une seule version de haute qualité : choisis avec ou sans musique avant de démarrer.'
+                ? 'Pour préserver le son des voix, SCEYLLIO enregistre une seule version de haute qualité : choisis avec ou sans musique avant de démarrer.'
                 : 'Tu pourras télécharger le fichier en un clic après l’arrêt. Pour la vidéo, choisis la musique avant la capture.'}
             </p>
             <div className="scelyo-mic-test-box">
@@ -2236,14 +2237,14 @@ function App() {
         </div>
       )}
       <header className="header scelyo-header">
-        <button type="button" className="scelyo-brand" aria-label="SCELYO · Accueil"
+        <button type="button" className="scelyo-brand" aria-label="SCEYLLIO · Accueil"
           onClick={() => { if (!joined) { location.hash = ''; setRoom(''); setMenuOpen(false); } }}>
           <img src="./scelyo-mark.svg" alt="" width="40" height="40" />
-          <span className="scelyo-brand-name">SCELYO</span>
+          <span className="scelyo-brand-name">SCEYLLIO</span>
           <span className="scelyo-brand-divider" />
           <span className="scelyo-brand-descriptor">Le live devient création</span>
         </button>
-        <nav className="scelyo-header-nav" aria-label="Espaces SCELYO">
+        <nav className="scelyo-header-nav" aria-label="Espaces SCEYLLIO">
           <button type="button" className="scelyo-nav-item selected" onClick={() => { if (!joined) { location.hash = ''; setRoom(''); } }}><Video size={17}/> Live</button>
           <a className="scelyo-nav-item" href="./fondvideo.html"><Camera size={17}/> Studio</a>
           <button type="button" className="scelyo-nav-item" onClick={() => setLibraryOpen(true)}><Library size={17}/> Vault</button>
@@ -2258,9 +2259,9 @@ function App() {
         </div>
         {menuOpen && (
           <nav className="scelyo-mobile-menu" aria-label="Navigation mobile">
-            <button type="button" onClick={() => {setMenuOpen(false);if(!joined){location.hash='';setRoom('');}}}><Video size={18}/> SCELYO Live <ArrowRight size={16}/></button>
-            <a href="./fondvideo.html"><Camera size={18}/> SCELYO Studio <ArrowRight size={16}/></a>
-            <button type="button" onClick={() => {setMenuOpen(false);setLibraryOpen(true);}}><Library size={18}/> SCELYO Vault <ArrowRight size={16}/></button>
+            <button type="button" onClick={() => {setMenuOpen(false);if(!joined){location.hash='';setRoom('');}}}><Video size={18}/> SCEYLLIO Studio <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={18}/> SCEYLLIO Studio <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => {setMenuOpen(false);setLibraryOpen(true);}}><Library size={18}/> SCEYLLIO Vault <ArrowRight size={16}/></button>
             <button type="button" onClick={() => {setMenuOpen(false);setShowSettings(true);}}><CloudUpload size={18}/> Google Drive <ArrowRight size={16}/></button>
           </nav>
         )}
@@ -2279,11 +2280,11 @@ function App() {
       {!room && !joined && (
         <main className="fv-dashboard">
           <aside className="fv-sidebar" aria-label="Navigation principale">
-            <div className="fv-sidebar-label">SCELYO / ESPACES</div>
+            <div className="fv-sidebar-label">SCEYLLIO / ESPACES</div>
             <div className="fv-sidebar-active"><Video size={19}/> Tableau de bord <span>01</span></div>
-            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> SCELYO Live <ArrowRight size={16}/></button>
-            <a href="./fondvideo.html"><Camera size={19}/> SCELYO Studio <ArrowRight size={16}/></a>
-            <button type="button" onClick={() => setLibraryOpen(true)}><Library size={19}/> SCELYO Vault <ArrowRight size={16}/></button>
+            <button type="button" onClick={() => openRoom(newCode())}><Plus size={19}/> SCEYLLIO Studio <ArrowRight size={16}/></button>
+            <a href="./fondvideo.html"><Camera size={19}/> SCEYLLIO Studio <ArrowRight size={16}/></a>
+            <button type="button" onClick={() => setLibraryOpen(true)}><Library size={19}/> SCEYLLIO Vault <ArrowRight size={16}/></button>
             <div className="fv-sidebar-bottom">
               <div className="fv-sidebar-orb"><Video size={20}/></div>
               <strong>Le live devient création.</strong>
@@ -2293,12 +2294,12 @@ function App() {
           </aside>
 
           <div className="fv-dashboard-content">
-            <div className="fv-dashboard-topline"><span><span className="fv-online-dot"/> TON UNIVERS SCELYO</span><span>LIVE · STUDIO · VAULT</span></div>
+            <div className="fv-dashboard-topline"><span><span className="fv-online-dot"/> TON UNIVERS SCEYLLIO</span><span>LIVE · STUDIO · VAULT</span></div>
             <section className="fv-feature-hero">
               <div className="fv-feature-content">
                 <div className="fv-kicker"><span className="fv-kicker-dash"/> LA VISIO, SANS LES COMPLICATIONS.</div>
                 <h1>Vos meilleures conversations<br/><em>méritent mieux qu’un simple appel.</em></h1>
-                <p>Réunissez-vous, échangez et enregistrez vos moments importants. Avec SCELYO, tout devient plus simple, plus fluide, plus vivant.</p>
+                <p>Réunissez-vous, échangez et enregistrez vos moments importants. Avec SCEYLLIO, tout devient plus simple, plus fluide, plus vivant.</p>
                 <div className="fv-hero-buttons">
                   <button className="fv-hero-primary" onClick={() => openRoom(newCode())}><Plus size={21}/> Créer une réunion <ArrowRight size={18}/></button>
                   <a className="fv-hero-secondary" href="./fondvideo.html"><PlayCircle size={21}/> Ouvrir le Studio</a>
@@ -2310,7 +2311,7 @@ function App() {
                 <div className="fv-showcase-orbit fv-orbit-two"/>
                 <div className="fv-showcase-glow"/>
                 <div className="fv-glass-frame">
-                  <div className="fv-glass-head"><span><i/> <i/> <i/></span><b>SCELYO / LIVE</b><span>● LIVE</span></div>
+                  <div className="fv-glass-head"><span><i/> <i/> <i/></span><b>SCEYLLIO / LIVE</b><span>● LIVE</span></div>
                   <div className="fv-glass-stage">
                     <div className="fv-glass-guest guest-one"><div className="fv-guest-avatar"><Users size={38}/></div><small>Caméra principale</small></div>
                     <div className="fv-glass-guest guest-two"><div className="fv-guest-avatar"><Video size={22}/></div><small>Invité connecté</small></div>
@@ -2321,19 +2322,19 @@ function App() {
               </div>
             </section>
 
-            <div className="fv-section-heading"><div><span>LES TROIS UNIVERS SCELYO</span><h2>Trois bonnes raisons de rester</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
+            <div className="fv-section-heading"><div><span>LES TROIS UNIVERS SCEYLLIO</span><h2>Trois bonnes raisons de rester</h2></div><span className="fv-heading-index">/ 03 POSSIBILITÉS</span></div>
             <section className="fv-action-grid">
               <button className="fv-action-card fv-action-meet" onClick={() => openRoom(newCode())}>
                 <span className="fv-action-top"><span className="fv-action-icon"><Video size={26}/></span><ArrowRight size={21}/></span>
-                <span className="fv-action-bottom"><small>01 / SE CONNECTER</small><strong>SCELYO Live</strong><span>Les meilleures conversations commencent ici. Rapprochez-vous, même à distance.</span></span>
+                <span className="fv-action-bottom"><small>01 / SE CONNECTER</small><strong>SCEYLLIO Studio</strong><span>Les meilleures conversations commencent ici. Rapprochez-vous, même à distance.</span></span>
               </button>
               <a className="fv-action-card fv-action-studio" href="./fondvideo.html">
                 <span className="fv-action-top"><span className="fv-action-icon"><Camera size={26}/></span><ArrowRight size={21}/></span>
-                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>SCELYO Studio</strong><span>Votre vidéo mérite de sortir du lot. Un meilleur décor, des sous-titres et un son plus agréable.</span></span>
+                <span className="fv-action-bottom"><small>02 / CRÉER</small><strong>SCEYLLIO Studio</strong><span>Votre vidéo mérite de sortir du lot. Un meilleur décor, des sous-titres et un son plus agréable.</span></span>
               </a>
               <button className="fv-action-card fv-action-library" onClick={() => setLibraryOpen(true)}>
                 <span className="fv-action-top"><span className="fv-action-icon"><Library size={26}/></span><ArrowRight size={21}/></span>
-                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>SCELYO Vault</strong><span>Les bons moments passent. Pas les souvenirs. Retrouvez vos enregistrements sur cet appareil.</span></span>
+                <span className="fv-action-bottom"><small>03 / RETROUVER</small><strong>SCEYLLIO Vault</strong><span>Les bons moments passent. Pas les souvenirs. Retrouvez vos enregistrements sur cet appareil.</span></span>
               </button>
             </section>
 
@@ -2407,11 +2408,11 @@ function App() {
                   {camOn ? 'activée' : 'coupée'}
                 </button>
               </div>
-              <section className="scelyo-clearvoice-prejoin" aria-label="SCELYO ClearVoice avant la réunion">
+              <section className="scelyo-clearvoice-prejoin" aria-label="SCEYLLIO ClearVoice avant la réunion">
                 <div className="scelyo-clearvoice-prejoin-header">
                   <div className="scelyo-clearvoice-headline">
                     <span className="scelyo-clearvoice-icon"><AudioLines size={20}/></span>
-                    <span><strong>SCELYO ClearVoice</strong><small>Faites entendre votre voix. Pas le bruit autour.</small></span>
+                    <span><strong>SCEYLLIO ClearVoice</strong><small>Faites entendre votre voix. Pas le bruit autour.</small></span>
                   </div>
                 </div>
                 <label className="scelyo-clearvoice-option">
@@ -2481,9 +2482,9 @@ function App() {
         <main className="meeting">
           <div className="meeting-header">
             <div>
-              <div className="eyebrow">SCELYO LIVE — EN DIRECT</div>
+              <div className="eyebrow">SCEYLLIO STUDIO — EN DIRECT</div>
               <h2>
-                SCELYO Live <span className="meeting-id">#{room}</span>
+                SCEYLLIO Studio <span className="meeting-id">#{room}</span>
               </h2>
             </div>
             <div className="meeting-meta">
@@ -2539,6 +2540,17 @@ function App() {
                 </button>
               ))}
             </div>
+            <div className="scelyo-photo-background-heading"><strong>Univers immersifs</strong><small>12 décors pour changer d’horizon</small></div>
+            <div className="scelyo-photo-background-gallery scelyo-immersive-gallery" role="group" aria-label="Univers immersifs">
+              {immersiveBackgrounds.map(item => (
+                <button key={item.id} type="button" className={'scelyo-photo-bg'+(bg === item.id ? ' selected' : '')}
+                  onClick={() => void changeCamera(item.id, format, quality)} disabled={effectBusy}
+                  aria-pressed={bg === item.id} title={'Décor immersif : '+item.label}>
+                  <img src={item.thumbnail} alt="" loading="lazy" decoding="async" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
             <label className="upload">
               + Image
               <input
@@ -2575,11 +2587,11 @@ function App() {
             )}
           </div>
           {clearVoiceOpen && (
-            <section className="scelyo-clearvoice-panel" aria-label="Réglages SCELYO ClearVoice">
+            <section className="scelyo-clearvoice-panel" aria-label="Réglages SCEYLLIO ClearVoice">
               <div className="scelyo-clearvoice-panel-header">
                 <div className="scelyo-clearvoice-headline">
                   <span className="scelyo-clearvoice-icon"><AudioLines size={21}/></span>
-                  <span><strong>SCELYO ClearVoice</strong><small>Réglages audio de cette session</small></span>
+                  <span><strong>SCEYLLIO ClearVoice</strong><small>Réglages audio de cette session</small></span>
                 </div>
                 <button type="button" className="scelyo-clearvoice-close" title="Fermer ClearVoice"
                   onClick={() => setClearVoiceOpen(false)}><X size={18}/></button>
@@ -2636,9 +2648,9 @@ function App() {
             </section>
           )}
           {isHost && musicPanelOpen && (
-            <section className="scelyo-music-panel" aria-label="Musique d’ambiance SCELYO Live">
+            <section className="scelyo-music-panel" aria-label="Musique d’ambiance SCEYLLIO Studio">
               <div className="scelyo-music-panel-head">
-                <div className="scelyo-music-title"><span className="scelyo-music-title-icon"><Music2 size={22}/></span><div><strong>Musique d’ambiance</strong><small>SCELYO Live · diffusion dans la session</small></div></div>
+                <div className="scelyo-music-title"><span className="scelyo-music-title-icon"><Music2 size={22}/></span><div><strong>Musique d’ambiance</strong><small>SCEYLLIO Studio · diffusion dans la session</small></div></div>
                 <button type="button" className="scelyo-music-close" title="Fermer" onClick={() => setMusicPanelOpen(false)}><X size={20}/></button>
               </div>
               <div className="scelyo-music-panel-body">
@@ -2773,7 +2785,7 @@ function App() {
                   className={clearVoiceOpen ? 'tool-btn active-tool' : 'tool-btn'}
                   onClick={() => setClearVoiceOpen(open => !open)}
                   title={noiseReduction ? (noiseActive ? 'ClearVoice atténue les bruits ('+noiseAttenuation+' dB)' : 'ClearVoice anti-bruit actif') : 'ClearVoice désactivé'}
-                  aria-label="Réglages SCELYO ClearVoice" aria-expanded={clearVoiceOpen}>
+                  aria-label="Réglages SCEYLLIO ClearVoice" aria-expanded={clearVoiceOpen}>
                   <AudioLines />
                   {noiseReduction && (clearVoiceGateReady || nativeNoiseSupported) && (
                     <span className={'scelyo-toolbar-noise-dot '+(noiseActive?'reducing':'enabled')}
@@ -2911,7 +2923,7 @@ function App() {
                     )}
                     <div className="scelyo-download-more">
                       <button type="button" onClick={()=>setLibraryOpen(true)} disabled={savingLocal}>
-                        <Library size={15}/>{savingLocal?'Sauvegarde locale…':'Ouvrir SCELYO Vault'}
+                        <Library size={15}/>{savingLocal?'Sauvegarde locale…':'Ouvrir SCEYLLIO Vault'}
                       </button>
                       <button type="button" onClick={()=>void shareRecording({
                         id:'current',name:chosenRecording.name,blob:chosenRecording.blob,
@@ -3002,7 +3014,7 @@ function App() {
         <div className="modal-backdrop local-recordings-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setLibraryOpen(false);}}>
           <section className="local-recordings-panel" role="dialog" aria-modal="true" aria-label="Mes enregistrements">
             <div className="modal-header">
-              <div><div className="eyebrow">SCELYO / VAULT LOCAL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
+              <div><div className="eyebrow">SCEYLLIO / VAULT LOCAL</div><h2><Library size={22}/> Mes enregistrements</h2></div>
               <button className="icon-btn" onClick={()=>setLibraryOpen(false)} aria-label="Fermer"><X size={21}/></button>
             </div>
             <p className="local-recordings-hint">Tes enregistrements restent dans ce navigateur, même après fermeture de l’onglet. Ils ne sont pas synchronisés entre appareils et peuvent disparaître si tu effaces les données du navigateur. Pour les conserver durablement, télécharge-les ou partage-les.</p>
@@ -3041,7 +3053,7 @@ function App() {
         </div>
       )}
       <footer className="footer">
-        <span>© SCELYO · Version de prévisualisation</span>
+        <span>© SCEYLLIO · Version de prévisualisation</span>
         <span>Live · Studio · Vault — Créez. Échangez. Conservez ce qui compte.</span>
       </footer>
 
@@ -3060,8 +3072,8 @@ function App() {
           >
             <div className="modal-header">
               <div>
-                <div className="eyebrow">SCELYO / DRIVE</div>
-                <h2>SCELYO & Google Drive</h2>
+                <div className="eyebrow">SCEYLLIO / DRIVE</div>
+                <h2>SCEYLLIO & Google Drive</h2>
               </div>
               <button
                 className="icon-btn"
@@ -3094,7 +3106,7 @@ function App() {
                   </svg>
                   Se connecter avec Google
                 </button>
-                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCELYO. Aucun mot de passe n’est demandé par SCELYO.</p>
+                <p className="drive-password-note"><ShieldCheck size={15}/> L’identification se fait chez Google, jamais dans SCEYLLIO. Aucun mot de passe n’est demandé par SCEYLLIO.</p>
                 {!clientId.trim().endsWith('.apps.googleusercontent.com') && (
                   <p className="drive-needs-setup">La connexion Google doit être configurée une seule fois pour cette prévisualisation. Le bouton sera fonctionnel dès que cette configuration aura été ajoutée.</p>
                 )}
