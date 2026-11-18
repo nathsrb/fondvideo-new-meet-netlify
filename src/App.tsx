@@ -29,6 +29,7 @@ import {
   Users,
   Circle,
   Square,
+  Settings,
   CloudUpload,
   Download,
   ShieldCheck,
@@ -3145,7 +3146,7 @@ function App() {
       {immersiveGalleryOpen && (
         <section className="scelyo-universe-screen" role="dialog" aria-modal="true" aria-label="Choisir un univers immersif">
           <header className="scelyo-universe-topbar">
-            <div className="scelyo-universe-brand"><img src="./scelyo-mark.svg" alt="" /> <span>SCELYO <small>STUDIO</small></span></div>
+            <div className="scelyo-universe-brand"><img src="./scelyo-mark.svg" alt="" /> <span>SCEYLLIO <small>STUDIO</small></span></div>
             <nav aria-label="Navigation du studio"><span className="scelyo-universe-current"><Video size={17}/> Réunion</span><a href="./fondvideo.html"><Camera size={17}/> Enregistrement</a><a href="./fondvideo.html"><Circle size={17}/> NOVA</a><button onClick={() => {setImmersiveGalleryOpen(false);setShowSettings(true)}}><CloudUpload size={17}/> Drive</button><button onClick={() => {setImmersiveGalleryOpen(false);setShowSettings(true)}}><Settings size={17}/> Paramètres</button></nav>
             <button className="scelyo-universe-close" onClick={() => {setImmersiveGalleryOpen(false);setImmersivePreviewOpen(false)}} aria-label="Fermer la galerie"><X size={22}/></button>
           </header>
