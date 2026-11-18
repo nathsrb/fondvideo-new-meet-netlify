@@ -20,26 +20,44 @@ export const photoBackgrounds = [
 // are standalone WebP files. No external network request is required.
 export const immersiveBackgrounds = [
   {
-    "id": "tiny-amazon",
-    "label": "Tiny house en Amazonie",
-    "src": "/immersive/tiny-amazon-hd.png",
-    "thumbnail": "/immersive/tiny-amazon-hd.png"
+    "id": "amazon-anaconda-panther",
+    "label": "Amazonie",
+    "src": "/immersive/amazon-anaconda-panther.webp",
+    "thumbnail": "/immersive/amazon-anaconda-panther.webp"
+  },
+  {
+    "id": "ancient-cave-office",
+    "label": "Grotte ancienne",
+    "src": "/immersive/ancient-cave-office.webp",
+    "thumbnail": "/immersive/ancient-cave-office.webp"
+  },
+  {
+    "id": "savanna-cats",
+    "label": "Savane",
+    "src": "/immersive/savanna-cats.webp",
+    "thumbnail": "/immersive/savanna-cats.webp"
+  },
+  {
+    "id": "dubai-penthouse",
+    "label": "Dubaï",
+    "src": "/immersive/dubai-penthouse.webp",
+    "thumbnail": "/immersive/dubai-penthouse.webp"
   },
   {
     "id": "mars-base",
-    "label": "Base sur Mars",
+    "label": "Mars",
     "src": "/immersive/mars-base-hd.png",
     "thumbnail": "/immersive/mars-base-hd.png"
   },
   {
     "id": "moon-base",
-    "label": "Station sur la Lune",
+    "label": "Lune",
     "src": "/immersive/moon-base-hd.png",
     "thumbnail": "/immersive/moon-base-hd.png"
   },
   {
     "id": "space-universe",
-    "label": "Au cœur de l’Univers",
+    "label": "Vaisseau spatial",
     "src": "/immersive/scene-collage.png",
     "crop": [
       0,
@@ -48,36 +66,12 @@ export const immersiveBackgrounds = [
   },
   {
     "id": "ocean-storm",
-    "label": "Tempête océanique",
+    "label": "Univers (galaxies)",
     "src": "/immersive/scene-collage.png",
     "crop": [
       1,
       0
     ]
-  },
-  {
-    "id": "savanna-cats",
-    "label": "Savane · lions, guépards et léopards",
-    "src": "/immersive/savanna-cats.webp",
-    "thumbnail": "/immersive/savanna-cats.webp"
-  },
-  {
-    "id": "amazon-anaconda-panther",
-    "label": "Amazonie · anaconda et panthère noire",
-    "src": "/immersive/amazon-anaconda-panther.webp",
-    "thumbnail": "/immersive/amazon-anaconda-panther.webp"
-  },
-  {
-    "id": "ancient-cave-office",
-    "label": "Bureau dans une grotte ancienne",
-    "src": "/immersive/ancient-cave-office.webp",
-    "thumbnail": "/immersive/ancient-cave-office.webp"
-  },
-  {
-    "id": "dubai-penthouse",
-    "label": "Appartement à Dubaï",
-    "src": "/immersive/dubai-penthouse.webp",
-    "thumbnail": "/immersive/dubai-penthouse.webp"
   },
   {
     "id": "batcave",
@@ -90,7 +84,7 @@ export const immersiveBackgrounds = [
   },
   {
     "id": "secret-lab",
-    "label": "Mon laboratoire",
+    "label": "Centre de commandement",
     "src": "/immersive/scene-collage.png",
     "crop": [
       2,
@@ -99,12 +93,18 @@ export const immersiveBackgrounds = [
   },
   {
     "id": "royal-palace",
-    "label": "Palais royal",
+    "label": "Salle du trône",
     "src": "/immersive/scene-collage.png",
     "crop": [
       2,
       2
     ]
+  },
+  {
+    "id": "tiny-amazon",
+    "label": "Lodge Amazone",
+    "src": "/immersive/tiny-amazon-hd.png",
+    "thumbnail": "/immersive/tiny-amazon-hd.png"
   }
 ];
 export const backgrounds = [
