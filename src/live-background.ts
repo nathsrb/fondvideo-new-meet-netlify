@@ -1,14 +1,26 @@
 // @ts-nocheck
 // Réutilisation du moteur de décors de FondVidéo pour les appels en direct.
+// Photographs from Unsplash, served on demand as browser-cached 1280x720
+// WebP/AVIF when supported. No images are fetched when simply joining a call.
+// Source attribution is included for clarity although not required by license.
+export const photoBackgrounds = [
+  { id: 'office', label: 'Bureau premium', photoId: 'photo-1497366811353-6870744d04b2' },
+  { id: 'studio', label: 'Bureau lumineux', photoId: 'photo-1497366754035-f200968a6e72' },
+  { id: 'tech', label: 'Espace créatif', photoId: 'photo-1497366858526-0766cadbe8fa' },
+  { id: 'warm', label: 'Salon chaleureux', photoId: 'photo-1600607687939-ce8a6c25118c' },
+  { id: 'nature', label: 'Lac & montagnes', photoId: 'photo-1470770841072-f978cf4d019e' },
+  { id: 'landscape', label: 'Nature', photoId: 'photo-1500534623283-312aade485b7' },
+].map(item => ({
+  ...item,
+  src: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&crop=entropy&w=1280&h=720&q=82`,
+  thumbnail: `https://images.unsplash.com/${item.photoId}?auto=format&fit=crop&w=320&h=180&q=65`,
+}));
 export const backgrounds = [
   ['original', 'Original'],
   ['blur', 'Flou'],
-  ['studio', 'Studio'],
-  ['office', 'Bureau'],
-  ['tech', 'Tech'],
+  ...photoBackgrounds.map(item => [item.id, item.label]),
   ['blue', 'Bleu'],
   ['violet', 'Violet'],
-  ['warm', 'Beige'],
   ['custom', 'Mon image'],
 ];
 export const formats = [
