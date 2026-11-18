@@ -7,6 +7,7 @@ import {
   videoDimensions,
   formats,
   backgrounds,
+  decorBackgrounds,
 } from './live-background';
 import { saveRecording, listRecordings, deleteRecording, type SavedRecording } from './recording-library';
 import {
@@ -2511,6 +2512,20 @@ function App() {
                 onChange={e => choosePhoto(e.target.files?.[0] || null)}
               />
             </label>
+            <div className="decor-picker" aria-label="Décors HD">
+              <span className="decor-picker-title">Décors HD</span>
+              <div className="decor-picker-list">
+                {decorBackgrounds.map(([value, label]) => (
+                  <button type="button" key={value}
+                    className={`decor-option${bg === value ? ' selected' : ''}`}
+                    disabled={effectBusy} aria-pressed={bg === value}
+                    onClick={() => void changeCamera(value, format, quality)}>
+                    <img src={`/backgrounds/${value}.webp`} alt="" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <label>
               Format
               <select
