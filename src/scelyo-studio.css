@@ -1,0 +1,16 @@
+/* SCELYO STUDIO — visual foundation, preview branch only */
+:root{font-family:'DM Sans',sans-serif;color:#f7f5f0;background:#0d0e13;--sc-gold:#f3c566;--sc-gold-deep:#bc8534;--sc-panel:#15161d;--sc-border:#ffffff24}
+body{background:#0d0e13}
+.app-shell{background:radial-gradient(circle at 70% 0%,#202027 0,transparent 45%),#0d0e13;color:#f7f5f0}
+.header{background:#111218;border-bottom:1px solid #ffffff20}
+.brand-mark{background:linear-gradient(135deg,#ffe29b,#bd873b);color:#17120b;box-shadow:0 5px 24px #e4ae4d33}
+.brand span,.eyebrow,.join-form button,.art-lock,.hero-badges svg,.private-pill svg{color:var(--sc-gold)}
+.btn.primary{background:linear-gradient(135deg,#ffdf8a,#e8ac48);color:#17130d;box-shadow:0 8px 22px #d9a64a30}
+.btn.primary:hover{background:linear-gradient(135deg,#ffe7a9,#f1bd60)}
+.btn.subtle,.icon-btn{background:#ffffff0b;color:#f5f1e9;border:1px solid #ffffff26}
+.join-form,.preview-art{background:#181920;border-color:#ffffff2b}
+.hero-copy h1 em{background:linear-gradient(100deg,#ffe5a0,#e7b455,#b77e30);background-clip:text;color:transparent}
+.hero-glow{background:#b17e2a20}
+.live-dot{background:#f1c46a;box-shadow:0 0 0 5px #f1c46a20}
+.art-person{background:#24242b}
+:focus-visible{outline:2px solid var(--sc-gold);outline-offset:3px}
