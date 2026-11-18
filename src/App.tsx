@@ -29,7 +29,6 @@ import {
   Users,
   Circle,
   Square,
-  Settings,
   CloudUpload,
   Download,
   ShieldCheck,
@@ -196,8 +195,6 @@ function App() {
   const [audioDiagnostic, setAudioDiagnostic] = useState('');
   const [camOn, setCamOn] = useState(true);
   const [bg, setBg] = useState('original');
-  const [immersiveGalleryOpen, setImmersiveGalleryOpen] = useState(false);
-  const [immersivePreviewOpen, setImmersivePreviewOpen] = useState(false);
   const [format, setFormat] = useState('original');
   const [quality, setQuality] = useState('1080');
   const [recordVideoQuality, setRecordVideoQuality] = useState<'1080'|'original'>('1080');
@@ -1173,41 +1170,6 @@ function App() {
     };
     img.onerror = () => { URL.revokeObjectURL(url); toast('Cette image ne peut pas être chargée.'); };
     img.src = url;
-  }
-
-  function importImmersiveScenes(files: FileList | null) {
-    if (!files?.length) return;
-    const list=Array.from(files);
-    let completed=0, imported=0;
-    for (const file of list) {
-      const index=Number(file.name.match(/^(\d{1,2})[-_. ]/)?.[1] || 0)-1;
-      const scene=immersiveBackgrounds[index];
-      if (!file.type.startsWith('image/') || !scene) {completed++;continue;}
-      const url=URL.createObjectURL(file);
-      const image=new Image();
-      image.onload=()=>{
-        URL.revokeObjectURL(url);
-        const canvas=document.createElement('canvas');
-        canvas.width=1280;canvas.height=720;
-        const ctx=canvas.getContext('2d');
-        if(ctx){
-          const scale=Math.max(1280/image.naturalWidth,720/image.naturalHeight);
-          const w=image.naturalWidth*scale,h=image.naturalHeight*scale;
-          ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-          ctx.drawImage(image,(1280-w)/2,(720-h)/2,w,h);
-          const encoded=canvas.toDataURL('image/webp',.73);
-          try {localStorage.setItem('sceyllio-scene-'+scene.id,encoded);}
-          catch { /* The full resolution remains active for this session. */ }
-          presetPhotoCache.set(scene.id,image);
-          setSceneOverrides(previous=>({...previous,[scene.id]:encoded}));
-          imported++;
-        }
-        completed++;
-        if(completed===list.length)toast(imported+' décors importés dans ce navigateur.');
-      };
-      image.onerror=()=>{URL.revokeObjectURL(url);completed++;if(completed===list.length)toast(imported+' décors importés.');};
-      image.src=url;
-    }
   }
 
   async function joinMeeting() {
@@ -2254,7 +2216,6 @@ function App() {
       : alternateRecording || recordReady
   );
 
-  const selectedImmersiveScene = immersiveBackgrounds.find(scene => scene.id === bg) || immersiveBackgrounds[0];
   return (
     <div className="app-shell">
       {fullStage && joined && !gallery && (
@@ -2341,12 +2302,10 @@ function App() {
           onClick={() => { if (!joined) { location.hash = ''; setRoom(''); setMenuOpen(false); } }}>
           <img src="./scelyo-mark.svg" alt="" width="40" height="40" />
           <span className="scelyo-brand-name">SCEYLLIO</span>
-          <span className="scelyo-brand-divider" />
-          <span className="scelyo-brand-descriptor">Le live devient création</span>
+          <span className="scelyo-brand-descriptor">STUDIO</span>
         </button>
         <nav className="scelyo-header-nav" aria-label="Espaces SCEYLLIO">
-          <button type="button" className={'scelyo-nav-item scelyo-universe-nav'+(immersiveGalleryOpen?' selected':'')} onClick={() => setImmersiveGalleryOpen(true)}><Camera size={17}/> Univers immersifs</button>
-          <button type="button" className="scelyo-nav-item selected" onClick={() => { if (!joined) { location.hash = ''; setRoom(''); } }}><Video size={17}/> Live</button>
+          <button type="button" className="scelyo-nav-item selected" onClick={() => { if (!joined) { location.hash = ''; setRoom(''); } }}><Video size={17}/> Réunion</button>
           <a className="scelyo-nav-item" href="./fondvideo.html"><Camera size={17}/> Studio</a>
           <button type="button" className="scelyo-nav-item" onClick={() => setLibraryOpen(true)}><Library size={17}/> Vault</button>
         </nav>
@@ -2360,7 +2319,7 @@ function App() {
         </div>
         {menuOpen && (
           <nav className="scelyo-mobile-menu" aria-label="Navigation mobile">
-            <button type="button" onClick={() => {setMenuOpen(false);if(!joined){location.hash='';setRoom('');}}}><Video size={18}/> SCEYLLIO Studio <ArrowRight size={16}/></button>
+            <button type="button" onClick={() => {setMenuOpen(false);if(!joined){location.hash='';setRoom('');}}}><Video size={18}/> Réunion <ArrowRight size={16}/></button>
             <a href="./fondvideo.html"><Camera size={18}/> SCEYLLIO Studio <ArrowRight size={16}/></a>
             <button type="button" onClick={() => {setMenuOpen(false);setLibraryOpen(true);}}><Library size={18}/> SCEYLLIO Vault <ArrowRight size={16}/></button>
             <button type="button" onClick={() => {setMenuOpen(false);setShowSettings(true);}}><CloudUpload size={18}/> Google Drive <ArrowRight size={16}/></button>
@@ -2654,7 +2613,6 @@ function App() {
                   }}/>
               </label>
             </div>
-            <button className="scelyo-open-universe-gallery" type="button" onClick={() => setImmersiveGalleryOpen(true)}><Camera size={16}/> Explorer les 12 univers en plein écran <ArrowRight size={16}/></button>
             <div className="scelyo-photo-background-gallery scelyo-immersive-gallery" role="group" aria-label="Univers immersifs">
               {immersiveBackgrounds.map(item => (
                 <button key={item.id} type="button" className={'scelyo-photo-bg'+(bg === item.id ? ' selected' : '')}
@@ -3178,42 +3136,6 @@ function App() {
         <span>Live · Studio · Vault — Créez. Échangez. Conservez ce qui compte.</span>
       </footer>
 
-      {immersiveGalleryOpen && (
-        <section className="scelyo-universe-screen" role="dialog" aria-modal="true" aria-label="Choisir un univers immersif">
-          <header className="scelyo-universe-topbar">
-            <div className="scelyo-universe-brand"><img src="./scelyo-mark.svg" alt="" /> <span>SCEYLLIO <small>STUDIO</small></span></div>
-            <nav aria-label="Navigation du studio"><span className="scelyo-universe-current"><Video size={17}/> Réunion</span><a href="./fondvideo.html"><Camera size={17}/> Enregistrement</a><a href="./fondvideo.html"><Circle size={17}/> NOVA</a><button onClick={() => {setImmersiveGalleryOpen(false);setShowSettings(true)}}><CloudUpload size={17}/> Drive</button><button onClick={() => {setImmersiveGalleryOpen(false);setShowSettings(true)}}><Settings size={17}/> Paramètres</button></nav>
-            <button className="scelyo-universe-close" onClick={() => {setImmersiveGalleryOpen(false);setImmersivePreviewOpen(false)}} aria-label="Fermer la galerie"><X size={22}/></button>
-          </header>
-          <div className="scelyo-universe-layout">
-            <aside className="scelyo-universe-sidebar">
-              <button onClick={() => setImmersiveGalleryOpen(false)}>⌂ &nbsp; Accueil</button>
-              <span className="selected"><Camera size={18}/> Univers immersifs</span>
-              <button onClick={() => {setImmersiveGalleryOpen(false);if(!room&&!joined)openRoom(newCode())}}><Users size={18}/> Réunions</button>
-              <a href="./fondvideo.html"><Video size={18}/> Enregistrements</a>
-              <a href="./fondvideo.html"><MessageSquare size={18}/> Transcriptions</a>
-              <a href="./fondvideo.html"><Circle size={18}/> Extraits NOVA</a>
-              <button onClick={() => {setImmersiveGalleryOpen(false);setShowSettings(true)}}><CloudUpload size={18}/> Drive</button>
-              <div className="scelyo-universe-sidebar-bottom"><button onClick={() => setImmersiveGalleryOpen(false)}>Aide</button></div>
-            </aside>
-            <div className="scelyo-universe-main">
-              <div className="scelyo-universe-heading"><Camera size={30}/><div><h2>Univers immersifs</h2><p>Choisis ton décor pour ta réunion ou ton enregistrement.</p></div></div>
-              <div className="scelyo-universe-grid">
-                {immersiveBackgrounds.map(scene => (
-                  <button key={scene.id} type="button" className={'scelyo-universe-card'+(bg === scene.id?' active':'')} disabled={effectBusy}
-                    onClick={() => {void changeCamera(scene.id, format, quality)}} aria-pressed={bg === scene.id} title={'Choisir : '+scene.label}>
-                    {scene.crop && !sceneOverrides[scene.id] ? <span className="scelyo-universe-card-crop" style={{backgroundImage:'url("'+scene.src+'")',backgroundSize:'400% 390%',backgroundPosition:scene.crop[1]/3*100+'% '+scene.crop[0]/2*100+'%'}}/> : <img src={sceneOverrides[scene.id] || scene.thumbnail || scene.src} alt="" loading="lazy" decoding="async" onError={e => {e.currentTarget.style.opacity='0.25';}}/>}
-                    <span className="scelyo-universe-card-shade"/><strong>{scene.label}</strong>
-                    {bg === scene.id && <span className="scelyo-universe-check"><Check size={19}/></span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <footer className="scelyo-universe-bottom"><label className="scelyo-universe-upload"><CloudUpload size={18}/> Importer les 12 décors HD<input type="file" hidden accept="image/*" multiple onChange={e => {importImmersiveScenes(e.target.files);e.target.value='';}}/></label><div><button className="scelyo-universe-ghost" onClick={() => setImmersivePreviewOpen(true)}><PlayCircle size={18}/> Aperçu</button><button className="scelyo-universe-primary" onClick={() => {setImmersiveGalleryOpen(false);setImmersivePreviewOpen(false);if(!room&&!joined)openRoom(newCode())}}><Video size={18}/> {joined?'Retour à la réunion':'Démarrer la réunion'}</button></div></footer>
-          {immersivePreviewOpen && <div className="scelyo-universe-preview" onClick={() => setImmersivePreviewOpen(false)} role="presentation"><div className="scelyo-universe-preview-inner" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Aperçu du décor"><button onClick={() => setImmersivePreviewOpen(false)} aria-label="Fermer"><X size={20}/></button>{selectedImmersiveScene.crop && !sceneOverrides[selectedImmersiveScene.id] ? <div className="scelyo-universe-preview-crop" style={{backgroundImage:'url("'+selectedImmersiveScene.src+'")',backgroundSize:'400% 390%',backgroundPosition:selectedImmersiveScene.crop[1]/3*100+'% '+selectedImmersiveScene.crop[0]/2*100+'%'}}/> : <img src={sceneOverrides[selectedImmersiveScene.id] || selectedImmersiveScene.src} alt={selectedImmersiveScene.label}/>}<strong>{selectedImmersiveScene.label}</strong></div></div>}
-        </section>
-      )}
       {showSettings && (
         <div
           className="modal-backdrop"
